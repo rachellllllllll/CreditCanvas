@@ -66,6 +66,7 @@ function applyAliases(details: CreditDetail[], categoryAliases: Record<string, s
 }
 
 const parseCreditDetailsFromSheet = (sheet: XLSX.WorkSheet, fileName: string): CreditDetail[] => {
+  console.log('add commit');
   const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
   // Find the header row index by searching for a row with known column names
   let headerIdx = -1;
