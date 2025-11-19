@@ -1,9 +1,5 @@
-// Simple money helpers
-export function formatMoney(n: number): string {
-  return n.toFixed(2);
-}
+import type { CreditDetail } from '../types';
 
-export function parseMoney(s: string): number {
-  const v = parseFloat(s.replace(/[^0-9.-]+/g, ''));
-  return Number.isFinite(v) ? v : 0;
-}
+// amount נשמר תמיד כערך מוחלט; signedAmount קובע את הסימן לפי direction
+export const signedAmount = (d: CreditDetail) =>
+  d.direction === 'income' ? +Math.abs(d.amount) : -Math.abs(d.amount);
