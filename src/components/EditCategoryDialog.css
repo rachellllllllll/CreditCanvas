@@ -1,1 +1,242 @@
-/* Styles for EditCategoryDialog */
+/* EditCategoryDialog.css */
+
+.edit-dialog-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.18);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.edit-dialog-box {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 4px 32px #0002;
+  padding: 28px 28px 18px 28px;
+  min-width: 380px;
+  max-width: 98vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  direction: rtl;
+}
+
+.edit-dialog-details {
+  margin-bottom: 12px;
+}
+
+.edit-dialog-checkbox-label {
+  font-weight: 500;
+}
+
+.edit-dialog-checkbox {
+  margin-left: 8px;
+}
+
+.edit-dialog-candidates-table-wrapper {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid #e0e7ef;
+  border-radius: 8px;
+  background: #fafdff;
+  padding: 8px;
+}
+
+.edit-dialog-candidates-table {
+  width: 100%;
+  font-size: 15px;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+
+.edit-dialog-candidates-table thead tr {
+  background: #f1f5fa;
+}
+
+.edit-dialog-candidates-table th,
+.edit-dialog-candidates-table td {
+  padding: 6px 14px;
+}
+
+.edit-dialog-candidates-table td:first-child,
+.edit-dialog-candidates-table th:first-child {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.edit-dialog-category-input-wrapper {
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.edit-dialog-category-input {
+  margin-right: 8px;
+  font-size: 16px;
+  min-width: 120px;
+}
+
+.edit-dialog-dropdown {
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 38px;
+  background: #fff;
+  border: 1px solid #cfd8dc;
+  border-radius: 10px;
+  z-index: 40;
+  max-height: min(420px, 70vh); /* מגדיל את גובה הרשימה */
+  overflow-y: auto;
+  box-shadow: 0 10px 28px -8px rgba(0,0,0,0.20);
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.edit-dialog-dropdown-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-dialog-dropdown-add {
+  padding: 8px 12px;
+  border-top: 1px solid #eee;
+  background: #fafdff;
+}
+
+.edit-dialog-dropdown-add-label {
+  margin-bottom: 6px;
+}
+
+.edit-dialog-icon-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 320px;
+}
+
+.edit-dialog-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 260px;
+}
+
+.edit-dialog-icon {
+  font-size: 20px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 2px;
+  background: #fff;
+  transition: border 0.15s, background 0.15s;
+}
+
+.edit-dialog-icon.selected {
+  border: 2px solid #36A2EB;
+  background: #e3f2fd;
+}
+
+.edit-dialog-add-btn {
+  margin-top: 8px;
+  font-size: 15px;
+  padding: 6px 16px;
+}
+
+.edit-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.edit-dialog-cancel-btn {
+  padding: 10px 16px;
+  border-radius: 4px;
+  border: 1.5px solid #7ecbff;
+  background: #fff;
+  color: #36A2EB;
+  font-weight: 700;
+  min-width: 80px;
+}
+
+.edit-dialog-save-btn {
+  padding: 10px 16px;
+  border-radius: 4px;
+  border: none;
+  background: #4CAF50;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  min-width: 120px;
+}
+
+.edit-dialog-current-category {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-dialog-current-category .edit-dialog-category-icon {
+  font-size: 18px;
+}
+
+.edit-dialog-no-category {
+  color: #bbb;
+}
+
+.edit-dialog-candidates-table.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.edit-dialog-table-disabled-msg {
+  color: #888;
+  font-size: 0.95em;
+  margin-top: 6px;
+  text-align: center;
+}
+
+.edit-dialog-help-message {
+  color: #f44336;
+  font-size: 0.8rem;
+  margin-top: 4px;
+  transition: opacity 0.3s ease;
+}
+
+.edit-dialog-required-marker {
+  color: #f44336;
+  font-weight: bold;
+  margin-right: 3px;
+}
+
+/* שיפור חזותי לכפתור מושבת */
+.edit-dialog-save-btn:disabled {
+  cursor: not-allowed;
+  position: relative;
+  opacity: 0.7;
+}
+
+/* אנימציה קלה לשדה הקלט כשחסר ערך */
+.CategorySelectOrAdd-input:focus:invalid {
+  border-color: #f44336;
+  animation: shake 0.5s;
+}
+
+/* הדגשה לשדה קלט חובה שלא מולא */
+.highlight-required {
+  border: 2px solid #f44336 !important;
+  box-shadow: 0 0 6px 2px rgba(244,67,54,0.25) !important;
+  background-color: #fff8e1 !important;
+  /* animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; */
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
