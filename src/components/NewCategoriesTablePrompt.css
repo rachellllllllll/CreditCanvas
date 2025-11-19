@@ -1,1 +1,134 @@
-/* Styles for NewCategoriesTablePrompt */
+.new-cats-dialog-box {
+  min-width: 480px;
+  max-width: 700px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.new-cats-title {
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.new-cats-table-outer-wrapper {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.new-cats-table {
+  min-width: 420px;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+
+.new-cats-table-name {
+  font-weight: 600;
+  font-size: 16px;
+  min-width: 80px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.new-cats-table-select {
+  position: relative;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.new-cats-table-icon {
+  min-width: 60px;
+  text-align: center;
+}
+
+.new-cats-icon {
+  font-size: 22px;
+}
+
+.new-cats-table-color {
+  min-width: 80px;
+  text-align: center;
+}
+
+.new-cats-color {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid #ccc;
+}
+
+.new-cats-table-expand {
+  min-width: 40px;
+  text-align: center;
+}
+
+.new-cats-table-expand-btn {
+  font-size: 15px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #36A2EB;
+}
+
+.new-cats-table-details-cell {
+  background: #f7fafd;
+  padding: 0;
+}
+
+.new-cats-table-details-wrapper {
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid #e0e7ef;
+  background: #fafdff;
+  padding: 8px;
+}
+
+.new-cats-table-details {
+  width: 100%;
+  font-size: 15px;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+
+.new-cats-table-edit-btn {
+  margin-right: 8px;
+  font-size: 13px;
+  color: #36A2EB;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.new-cats-btns-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+  flex: 0 0 auto;
+}
+
+.new-cats-cancel-btn {
+  padding: 10px 16px;
+  border-radius: 4px;
+  border: 1.5px solid #7ecbff;
+  background: #fff;
+  color: #36A2EB;
+  font-weight: 700;
+  min-width: 80px;
+}
+
+.new-cats-confirm-btn {
+  padding: 10px 16px;
+  border-radius: 4px;
+  border: none;
+  background: #4CAF50;
+  color: #fff;
+  font-weight: 700;
+  min-width: 120px;
+}
