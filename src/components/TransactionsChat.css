@@ -1,1 +1,304 @@
-/* Styles for TransactionsChat */
+/* שורת כותרת ראשית של הצ'אט (למודאל) */
+.transactions-chat-main-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px 8px 18px;
+  background: #e3f2fd;
+  border-radius: 18px 18px 0 0;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 1.08em;
+  font-weight: 600;
+  color: #1976d2;
+  gap: 12px;
+}
+.transactions-chat-title {
+  font-size: 1.13em;
+  font-weight: 700;
+  color: #1976d2;
+  letter-spacing: 0.5px;
+}
+/* שורת כותרת של הצ'אט */
+.transactions-chat-header-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 12px 0 12px;
+}
+
+.clear-chat-btn {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1.2px solid #ffe0b2;
+  border-radius: 18px;
+  font-size: 0.98em;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, border 0.18s;
+  margin-bottom: 2px;
+  margin-right: 0;
+  margin-left: 0;
+  box-shadow: 0 1px 4px 0 rgba(255,152,0,0.07);
+}
+.clear-chat-btn:disabled {
+  background: #f5f5f5;
+  color: #bdbdbd;
+  border-color: #eee;
+  cursor: not-allowed;
+}
+.clear-chat-btn:not(:disabled):hover {
+  background: #ffe0b2;
+  color: #bf360c;
+  border-color: #ffb74d;
+}
+/* --- שדרוג עיצוב הצ'אט --- */
+.upgraded-ui {
+  background: #f6f8fa;
+  border-radius: 18px;
+  box-shadow: 0 2px 16px 0 rgba(0,0,0,0.08);
+  padding: 0;
+  border: 1px solid #e0e0e0;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.transactions-chat-messages {
+  padding: 18px 12px 8px 12px;
+  max-height: 510px;
+  overflow-y: auto;
+  background: transparent;
+}
+
+.transactions-chat-message-bubble {
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+.transactions-chat-message-bubble.user {
+  flex-direction: row-reverse;
+}
+.transactions-chat-message-bubble.assistant {
+  flex-direction: row;
+}
+
+.chat-avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7em;
+  margin: 0 6px;
+}
+
+.chat-bubble-content {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 1px 6px 0 rgba(0,0,0,0.04);
+  padding: 10px 16px 8px 16px;
+  max-width: 320px;
+  word-break: break-word;
+  position: relative;
+  font-size: 1.04em;
+  color: #222;
+  direction: rtl;
+}
+.transactions-chat-message-bubble.user .chat-bubble-content {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border-bottom-right-radius: 6px;
+  border-bottom-left-radius: 18px;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+.transactions-chat-message-bubble.assistant .chat-bubble-content {
+  background: #fff;
+  color: #333;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 18px;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+
+.msg-meta {
+  display: block;
+  font-size: 0.78em;
+  color: #888;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.upgraded-input-row {
+  background: #f6f8fa;
+  border-top: 1px solid #e0e0e0;
+  padding: 12px 10px 10px 10px;
+  border-radius: 0 0 18px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.upgraded-input {
+  flex: 1;
+  border: 1.5px solid #bdbdbd;
+  border-radius: 16px;
+  padding: 10px 14px;
+  font-size: 1.08em;
+  outline: none;
+  background: #fff;
+  transition: border 0.2s;
+}
+.upgraded-input:focus {
+  border: 1.5px solid #1976d2;
+}
+.upgraded-send-btn {
+  background: linear-gradient(90deg, #1976d2 60%, #42a5f5 100%);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  font-size: 1.35em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px 0 rgba(25,118,210,0.08);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.upgraded-send-btn:disabled {
+  background: #bdbdbd;
+  color: #eee;
+  cursor: not-allowed;
+}
+.upgraded-send-btn:hover:not(:disabled) {
+  background: linear-gradient(90deg, #1565c0 60%, #1976d2 100%);
+  box-shadow: 0 4px 16px 0 rgba(25,118,210,0.13);
+}
+
+/* כפתור הצג עוד */
+.show-more-btn {
+  font-size: 0.92em;
+  color: #1976d2;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-right: 8px;
+  margin-left: 0;
+  padding: 0;
+  transition: color 0.2s;
+}
+.show-more-btn:hover {
+  color: #0d47a1;
+  text-decoration: underline;
+}
+
+/* אנימציית הופעה להודעות חדשות */
+.transactions-chat-message-bubble {
+  animation: chat-bubble-in 0.22s cubic-bezier(.4,0,.2,1);
+}
+@keyframes chat-bubble-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.transactions-chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f7f7f7;
+}
+
+.transactions-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 80px;
+}
+
+.transactions-chat-message {
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: 16px;
+  white-space: pre-line;
+  word-break: break-word;
+  font-size: 15px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  line-height: 1.5;
+}
+
+.transactions-chat-message.user {
+  align-self: flex-end;
+  background: #36A2EB;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.transactions-chat-message.assistant {
+  align-self: flex-start;
+  background: #eaeaea;
+  color: #222;
+  border-bottom-left-radius: 4px;
+}
+
+.transactions-chat-message .msg-meta {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.transactions-chat-input-row {
+  display: flex;
+  padding: 12px;
+  background: #fff;
+  border-top: 1px solid #eee;
+  gap: 8px;
+}
+
+.transactions-chat-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 15px;
+}
+
+.transactions-chat-send-btn {
+  background: #36A2EB;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0 18px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.transactions-chat-send-btn:disabled {
+  background: #b3d7f4;
+  cursor: not-allowed;
+}
+
+.transactions-chat-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 32px;
+  margin-top: 4px;
+}
+
+.transactions-chat-spinner .loader {
+  border: 4px solid #eaeaea;
+  border-top: 4px solid #36A2EB;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
