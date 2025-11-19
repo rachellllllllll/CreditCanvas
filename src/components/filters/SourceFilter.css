@@ -1,0 +1,21 @@
+/* --- Source Filter (Credit Cards / Bank) --- */
+.source-filter-wrapper { display:flex; align-items:center; }
+.source-filter-btn { padding:10px 14px; border:1px solid #e2e8f0; background:#f8f9fa; color:#475569; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer; transition:.18s; position:relative; }
+.source-filter-btn.open, .source-filter-btn:hover { background:#6366f1; color:#fff; border-color:#4f46e5; box-shadow:0 4px 14px rgba(99,102,241,0.35); }
+.source-filter-popover { position:absolute; top:calc(100% + 8px); inset-inline-start:0; background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:14px 16px 12px; width:260px; box-shadow:0 14px 32px -6px rgba(0,0,0,0.25); z-index:120; animation:sfPop .18s ease; display:flex; flex-direction:column; gap:12px; direction:rtl; }
+@keyframes sfPop { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:translateY(0);} }
+.sf-section { display:flex; flex-direction:column; gap:6px; }
+.sf-title { font-size:12px; font-weight:700; letter-spacing:.5px; color:#334155; }
+.sf-item { display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; }
+.sf-item input { width:16px; height:16px; accent-color:#6366f1; }
+.sf-actions { display:flex; gap:8px; margin-top:4px; }
+.sf-actions button { flex:1; padding:6px 10px; border:none; background:#e2e8f0; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; transition:.18s; color:#0f172a; letter-spacing:.3px; }
+.sf-actions button:hover:not(:disabled) { background:#6366f1; color:#fff; }
+/* מצב מושבת: שמירה על ניגודיות סבירה במקום הפחתת שקיפות חזקה */
+.sf-actions button:disabled { background:#e2e8f0; color:#64748b; cursor:not-allowed; filter:saturate(0.85); }
+.sf-empty { font-size:12px; color:#64748b; }
+.sf-footer { display:flex; justify-content:flex-end; }
+.sf-close { background:#6366f1; color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; }
+.sf-close:hover { filter:brightness(1.08); }
+.sf-card-line { gap:6px; }
+.sf-card-digits { font-size:12px; font-weight:600; color:#334155; background:#eef2f7; padding:4px 8px; border-radius:8px; letter-spacing:.5px; }
