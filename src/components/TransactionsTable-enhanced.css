@@ -1,1 +1,178 @@
-/* Styles for TransactionsTable-enhanced */
+/* Enhanced animations and transitions */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Apply animations to table rows */
+.TransactionsTable-table tbody tr {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.TransactionsTable-group-row {
+  animation: slideIn 0.4s ease-out;
+}
+
+/* Enhanced scrollbar for yearly view */
+.TransactionsTable-yearly-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.TransactionsTable-yearly-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.TransactionsTable-yearly-wrapper::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: 4px;
+}
+
+.TransactionsTable-yearly-wrapper::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #4338ca 0%, #7c3aed 100%);
+}
+
+/* Loading state styles */
+.TransactionsTable-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
+.TransactionsTable-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #6366f1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Enhanced focus styles for accessibility */
+.TransactionsTable-th:focus,
+.TransactionsTable-td:focus,
+.TransactionsTable-category-btn:focus,
+.TransactionsTable-group-toggle:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .TransactionsTable-title-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .TransactionsTable-th,
+  .TransactionsTable-td {
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+  
+  .TransactionsTable-title {
+    font-size: 1.4em;
+  }
+}
+
+/* Compact padding for better data density */
+.TransactionsTable-th {
+  padding: 10px 8px !important;
+}
+
+.TransactionsTable-td {
+  padding: 8px 6px !important;
+}
+
+.TransactionsTable-group-toggle {
+  padding: 8px 12px !important;
+}
+
+.TransactionsTable-category-btn {
+  padding: 4px 8px !important;
+  margin-left: 3px !important;
+}
+
+.TransactionsTable-group-total {
+  padding: 8px 6px !important;
+}
+
+.TransactionsTable-business-label {
+  padding: 6px 8px !important;
+}
+
+/* Print styles */
+@media print {
+  .TransactionsTable-context-menu,
+  .TransactionsTable-category-btn {
+    display: none !important;
+  }
+  
+  .TransactionsTable-table {
+    box-shadow: none;
+    border: 1px solid #000;
+  }
+}
+
+/* Card last4 badge (hover reveal unless always-visible) */
+.TransactionsTable-card-badge {
+  background: #ececec;
+  color: #333;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-right: 4px;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity .15s ease, transform .15s ease;
+  direction: ltr;
+}
+
+.TransactionsTable-card-badge.always-visible {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.source-credit:hover + .TransactionsTable-card-badge:not(.always-visible),
+.TransactionsTable-td-date:hover .TransactionsTable-card-badge:not(.always-visible) {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.source-badge { display: inline-block; }
