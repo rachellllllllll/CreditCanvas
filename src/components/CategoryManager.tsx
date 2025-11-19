@@ -1,7 +1,452 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ICONS } from './icons';
+import './CategoryManager.css';
 
-const CategoryManager: React.FC = () => {
-  return <div>CategoryManager</div>;
+export interface CategoryDef {
+  name: string;
+  color: string;
+  icon: string;
+}
+
+import type { CreditDetail } from '../types';
+
+interface CategoryManagerProps {
+  categories: CategoryDef[];
+  onChange: (cats: CategoryDef[]) => void;
+  onClose: () => void;
+  categoriesCount?: Record<string, number>; // מיפוי שם קטגוריה לכמות עסקאות
+  transactionsByCategory: Record<string, CreditDetail[]>; // מיפוי שם קטגוריה לרשימת עסקאות
+}
+
+const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange, onClose, categoriesCount = {}, transactionsByCategory }) => {
+  const [cats, setCats] = useState<CategoryDef[]>(categories);
+  const [newCat, setNewCat] = useState<CategoryDef>({ name: '', color: '#36A2EB', icon: ICONS[0] });
+  const [iconPickerIdx, setIconPickerIdx] = useState<number|null>(null);
+  const [colorPickerIdx, setColorPickerIdx] = useState<number|null>(null);
+  const [editNameIdx, setEditNameIdx] = useState<number|null>(null);
+  const [editNameValue, setEditNameValue] = useState<string>('');
+  const [saveStatus, setSaveStatus] = useState<'idle'|'success'|'error'>('idle');
+  const [saveMsg, setSaveMsg] = useState('');
+  // הצעות לאיחוד/שמות חדשים
+  const [suggestions, setSuggestions] = useState<any>(null);
+  const [showSuggestionsDialog, setShowSuggestionsDialog] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  // עטיפת onChange כך שכל שינוי יגרום לאירוע גלובלי (App יאזין וישמור ל-JSON)
+  const handleChangeAndNotify = (updated: CategoryDef[]) => {
+    onChange(updated);
+    window.dispatchEvent(new CustomEvent('categoriesChanged'));
+  }
+
+  // הוספת קטגוריה בראש
+  const handleAddCategory = () => {
+    if (!newCat.name.trim()) return;
+    const updated = [...cats, { ...newCat }];
+    setCats(updated);
+    setNewCat({ name: '', color: '#36A2EB', icon: ICONS[0] });
+    handleChangeAndNotify(updated);
+  };
+  // עריכת שם
+  const handleNameEdit = (idx: number) => {
+    setEditNameIdx(idx);
+    setEditNameValue(cats[idx].name);
+  };
+  const handleNameSave = (idx: number) => {
+    if (!editNameValue.trim()) return;
+    const updated = cats.slice();
+    updated[idx] = { ...updated[idx], name: editNameValue };
+    setCats(updated);
+    setEditNameIdx(null);
+    setEditNameValue('');
+    handleChangeAndNotify(updated);
+  };
+  // בחירת אייקון
+  const handleIconPick = (idx: number, icon: string) => {
+    setIconPickerIdx(null); // סגור מיד
+    const updated = cats.slice();
+    updated[idx] = { ...updated[idx], icon };
+    setCats(updated);
+    handleChangeAndNotify(updated);
+  };
+  // בחירת צבע
+  const handleColorPick = (idx: number, color: string) => {
+    const updated = cats.slice();
+    updated[idx] = { ...updated[idx], color };
+    setCats(updated);
+    setColorPickerIdx(null);
+    handleChangeAndNotify(updated);
+  };
+  // מחיקה
+  const handleDelete = (idx: number) => {
+    const updated = cats.filter((_, i) => i !== idx);
+    setCats(updated);
+    handleChangeAndNotify(updated);
+  };
+  // בקשת הצעות מהשרת – לכל קטגוריה בנפרד, הצג תוצאה מידית, דלג על מאוחדות
+  const fetchSuggestions = async () => {
+    setLoadingSuggestions(true);
+    setSuggestions({});
+    setShowSuggestionsDialog(true);
+    
+    // סנן קטגוריות ללא עסקאות כדי להקטין את גודל הבקשה לשרת
+    const catsWithTransactions = cats.filter(cat => 
+      Array.isArray(transactionsByCategory[cat.name]) && 
+      transactionsByCategory[cat.name].length > 0
+    );
+    
+    // בדוק אם יש מספיק נתונים
+    if (catsWithTransactions.length === 0) {
+      setSuggestions({ error: 'לא נמצאו קטגוריות עם עסקאות להצעת שיפורים' });
+      setLoadingSuggestions(false);
+      return;
+    }
+    
+    // צור מערך רק של קטגוריות עם עסקאות ועם דוגמאות מצומצמות
+    const categoriesWithSamples = catsWithTransactions.map(cat => ({
+      name: cat.name,
+      icon: cat.icon,
+      transactions: Array.isArray(transactionsByCategory[cat.name])
+        ? [...new Set(transactionsByCategory[cat.name].map(t=> 
+            // לקחת רק את התיאור ולקצר אותו במידת הצורך
+            t.description?.substring(0, 50) || ''))]
+          .slice(0, 3) // קח רק עד 3 דוגמאות
+        : []
+    }));
+    
+    const mergedWith = new Set<string>(); // שמות שאוחדו
+    for (let i = 0; i < catsWithTransactions.length; i++) {
+      const cat = catsWithTransactions[i];
+      if (mergedWith.has(cat.name)) continue; // דלג אם כבר אוחד
+      
+      // מצא את הקטגוריה המתאימה במערך הדגימות
+      const catSample = categoriesWithSamples.find(c => c.name === cat.name);
+      if (!catSample) continue;
+      
+      try {
+        // נסה קודם עם בקשה מצומצמת - רק קבוצה קטנה של קטגוריות דומות
+        const similarCategories = categoriesWithSamples
+          .filter(c => c.name === cat.name || 
+                     // בחר רק עד 5 קטגוריות נוספות
+                     categoriesWithSamples.indexOf(c) < 6)
+          .slice(0, 6); // הגבל לכמות קטנה של קטגוריות
+        
+        const res = await fetch('/api/category-suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            allCategories: similarCategories,
+            targetCategory: catSample
+          }),
+        });
+        
+        if (!res.ok) {
+          // אם נכשל, נסה עם עוד פחות קטגוריות
+          console.warn(`שגיאה בבקשה לקטגוריה ${cat.name}, מנסה עם פחות נתונים`);
+          
+          const minimalRequest = {
+            allCategories: [catSample],
+            targetCategory: catSample
+          };
+          
+          const retryRes = await fetch('/api/category-suggestions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(minimalRequest),
+          });
+          
+          if (!retryRes.ok) {
+            throw new Error(`נכשל גם בבקשה מינימלית: ${retryRes.status}`);
+          }
+          
+          const retryData = await retryRes.json();
+          setSuggestions((prev: Record<string, any> = {}) => ({
+            ...prev,
+            [cat.name]: {
+              ...retryData,
+              limited: true // סמן שזו תוצאה מוגבלת
+            }
+          }));
+        } else {
+          const data = await res.json();
+          setSuggestions((prev: Record<string, any> = {}) => {
+            const next = { ...prev };
+            next[cat.name] = data;
+            // אם יש הצעת איחוד, דלג על הקטגוריה השנייה
+            if (data.mergeSuggestions && Array.isArray(data.mergeSuggestions)) {
+              data.mergeSuggestions.forEach((merge: any) => {
+                merge.categories.forEach((mergeCat: string) => {
+                  if (mergeCat !== cat.name) mergedWith.add(mergeCat);
+                });
+              });
+            }
+            return next;
+          });
+        }
+      } catch (error) {
+        console.error(`שגיאה בקבלת הצעות עבור ${cat.name}:`, error);
+        setSuggestions((prev: Record<string, any> = {}) => ({ 
+          ...prev, 
+          [cat.name]: { 
+            error: 'שגיאה בקבלת הצעות. ייתכן שגודל הבקשה גדול מדי.' 
+          } 
+        }));
+      }
+    }
+    setLoadingSuggestions(false);
+  };
+
+  return (
+    <div className="edit-dialog-overlay category-manager-overlay">
+      <div className="edit-dialog-box category-manager-box">
+        {/* Header */}
+        <div className="category-manager-header">
+          <h3>ניהול קטגוריות</h3>
+          <div>
+            <button className="category-manager-add-btn" onClick={handleAddCategory}>+ הוסף קטגוריה</button>
+            <button 
+              className="category-manager-suggest-btn" 
+              style={{ marginRight: 8 }} 
+              onClick={fetchSuggestions} 
+              disabled={loadingSuggestions}
+            >
+              {loadingSuggestions ? '⏳ טוען הצעות...' : '✨ הצג הצעות חכמות'}
+            </button>
+          </div>
+        </div>
+        {/* Content (scrollable) */}
+        <div className="category-manager-content">
+          <div style={{ marginBottom: 16, display: 'none' }}>
+            {/* שדה הוספה ישן - מוסתר */}
+          </div>
+          <div className="category-manager-table-wrapper">
+            <table className="category-manager-table">
+              <thead>
+                <tr>
+                  <th>אייקון</th>
+                  <th>שם</th>
+                  <th>כמות עסקאות</th>
+                  <th>צבע</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {cats.map((cat, idx) => (
+                  <tr key={cat.name+idx}>
+                    <td className="category-manager-icon-cell" onClick={() => setIconPickerIdx(idx)}>
+                      {cat.icon}
+                      {/* פופאפ בחירת אייקון */}
+                      {iconPickerIdx === idx && (
+                        <>
+                          <div className="category-manager-iconpicker-backdrop" onClick={() => setIconPickerIdx(null)} />
+                          <div className="category-manager-iconpicker-popup" onClick={e => e.stopPropagation()}>
+                            <div className="category-manager-iconpicker-title">{cat.name}</div>
+                            <div className="category-manager-iconpicker-list">
+                              {ICONS.map(ic => (
+                                <span key={ic} className={ic === cat.icon ? 'category-manager-iconpicker-selected' : ''} onClick={() => { setIconPickerIdx(null); handleIconPick(idx, ic); }}>{ic}</span>
+                              ))}
+                            </div>
+                            <button className="category-manager-iconpicker-cancel" onClick={() => setIconPickerIdx(null)}>ביטול</button>
+                          </div>
+                        </>
+                      )}
+                    </td>
+                    <td className="category-manager-name-cell" onClick={() => handleNameEdit(idx)}>
+                      {editNameIdx === idx ? (
+                        <input
+                          value={editNameValue}
+                          autoFocus
+                          onChange={e => setEditNameValue(e.target.value)}
+                          onBlur={() => handleNameSave(idx)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleNameSave(idx); }}
+                          className="category-manager-name-input"
+                        />
+                      ) : (
+                        <span>{cat.name}</span>
+                      )}
+                    </td>
+                    <td className="category-manager-count-cell">
+                      {categoriesCount[cat.name] || 0}
+                    </td>
+                    <td className="category-manager-color-cell" onClick={() => setColorPickerIdx(idx)}>
+                      <span className="category-manager-color-preview" style={{ background: cat.color }}></span>
+                      {colorPickerIdx === idx && (
+                        <input
+                          type="color"
+                          value={cat.color}
+                          autoFocus
+                          className="category-manager-color-input"
+                          onChange={e => handleColorPick(idx, e.target.value)}
+                          onBlur={() => setColorPickerIdx(null)}
+                        />
+                      )}
+                    </td>
+                    <td>
+                      <button className="category-manager-delete-btn" onClick={() => handleDelete(idx)} title="מחק קטגוריה">🗑️</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {/* דיאלוג הצעות - עיצוב משופר */}
+        {showSuggestionsDialog && (
+          <div className="category-manager-suggestions-dialog">
+            <div className="category-manager-suggestions-box">
+              <h4>
+                🔍 הצעות לאיחוד וייעול הקטגוריות
+                {loadingSuggestions && <span style={{ fontSize: '0.8em', color: '#0d47a1', marginRight: '8px' }}>⏳ טוען...</span>}
+              </h4>
+              
+              {/* כשאין הצעות ועדיין טוען */}
+              {loadingSuggestions && Object.keys(suggestions || {}).length === 0 && (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ fontSize: '24px', marginBottom: '10px' }}>⏳</div>
+                  <div>מאתר הצעות מתאימות...</div>
+                </div>
+              )}
+              
+              {/* הודעת שגיאה */}
+              {suggestions?.error && (
+                <div className="category-manager-suggestions-error">
+                  <span style={{ fontSize: '20px', marginLeft: '8px' }}>⚠️</span>
+                  {suggestions.error}
+                  {suggestions.error.includes('גודל') && (
+                    <p style={{ fontSize: '0.9em', marginTop: '8px' }}>
+                      נסה שוב עם פחות קטגוריות או הסר קטגוריות ללא עסקאות.
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              {/* יש הצעות - מציג גם אם עדיין טוען */}
+              {suggestions && !suggestions.error && Object.keys(suggestions).length > 0 && (
+                <div className="category-manager-suggestions-content">
+                  {/* אינדיקטור טעינה */}
+                  {loadingSuggestions && (
+                    <div style={{ textAlign: 'right', padding: '5px 10px', fontSize: '0.9em', color: '#0d47a1', background: '#e3f2fd', borderRadius: '6px', marginBottom: '10px' }}>
+                      <span style={{ marginLeft: '5px' }}>⏳</span>
+                      טוען הצעות נוספות...
+                    </div>
+                  )}
+                  
+                  {/* הצעות שכבר הגיעו */}
+                  {Object.entries(suggestions).map(([catName, sug]: [string, any]) => (
+                    <div key={catName} className="category-manager-suggestion-group">
+                      <div className="category-manager-suggestion-title">
+                        {sug.mergeSuggestions?.length > 0 || sug.renameSuggestions?.length > 0 ? '✨' : '🔍'} 
+                        <b> קטגוריה:</b> {catName}
+                        {sug.limited && <span style={{fontSize: '0.8em', color: '#7986cb', marginRight: '5px'}}> (מידע מוגבל)</span>}
+                      </div>
+                      
+                      {sug.mergeSuggestions?.length > 0 && (
+                        <div>
+                          <b style={{ color: '#0d47a1', display: 'block', margin: '12px 0 8px', fontSize: '15px' }}>
+                            🔀 הצעות לאיחוד קטגוריות:
+                          </b>
+                          <ul>
+                            {sug.mergeSuggestions.map((s: any, i: number) => (
+                              <li key={i}>
+                                <span style={{ fontWeight: 500 }}>
+                                  איחוד: {s.categories.join(', ')} → <b style={{ color: '#0d47a1' }}>{s.mergedName}</b>
+                                </span>
+                                <br />
+                                <span style={{ fontSize: '0.92em', color: '#555', display: 'block', margin: '4px 0' }}>
+                                  {s.reason}
+                                </span>
+                                <button className="category-manager-action-btn" onClick={() => {
+                                  // בצע איחוד בפועל
+                                  const updated = cats.filter(cat => !s.categories.includes(cat.name));
+                                  updated.push({ name: s.mergedName, color: '#36A2EB', icon: ICONS[0] });
+                                  setCats(updated);
+                                  setShowSuggestionsDialog(false);
+                                  handleChangeAndNotify(updated);
+                                }}>✅ בצע איחוד קטגוריות</button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {sug.renameSuggestions?.length > 0 && (
+                        <div>
+                          <b style={{ color: '#0d47a1', display: 'block', margin: '12px 0 8px', fontSize: '15px' }}>
+                            🏷️ הצעות לשינוי שמות:
+                          </b>
+                          <ul>
+                            {sug.renameSuggestions.map((s: any, i: number) => (
+                              <li key={i}>
+                                <span style={{ fontWeight: 500 }}>
+                                  החלף <b>{s.oldName}</b> ל-<b style={{ color: '#0d47a1' }}>{s.newName}</b>
+                                </span>
+                                <br />
+                                <span style={{ fontSize: '0.92em', color: '#555', display: 'block', margin: '4px 0' }}>
+                                  {s.reason}
+                                </span>
+                                <button className="category-manager-action-btn" onClick={() => {
+                                  // בצע שינוי שם בפועל
+                                  const updated = cats.map(cat => cat.name === s.oldName ? { ...cat, name: s.newName } : cat);
+                                  setCats(updated);
+                                  setShowSuggestionsDialog(false);
+                                  handleChangeAndNotify(updated);
+                                }}>✅ שנה שם קטגוריה</button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {(!sug.mergeSuggestions?.length && !sug.renameSuggestions?.length) && (
+                        <div style={{ color: '#777', fontSize: '0.95em', padding: '8px 10px', background: '#f1f3f5', borderRadius: '6px', margin: '8px 0' }}>
+                          <span style={{ marginLeft: '5px' }}>ℹ️</span>
+                          לא נמצאו הצעות רלוונטיות עבור קטגוריה זו.
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* מצב שיש הצעות שנטענו אבל הן ריקות */}
+              {suggestions && !suggestions.error && Object.keys(suggestions).length === 0 && !loadingSuggestions && (
+                <div style={{ color: '#555', fontSize: '0.95em', padding: '16px', background: '#f8f9fa', borderRadius: '8px', textAlign: 'center', margin: '20px 0' }}>
+                  <span style={{ fontSize: '24px', display: 'block', margin: '0 0 10px' }}>🔍</span>
+                  לא נמצאו הצעות לאף קטגוריה. הקטגוריות הנוכחיות נראות מאורגנות היטב.
+                </div>
+              )}
+              
+              <button className="category-manager-close-btn" onClick={() => setShowSuggestionsDialog(false)}>
+                סגור
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Footer (sticky) */}
+        <div className="category-manager-footer">
+          <button onClick={onClose}>סגור</button>
+          <button
+            className="category-manager-save-btn"
+            onClick={() => {
+              try {
+                handleChangeAndNotify(cats);
+                setSaveStatus('success');
+                setSaveMsg('הקטגוריות נשמרו בהצלחה!');
+                setTimeout(() => setSaveStatus('idle'), 2000);
+              } catch {
+                setSaveStatus('error');
+                setSaveMsg('אירעה שגיאה בשמירה');
+              }
+            }}
+          >שמור שינויים</button>
+        </div>
+        {saveStatus !== 'idle' && (
+          <div className={saveStatus === 'success' ? 'category-manager-save-success' : 'category-manager-save-error'}>
+            {saveMsg}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default CategoryManager;
