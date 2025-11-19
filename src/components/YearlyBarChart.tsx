@@ -1,6 +1,6 @@
 import React from 'react';
 import { Bar } from 'react-chartjs-2';
-import TransactionsTable from './TransactionsTable';
+// import TransactionsTable from './TransactionsTable';
 import type { CreditDetail } from '../types';
 import type { CategoryDef } from './CategoryManager';
 
@@ -10,12 +10,12 @@ interface YearlyBarChartProps {
   onEditCategory?: (transaction: CreditDetail) => void;
   categoriesList?: CategoryDef[];
   onAddCategory?: (cat: CategoryDef) => void;
-  onMonthSelect?: (monthKey: string) => void; // MM/YYYY
+  // onMonthSelect?: (monthKey: string) => void; // MM/YYYY
   selectedYear: string; // YYYY
   setSelectedYear: (year: string) => void;
 }
 
-const YearlyBarChart: React.FC<YearlyBarChartProps> = ({ summary, allDetails, onEditCategory, categoriesList, onMonthSelect, selectedYear, setSelectedYear }) => {
+const YearlyBarChart: React.FC<YearlyBarChartProps> = ({ summary, allDetails, onEditCategory, categoriesList, selectedYear, setSelectedYear }) => {
   // Helper to get all consecutive months from min to max (YYYY-MM)
   const getAllConsecutiveMonths = (minKey: string, maxKey: string) => {
     const [minYear, minMonth] = minKey.split('-').map(Number);
