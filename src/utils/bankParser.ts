@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
 import type { CreditDetail } from '../types';
 
+XLSX.set_fs({});
+
 function normalizeDate(input: any): string {
   let date = String(input ?? '').trim();
   if (!date) return '';
