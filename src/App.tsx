@@ -225,7 +225,7 @@ const App: React.FC = () => {
   const handlePickDirectory = async () => {
     setError(null);
     setAnalysis(null);
-  setSelectedMonth(formatMonthYear(new Date()));
+    setSelectedMonth(formatMonthYear(new Date()));
     setMonths([]);
     setSelectedFolder(null); // Reset selected folder before picking
     try {
@@ -257,12 +257,12 @@ const App: React.FC = () => {
       }
       setExcelFiles(fileBuffers);
 
-  // החל מיפוי aliases
-  allDetails = applyAliases(allDetails, await loadAliasesFromDir(dir, 'category'), await loadAliasesFromDir(dir, 'description'));
+      // החל מיפוי aliases
+      allDetails = applyAliases(allDetails, await loadAliasesFromDir(dir, 'category'), await loadAliasesFromDir(dir, 'description'));
 
-  // טען כללי קטגוריות מתקדמים והחל
-  const categoryRules = await loadCategoryRules(dir);
-  allDetails = applyCategoryRules(allDetails, categoryRules);
+      // טען כללי קטגוריות מתקדמים והחל
+      const categoryRules = await loadCategoryRules(dir);
+      allDetails = applyCategoryRules(allDetails, categoryRules);
 
       // טען והחל overrides לכיוון (income/expense)
       const directionOverrides = await loadDirectionOverridesFromDir(dir);
@@ -289,6 +289,7 @@ const App: React.FC = () => {
       const averageAmount = allDetails.length > 0 ? totalAmount / allDetails.length : 0;
       setAnalysis({ totalAmount, averageAmount, details: finalDetails, creditChargeCycles: finalCycles });
     } catch (err) {
+      console.error('שגיאה בבחירת תיקיה:', err);
       setError('בחירת התיקיה נכשלה או בוטלה.');
     }
   };
