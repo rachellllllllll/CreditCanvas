@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx/dist/xlsx.full.min.js';
+import * as XLSX from 'xlsx';
 import type { CreditDetail, AnalysisResult } from './types';
 import CategoryManager, { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
