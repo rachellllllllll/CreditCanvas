@@ -249,7 +249,7 @@ const App: React.FC = () => {
             if (type === 'credit') {
               details = await parseCreditDetailsFromSheet(sheet, entry.name);
             } else {
-              details = parseBankStatementFromSheet(sheet, entry.name, sheetName);
+              details = await parseBankStatementFromSheet(sheet, entry.name, sheetName);
             }
             allDetails = allDetails.concat(details);
           }
