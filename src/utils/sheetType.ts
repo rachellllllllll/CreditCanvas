@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+// import * as XLSX from 'xlsx';
 
 export type SheetType = 'bank' | 'credit' | 'unknown';
 
@@ -9,7 +9,8 @@ function normCell(s: any): string {
     .trim();
 }
 
-export function detectSheetTypeFromSheet(sheet: XLSX.WorkSheet): SheetType {
+export async function detectSheetTypeFromSheet(sheet: any): Promise<SheetType> {
+  const XLSX = await import('xlsx');
   const rows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
   const tokens = new Set<string>();
 
@@ -62,13 +63,13 @@ export async function ensureSheetType(
   dirHandle: any,
   fileName: string,
   sheetName: string,
-  sheet: XLSX.WorkSheet
+  sheet: any
 ): Promise<'bank' | 'credit'> {
   const key = `${fileName}::${sheetName}`;
   const overrides = await loadSheetTypeOverridesFromDir(dirHandle);
   if (overrides[key]) return overrides[key];
 
-  const detected = detectSheetTypeFromSheet(sheet);
+  const detected = await detectSheetTypeFromSheet(sheet);
   if (detected === 'unknown') {
     const chosen = await askUserSheetType(fileName, sheetName);
     if (!chosen) throw new Error('user-cancelled');
