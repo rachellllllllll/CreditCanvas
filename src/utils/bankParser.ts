@@ -1,7 +1,5 @@
-import * as XLSX from 'xlsx';
+// import * as XLSX from 'xlsx';
 import type { CreditDetail } from '../types';
-
-XLSX.set_fs({});
 
 function normalizeDate(input: any): string {
   let date = String(input ?? '').trim();
@@ -42,7 +40,11 @@ function parseNumber(s: any): number {
   return isNaN(f) ? 0 : f;
 }
 
-export function parseBankStatementFromSheet(sheet: XLSX.WorkSheet, fileName: string, sheetName: string): CreditDetail[] {
+export async function parseBankStatementFromSheet(sheet: any, fileName: string, sheetName: string): Promise<CreditDetail[]> {
+  if (typeof window === 'undefined') {
+    throw new Error('XLSX must run in browser only');
+  }
+  const XLSX = await import('xlsx');
   const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
   if (!json?.length) return [];
 
