@@ -240,7 +240,13 @@ const App: React.FC = () => {
           const file = await entry.getFile();
           const data = await file.arrayBuffer();
           fileBuffers.set(entry.name, data);
-          const workbook = XLSX.read(data, { type: 'array' });
+          let workbook;
+          try {
+            workbook = XLSX.read(data, { type: 'array' });
+          } catch (e) {
+            console.error("XLSX ERROR:", e, entry.name, data.byteLength);
+            throw e; // כדי לא לבלוע שגיאה
+          }
           for (const sheetName of workbook.SheetNames) {
             const sheet = workbook.Sheets[sheetName];
             const type = await ensureSheetType(dir, entry.name, sheetName, sheet);
