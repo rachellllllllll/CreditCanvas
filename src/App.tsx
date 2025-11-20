@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
+// import * as XLSX from 'xlsx';
 import type { CreditDetail, AnalysisResult } from './types';
 import CategoryManager, { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
@@ -65,8 +65,11 @@ function applyAliases(details: CreditDetail[], categoryAliases: Record<string, s
   });
 }
 
-const parseCreditDetailsFromSheet = (sheet: XLSX.WorkSheet, fileName: string): CreditDetail[] => {
-  console.log('add commit');
+const parseCreditDetailsFromSheet = async (sheet: any, fileName: string): Promise<CreditDetail[]> => {
+  if (typeof window === 'undefined') {
+    throw new Error('XLSX must run in browser only');
+  }
+  const XLSX = await import('xlsx');
   const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
   // Find the header row index by searching for a row with known column names
   let headerIdx = -1;
@@ -240,21 +243,19 @@ const App: React.FC = () => {
           const file = await entry.getFile();
           const data = await file.arrayBuffer();
           fileBuffers.set(entry.name, data);
-          let workbook;
-          try {
-            workbook = XLSX.read(data, { type: 'array' });
-          } catch (e) {
-            console.error("XLSX ERROR:", e, entry.name, data.byteLength);
-            throw e; // כדי לא לבלוע שגיאה
+          if (typeof window === 'undefined') {
+            throw new Error('XLSX must run in browser only');
           }
+          const XLSX = await import('xlsx');
+          const workbook = XLSX.read(data, { type: 'array' });
           for (const sheetName of workbook.SheetNames) {
             const sheet = workbook.Sheets[sheetName];
             const type = await ensureSheetType(dir, entry.name, sheetName, sheet);
             let details: CreditDetail[] = [];
             if (type === 'credit') {
-              details = parseCreditDetailsFromSheet(sheet, entry.name);
+              details = await parseCreditDetailsFromSheet(sheet, entry.name);
             } else {
-              details = parseBankStatementFromSheet(sheet, entry.name, sheetName);
+              details = await parseBankStatementFromSheet(sheet, entry.name, sheetName);
             }
             allDetails = allDetails.concat(details);
           }
@@ -294,8 +295,7 @@ const App: React.FC = () => {
       const averageAmount = allDetails.length > 0 ? totalAmount / allDetails.length : 0;
       setAnalysis({ totalAmount, averageAmount, details: finalDetails, creditChargeCycles: finalCycles });
     } catch (err) {
-      console.error('בחירת התיקיה נכשלה או בוטלה.', err);
-      setSelectedFolder(null);
+      console.error('שגיאה בבחירת תיקיה:', err);
       setError('בחירת התיקיה נכשלה או בוטלה.');
     }
   };
@@ -497,6 +497,10 @@ const App: React.FC = () => {
     for (const fileName in byFile) {
       const fileBuffer = excelFiles.get(fileName);
       if (!fileBuffer) continue;
+      if (typeof window === 'undefined') {
+        throw new Error('XLSX must run in browser only');
+      }
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(fileBuffer, { type: 'array' });
       workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
