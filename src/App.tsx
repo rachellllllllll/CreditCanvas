@@ -18,6 +18,8 @@ import { processCreditChargeMatching } from './utils/creditChargePatterns';
 import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule } from './utils/categoryRules';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
 
+XLSX.set_fs({});
+
 // Helpers for categories and aliases persistence + application
 async function loadCategoriesFromDir(dirHandle: any): Promise<CategoryDef[] | null> {
   try {

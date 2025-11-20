@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 
+XLSX.set_fs({});
+
 export type SheetType = 'bank' | 'credit' | 'unknown';
 
 function normCell(s: any): string {
