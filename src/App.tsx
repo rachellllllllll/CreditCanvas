@@ -247,7 +247,18 @@ const App: React.FC = () => {
             throw new Error('XLSX must run in browser only');
           }
           const XLSX = await import('xlsx');
-          const workbook = XLSX.read(data, { type: 'array' });
+          // המרת ArrayBuffer ל-binary string
+          function arrayBufferToBinaryString(buffer: ArrayBuffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            return binary;
+          }
+          const binaryString = arrayBufferToBinaryString(data);
+          const workbook = XLSX.read(binaryString, { type: 'binary' });
           for (const sheetName of workbook.SheetNames) {
             const sheet = workbook.Sheets[sheetName];
             const type = await ensureSheetType(dir, entry.name, sheetName, sheet);
