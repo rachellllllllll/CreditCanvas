@@ -734,15 +734,67 @@ const App: React.FC = () => {
         <div className="onboarding" role="dialog" aria-labelledby="onboardingTitle" aria-modal="true">
           <div className="onboarding-inner">
             <h1 id="onboardingTitle">ברוך הבא למערכת ניתוח חיובי אשראי</h1>
-            <p className="onboarding-sub">לפני שמתחילים: בחר תיקיה המכילה קבצי Excel של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
-            <button onClick={handlePickDirectory} className="folder-btn primary" autoFocus>
-              📁 בחר תיקיה להתחלה
-            </button>
+            <p className="onboarding-sub">לפני שמתחילים: בחר תיקיה או קובץ Excel של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button onClick={handlePickDirectory} className="folder-btn primary" autoFocus>
+                📁 בחר תיקיה להתחלה
+              </button>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: 'inline-block' }}
+                onChange={async (e) => {
+                  setError(null);
+                  setAnalysis(null);
+                  setSelectedMonth(formatMonthYear(new Date()));
+                  setMonths([]);
+                  setSelectedFolder(null);
+                  const file = e.target.files && e.target.files[0];
+                  if (!file) return;
+                  try {
+                    const data = await file.arrayBuffer();
+                    if (typeof window === 'undefined') {
+                      throw new Error('XLSX must run in browser only');
+                    }
+                    const XLSX = await import('xlsx');
+                    function arrayBufferToBinaryString(buffer) {
+                      let binary = '';
+                      const bytes = new Uint8Array(buffer);
+                      const len = bytes.byteLength;
+                      for (let i = 0; i < len; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                      }
+                      return binary;
+                    }
+                    const binaryString = arrayBufferToBinaryString(data);
+                    const workbook = XLSX.read(binaryString, { type: 'binary' });
+                    let allDetails = [];
+                    for (const sheetName of workbook.SheetNames) {
+                      const sheet = workbook.Sheets[sheetName];
+                      // נניח שכולם credit, אפשר להרחיב לפי הצורך
+                      const details = await parseCreditDetailsFromSheet(sheet, file.name);
+                      allDetails = allDetails.concat(details);
+                    }
+                    setExcelFiles(new Map([[file.name, data]]));
+                    setAnalysis({
+                      totalAmount: allDetails.reduce((sum, d) => sum + signedAmount(d), 0),
+                      averageAmount: allDetails.length > 0 ? allDetails.reduce((sum, d) => sum + signedAmount(d), 0) / allDetails.length : 0,
+                      details: allDetails,
+                      creditChargeCycles: [],
+                    });
+                  } catch (err) {
+                    console.error('שגיאה בטעינת קובץ:', err);
+                    setError('טעינת הקובץ נכשלה או בוטלה.');
+                  }
+                }}
+              />
+              <span style={{ fontSize: '0.9em' }}>או בחר קובץ Excel</span>
+            </div>
             {error && <div className="error-msg" style={{ marginTop: '12px' }}>{error}</div>}
             <ul className="onboarding-hints" aria-label="הוראות">
               <li>ודא שהדפדפן (Chrome / Edge) תומך בגישת תיקיות.</li>
               <li>מומלץ לאחסן קבצי XLSX מעודכנים בלבד.</li>
-              <li>תוכל להחליף תיקיה מאוחר יותר דרך ההגדרות.</li>
+              <li>תוכל להחליף תיקיה או קובץ מאוחר יותר דרך ההגדרות.</li>
             </ul>
           </div>
         </div>
