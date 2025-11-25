@@ -757,7 +757,7 @@ const App: React.FC = () => {
                       throw new Error('XLSX must run in browser only');
                     }
                     const XLSX = await import('xlsx');
-                    function arrayBufferToBinaryString(buffer) {
+                    function arrayBufferToBinaryString(buffer: ArrayBuffer) {
                       let binary = '';
                       const bytes = new Uint8Array(buffer);
                       const len = bytes.byteLength;
@@ -768,7 +768,7 @@ const App: React.FC = () => {
                     }
                     const binaryString = arrayBufferToBinaryString(data);
                     const workbook = XLSX.read(binaryString, { type: 'binary' });
-                    let allDetails = [];
+                    let allDetails: CreditDetail[] = [];
                     for (const sheetName of workbook.SheetNames) {
                       const sheet = workbook.Sheets[sheetName];
                       // נניח שכולם credit, אפשר להרחיב לפי הצורך
