@@ -513,7 +513,7 @@ const App: React.FC = () => {
       // }
       // const XLSX = await import('xlsx');
       const workbook = XLSX.read(fileBuffer, { type: 'array' });
-      workbook.SheetNames.forEach(sheetName => {
+      for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
         // הפוך sheet למערך
         const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
@@ -541,7 +541,7 @@ const App: React.FC = () => {
           }
         });
         // אין צורך להמיר sheet מחדש, הוא כבר עודכן
-      });
+      };
       // המר ל-blob
       const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       newFiles[fileName] = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
