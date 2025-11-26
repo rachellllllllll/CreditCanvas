@@ -1,4 +1,4 @@
-// import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 
 export type SheetType = 'bank' | 'credit' | 'unknown';
 
@@ -10,10 +10,10 @@ function normCell(s: any): string {
 }
 
 export async function detectSheetTypeFromSheet(sheet: any): Promise<SheetType> {
-  if (typeof window === 'undefined') {
-    throw new Error('XLSX must run in browser only');
-  }
-  const XLSX = await import('xlsx');
+  // if (typeof window === 'undefined') {
+  //   throw new Error('XLSX must run in browser only');
+  // }
+  // const XLSX = await import('xlsx');
   const rows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
   const tokens = new Set<string>();
 
