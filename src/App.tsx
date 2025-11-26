@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-// import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 import type { CreditDetail, AnalysisResult } from './types';
 import CategoryManager, { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
@@ -69,7 +69,7 @@ const parseCreditDetailsFromSheet = async (sheet: any, fileName: string): Promis
   // if (typeof window === 'undefined') {
   //   throw new Error('XLSX must run in browser only');
   // }
-  const XLSX = await import('xlsx');
+  // const XLSX = await import('xlsx');
   const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
   // Find the header row index by searching for a row with known column names
   let headerIdx = -1;
@@ -246,7 +246,7 @@ const App: React.FC = () => {
           // if (typeof window === 'undefined') {
           //   throw new Error('XLSX must run in browser only');
           // }
-          const XLSX = await import('xlsx');
+          // const XLSX = await import('xlsx');
           // המרת ArrayBuffer ל-binary string
           function arrayBufferToBinaryString(buffer: ArrayBuffer) {
             let binary = '';
@@ -511,7 +511,7 @@ const App: React.FC = () => {
       // if (typeof window === 'undefined') {
       //   throw new Error('XLSX must run in browser only');
       // }
-      const XLSX = await import('xlsx');
+      // const XLSX = await import('xlsx');
       const workbook = XLSX.read(fileBuffer, { type: 'array' });
       workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
@@ -756,7 +756,7 @@ const App: React.FC = () => {
                     // if (typeof window === 'undefined') {
                     //   throw new Error('XLSX must run in browser only');
                     // }
-                    const XLSX = await import('xlsx');
+                    // const XLSX = await import('xlsx');
                     function arrayBufferToBinaryString(buffer: ArrayBuffer) {
                       let binary = '';
                       const bytes = new Uint8Array(buffer);
