@@ -1,4 +1,4 @@
-import XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 import type { CreditDetail } from '../types';
 
 function normalizeDate(input: any): string {
