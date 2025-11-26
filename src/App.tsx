@@ -66,9 +66,9 @@ function applyAliases(details: CreditDetail[], categoryAliases: Record<string, s
 }
 
 const parseCreditDetailsFromSheet = async (sheet: any, fileName: string): Promise<CreditDetail[]> => {
-  if (typeof window === 'undefined') {
-    throw new Error('XLSX must run in browser only');
-  }
+  // if (typeof window === 'undefined') {
+  //   throw new Error('XLSX must run in browser only');
+  // }
   const XLSX = await import('xlsx');
   const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
   // Find the header row index by searching for a row with known column names
@@ -243,9 +243,9 @@ const App: React.FC = () => {
           const file = await entry.getFile();
           const data = await file.arrayBuffer();
           fileBuffers.set(entry.name, data);
-          if (typeof window === 'undefined') {
-            throw new Error('XLSX must run in browser only');
-          }
+          // if (typeof window === 'undefined') {
+          //   throw new Error('XLSX must run in browser only');
+          // }
           const XLSX = await import('xlsx');
           // המרת ArrayBuffer ל-binary string
           function arrayBufferToBinaryString(buffer: ArrayBuffer) {
@@ -508,9 +508,9 @@ const App: React.FC = () => {
     for (const fileName in byFile) {
       const fileBuffer = excelFiles.get(fileName);
       if (!fileBuffer) continue;
-      if (typeof window === 'undefined') {
-        throw new Error('XLSX must run in browser only');
-      }
+      // if (typeof window === 'undefined') {
+      //   throw new Error('XLSX must run in browser only');
+      // }
       const XLSX = await import('xlsx');
       const workbook = XLSX.read(fileBuffer, { type: 'array' });
       workbook.SheetNames.forEach(sheetName => {
@@ -753,9 +753,9 @@ const App: React.FC = () => {
                   if (!file) return;
                   try {
                     const data = await file.arrayBuffer();
-                    if (typeof window === 'undefined') {
-                      throw new Error('XLSX must run in browser only');
-                    }
+                    // if (typeof window === 'undefined') {
+                    //   throw new Error('XLSX must run in browser only');
+                    // }
                     const XLSX = await import('xlsx');
                     function arrayBufferToBinaryString(buffer: ArrayBuffer) {
                       let binary = '';
