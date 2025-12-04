@@ -223,6 +223,55 @@ const App: React.FC = () => {
   // File System Access API: Directory handle
   const [dirHandle, setDirHandle] = useState<any>(null);
 
+  function parseCSV(text: string): string[][] {
+    return text
+      .split('\n')
+      .map(line => line.split(',').map(cell => cell.trim()));
+  }
+
+  function parseCreditDetailsFromCSV(rows: string[][], fileName: string): CreditDetail[] {
+    if (!rows.length) return [];
+    const headers = rows[0].map(h => h.replace(/"/g, '').replace(/\r?\n/g, '').trim());
+    const details: CreditDetail[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length < 3) continue;
+      const rowObj: Record<string, string> = {};
+      headers.forEach((h, idx) => {
+        rowObj[h] = (row[idx] || '').toString().trim();
+      });
+      let date = rowObj['תאריך עסקה'] || rowObj['תאריך'] || '';
+      let description = rowObj['שם בית העסק'] || rowObj['שם בית עסק'] || rowObj['בית עסק'] || '';
+      let amount = rowObj['סכום חיוב'] || rowObj['סכום עסקה'] || '';
+      let category = rowObj['ענף'] || rowObj['קטגוריה'] || '';
+      let chargeDate = rowObj['תאריך חיוב'] || '';
+      let cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || '';
+      amount = amount.replace(/[^\d.,-]/g, '').replace(',', '.');
+      if (date && amount && description) {
+        const raw = parseFloat(amount);
+        if (isNaN(raw)) continue;
+        let direction: 'income' | 'expense' = raw < 0 ? 'income' : 'expense';
+        const amountAbs = Math.abs(raw);
+        details.push({
+          id: `${date}-${raw}-${description}`,
+          date,
+          amount: amountAbs,
+          description,
+          category,
+          chargeDate,
+          cardLast4,
+          fileName,
+          rowIndex: i,
+          headerIdx: 0,
+          source: 'credit',
+          direction,
+          directionDetected: direction,
+          transactionType: 'regular',
+        });
+      }
+    }
+    return details;
+  }
 
   // File System Access API: Pick directory and read Excel files
   const handlePickDirectory = async () => {
@@ -239,35 +288,43 @@ const App: React.FC = () => {
       let allDetails: CreditDetail[] = [];
       const fileBuffers = new Map<string, ArrayBuffer>();
       for await (const entry of dir.values()) {
-        if (entry.kind === 'file' && (entry.name.endsWith('.xlsx') || entry.name.endsWith('.xls'))) {
-          const file = await entry.getFile();
-          const data = await file.arrayBuffer();
-          fileBuffers.set(entry.name, data);
-          // if (typeof window === 'undefined') {
-          //   throw new Error('XLSX must run in browser only');
-          // }
-          // const XLSX = await import('xlsx');
-          // המרת ArrayBuffer ל-binary string
-          function arrayBufferToBinaryString(buffer: ArrayBuffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-              binary += String.fromCharCode(bytes[i]);
+        if (entry.kind === 'file') {
+          if (entry.name.endsWith('.xlsx') || entry.name.endsWith('.xls')) {
+            const file = await entry.getFile();
+            const data = await file.arrayBuffer();
+            fileBuffers.set(entry.name, data);
+            // if (typeof window === 'undefined') {
+            //   throw new Error('XLSX must run in browser only');
+            // }
+            // const XLSX = await import('xlsx');
+            // המרת ArrayBuffer ל-binary string
+            function arrayBufferToBinaryString(buffer: ArrayBuffer) {
+              let binary = '';
+              const bytes = new Uint8Array(buffer);
+              const len = bytes.byteLength;
+              for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+              }
+              return binary;
             }
-            return binary;
-          }
-          const binaryString = arrayBufferToBinaryString(data);
-          const workbook = XLSX.read(binaryString, { type: 'binary' });
-          for (const sheetName of workbook.SheetNames) {
-            const sheet = workbook.Sheets[sheetName];
-            const type = await ensureSheetType(dir, entry.name, sheetName, sheet);
-            let details: CreditDetail[] = [];
-            if (type === 'credit') {
-              details = await parseCreditDetailsFromSheet(sheet, entry.name);
-            } else {
-              details = await parseBankStatementFromSheet(sheet, entry.name, sheetName);
+            const binaryString = arrayBufferToBinaryString(data);
+            const workbook = XLSX.read(binaryString, { type: 'binary' });
+            for (const sheetName of workbook.SheetNames) {
+              const sheet = workbook.Sheets[sheetName];
+              const type = await ensureSheetType(dir, entry.name, sheetName, sheet);
+              let details: CreditDetail[] = [];
+              if (type === 'credit') {
+                details = await parseCreditDetailsFromSheet(sheet, entry.name);
+              } else {
+                details = await parseBankStatementFromSheet(sheet, entry.name, sheetName);
+              }
+              allDetails = allDetails.concat(details);
             }
+          } else if (entry.name.endsWith('.csv')) {
+            const file = await entry.getFile();
+            const text = await file.text();
+            const rows = parseCSV(text);
+            const details = parseCreditDetailsFromCSV(rows, entry.name);
             allDetails = allDetails.concat(details);
           }
         }
