@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>המרת Excel ל-CSV</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      direction: rtl;
+      text-align: right;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .option-toggle {
+      background: #fafafa;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      border: 1px solid #e0e0e0;
+    }
+    .option-toggle h3 {
+      color: #333;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .toggle-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .toggle-btn {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #667eea;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 14px;
+      font-weight: 500;
+      color: #667eea;
+      text-align: center;
+    }
+    .toggle-btn:hover {
+      background: #f8f9ff;
+    }
+    .toggle-btn.active {
+      background: #667eea;
+      color: white;
+    }
+    .toggle-btn .icon {
+      font-size: 18px;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .file-input-wrapper {
+      position: relative;
+      margin-bottom: 30px;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .file-input-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 30px;
+      border: 2px dashed #667eea;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #f8f9ff;
+      font-size: 16px;
+      font-weight: 500;
+      color: #667eea;
+    }
+    .file-input-label:hover {
+      background: #eef0ff;
+      border-color: #764ba2;
+      color: #764ba2;
+    }
+    .file-input-label.active {
+      border-color: #4caf50;
+      background: #f1f8f4;
+      color: #4caf50;
+    }
+    #status {
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+      display: none;
+    }
+    #status.success {
+      display: block;
+      background: #f1f8f4;
+      color: #2e7d32;
+      border: 1px solid #4caf50;
+    }
+    #status.error {
+      display: block;
+      background: #fef5f5;
+      color: #c62828;
+      border: 1px solid #ef5350;
+    }
+    #status.loading {
+      display: block;
+      background: #f8f9ff;
+      color: #667eea;
+      border: 1px solid #667eea;
+    }
+    .info-box {
+      background: #f0f4ff;
+      border: 1px solid #667eea;
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 13px;
+      color: #333;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .info-box strong {
+      color: #667eea;
+    }
+    .steps {
+      background: #fafafa;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    .steps h3 {
+      color: #333;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .steps ol {
+      padding-right: 20px;
+      font-size: 13px;
+      color: #666;
+      line-height: 1.8;
+    }
+    .steps li {
+      margin-bottom: 8px;
+    }
+    .footer {
+      text-align: center;
+      color: #999;
+      font-size: 12px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>🔄 המרת Excel ל-CSV</h1>
+    <p class="subtitle">כלי זה יממיר את קבצי ה-Excel שלך לקבצי CSV בפורמט UTF-8 תקני, עם תמיכה מלאה בעברית.</p>
+
+    <div class="info-box">
+      <strong>ℹ️ הוראות:</strong><br>
+      בחר קבצי Excel (.xlsx, .xls) מהמחשב שלך, והם יומרו ל-CSV בפורמט UTF-8 עם BOM. כל גיליון יופק כקובץ CSV נפרד.
+    </div>
+
+    <div class="option-toggle">
+      <h3>⚙️ פורמט הורדה:</h3>
+      <div class="toggle-buttons">
+        <button class="toggle-btn active" data-mode="zip">
+          <span class="icon">📦</span>
+          קובץ ZIP אחד
+        </button>
+        <button class="toggle-btn" data-mode="separate">
+          <span class="icon">📄</span>
+          קבצים נפרדים
+        </button>
+      </div>
+    </div>
+
+    <div class="steps" id="steps-zip">
+      <h3>📋 שלבים (ZIP):</h3>
+      <ol>
+        <li>בחר קבצי Excel מהמחשב שלך</li>
+        <li>המרה תתחיל אוטומטית</li>
+        <li>קובץ ZIP עם כל קבצי ה-CSV ירד לתיקיית "הורדות"</li>
+        <li>חלץ את ה-ZIP לתיקיה של המערכת</li>
+        <li>חזור לאפליקציה ובחר את התיקיה מחדש</li>
+      </ol>
+    </div>
+
+    <div class="steps" id="steps-separate" style="display: none;">
+      <h3>📋 שלבים (קבצים נפרדים):</h3>
+      <ol>
+        <li>בחר קבצי Excel מהמחשב שלך</li>
+        <li>המרה תתחיל אוטומטית</li>
+        <li>קבצי ה-CSV ירדו לתיקיית "הורדות"</li>
+        <li>העתק את קבצי ה-CSV לתיקיה של המערכת</li>
+        <li>חזור לאפליקציה ובחר את התיקיה מחדש</li>
+      </ol>
+    </div>
+
+    <div class="file-input-wrapper">
+      <input type="file" id="file-input" multiple accept=".xlsx,.xls" />
+      <label for="file-input" class="file-input-label">
+        <span>📂 בחר קבצי Excel</span>
+      </label>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="footer">
+      חוזר לאפליקציה? זכור להעתיק/לחלץ את הקבצים לתיקיה הנבחרת.
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('file-input');
+    const label = document.querySelector('.file-input-label');
+    const status = document.getElementById('status');
+    const toggleButtons = document.querySelectorAll('.toggle-btn');
+    const stepsZip = document.getElementById('steps-zip');
+    const stepsSeparate = document.getElementById('steps-separate');
+    let downloadMode = 'zip'; // ברירת מחדל
+
+    // Toggle between ZIP and separate files
+    toggleButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        toggleButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        downloadMode = btn.dataset.mode;
+       
+        // Show/hide appropriate steps
+        if (downloadMode === 'zip') {
+          stepsZip.style.display = 'block';
+          stepsSeparate.style.display = 'none';
+        } else {
+          stepsZip.style.display = 'none';
+          stepsSeparate.style.display = 'block';
+        }
+      });
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      if (!files.length) return;
+
+      status.className = 'loading';
+      status.textContent = '⏳ מעבד את הקבצים...';
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errors = [];
+      const zip = downloadMode === 'zip' ? new JSZip() : null;
+
+      for (const file of files) {
+        try {
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          workbook.SheetNames.forEach(sheetName => {
+            try {
+              const csvContent = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+              // הוסף BOM לתחילת הקובץ (עבור UTF-8 עם BOM)
+              const bom = '\uFEFF';
+              const fullCsv = bom + csvContent;
+              const fileName = `${file.name.replace(/\.[^.]+$/, '')}-${sheetName}.csv`;
+
+              if (downloadMode === 'zip') {
+                // הוסף ל-ZIP
+                zip.file(fileName, fullCsv);
+              } else {
+                // הורד כקובץ נפרד
+                const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }
+              successCount++;
+            } catch (err) {
+              errorCount++;
+              errors.push(`שגיאה בגיליון "${sheetName}" מקובץ "${file.name}"`);
+            }
+          });
+        } catch (err) {
+          errorCount++;
+          errors.push(`שגיאה בקובץ "${file.name}": ${err.message}`);
+        }
+      }
+
+      // אם מצב ZIP - צור והורד את הקובץ
+      if (downloadMode === 'zip' && successCount > 0) {
+        try {
+          status.textContent = '⏳ יוצר קובץ ZIP...';
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+          const zipBlob = await zip.generateAsync({ type: 'blob' });
+          const url = URL.createObjectURL(zipBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `excel-to-csv-${timestamp}.zip`;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          status.className = 'error';
+          status.innerHTML = `❌ <strong>שגיאה ביצירת קובץ ZIP:</strong><br>${err.message}`;
+          fileInput.value = '';
+          return;
+        }
+      }
+
+      // הצג סטטוס סופי
+      if (errorCount === 0) {
+        status.className = 'success';
+        if (downloadMode === 'zip') {
+          status.innerHTML = `✅ <strong>הממרה הושלמה בהצלחה!</strong><br>
+            קובץ ZIP עם ${successCount} קבצי CSV הורד לתיקיית "הורדות".<br><br>
+            <strong>הצעד הבא:</strong> חלץ את קובץ ה-ZIP לתיקיה הנבחרת, ואז בחר את התיקיה מחדש באפליקציה.`;
+        } else {
+          status.innerHTML = `✅ <strong>הממרה הושלמה בהצלחה!</strong><br>
+            ${successCount} קבצי CSV ירדו לתיקיית "הורדות".<br><br>
+            <strong>הצעד הבא:</strong> העתק את קבצי ה-CSV לתיקיה הנבחרת, ואז בחר את התיקיה מחדש באפליקציה.`;
+        }
+      } else if (successCount > 0) {
+        status.className = 'error';
+        const modeText = downloadMode === 'zip' ? 'קובץ ZIP עם ' : '';
+        status.innerHTML = `⚠️ <strong>הממרה הושלמה חלקית</strong><br>
+          ${modeText}${successCount} קובץ/ים הצליחו, ${errorCount} קובץ/ים נכשלו<br><br>
+          <strong>שגיאות:</strong><br>${errors.join('<br>')}`;
+      } else {
+        status.className = 'error';
+        status.innerHTML = `❌ <strong>הממרה נכשלה</strong><br>
+          ${errors.join('<br>')}`;
+      }
+
+      // אפשר בחירה חדשה
+      label.classList.remove('active');
+      fileInput.value = '';
+    });
+
+    // UI improvements
+    fileInput.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      label.classList.add('active');
+    });
+
+    fileInput.addEventListener('dragleave', () => {
+      label.classList.remove('active');
+    });
+
+    fileInput.addEventListener('drop', (e) => {
+      e.preventDefault();
+      label.classList.remove('active');
+      fileInput.files = e.dataTransfer.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  </script>
+</body>
+</html>
+
