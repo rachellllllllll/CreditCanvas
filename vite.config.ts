@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { Buffer } from 'buffer'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -9,4 +9,38 @@ export default defineConfig({
       '/api': 'http://localhost:3001',
     },
   },
+  define: {
+    'process.env': {},
+    global: 'globalThis',
+  },
+  resolve: {
+    alias: {
+      buffer: 'buffer',
+      process: 'process/browser',
+      stream: 'stream-browserify',
+    }
+  },
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'xlsx-vendor': ['xlsx']
+        }
+      }
+    },
+    commonjsOptions: {
+      include: [/xlsx/, /node_modules/],
+      transformMixedEsModules: true
+    }
+  },
+  optimizeDeps: {
+    include: ['xlsx', 'buffer', 'process'],
+    esbuildOptions: {
+      target: 'esnext',
+      define: {
+        global: 'globalThis'
+      },
+    }
+  }
 });

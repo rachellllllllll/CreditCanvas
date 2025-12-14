@@ -54,14 +54,47 @@ const MainView: React.FC<MainViewProps> = ({
   // רפרנס לכותרת העליונה לצורך מעבר למצב מכווץ בגלילה
   const headerRef = useRef<HTMLDivElement | null>(null);
 
-  // רשימת כרטיסים זמינים (4 ספרות אחרונות) מחושבת מהנתונים הגולמיים
-  const availableCards = useMemo(() => {
+  // רשימת כרטיסים זמינים (4 ספרות אחרונות) + תאריך שימוש אחרון לכל כרטיס
+  // וכן אינדיקציה האם הכרטיס מופיע בטווח התאריכים המוצג (filteredDetails)
+  const { availableCards, lastDateByCard, activeInViewByCard } = useMemo(() => {
     const set = new Set<string>();
+    const lastDateMap: Record<string, number> = {};
+    const activeMap: Record<string, boolean> = {};
+
+    const parseToTs = (raw: string | undefined) => {
+      if (!raw) return 0;
+      const parts = raw.split(/[\/\-]/);
+      if (parts.length < 3) return 0;
+      const dd = parts[0].padStart(2, '0');
+      const mm = parts[1].padStart(2, '0');
+      let yyyy = parts[2];
+      if (yyyy.length === 2) yyyy = '20' + yyyy;
+      const iso = `${yyyy}-${mm}-${dd}`;
+      const ts = Date.parse(iso);
+      return Number.isNaN(ts) ? 0 : ts;
+    };
+
     for (const d of analysis.details) {
-      if (d.source === 'credit' && d.cardLast4) set.add(d.cardLast4);
+      if (d.source !== 'credit' || !d.cardLast4) continue;
+      set.add(d.cardLast4);
+
+      const rawDate = dateMode === 'charge' && d.chargeDate ? d.chargeDate : d.date;
+      const ts = parseToTs(rawDate);
+      if (!lastDateMap[d.cardLast4] || ts > lastDateMap[d.cardLast4]) {
+        lastDateMap[d.cardLast4] = ts;
+      }
     }
-    return Array.from(set).sort();
-  }, [analysis.details]);
+
+    // כרטיסים שמופיעים בטווח המסונן כרגע (filteredDetails)
+    for (const d of filteredDetails) {
+      if (d.source === 'credit' && d.cardLast4) {
+        activeMap[d.cardLast4] = true;
+      }
+    }
+
+    const cards = Array.from(set).sort();
+    return { availableCards: cards, lastDateByCard: lastDateMap, activeInViewByCard: activeMap };
+  }, [analysis.details, filteredDetails, dateMode]);
   // בחירת הכרטיסים המוצגים (ברירת מחדל: כולם)
   const [selectedCards, setSelectedCards] = useState<string[]>(availableCards);
   // האם להציג עסקאות בנק
@@ -131,7 +164,7 @@ const MainView: React.FC<MainViewProps> = ({
     // סינון לפי חיפוש
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(tx => 
+      filtered = filtered.filter(tx =>
         tx.description.toLowerCase().includes(term) ||
         tx.category?.toLowerCase().includes(term)
       );
@@ -157,13 +190,13 @@ const MainView: React.FC<MainViewProps> = ({
   const topCategoryData = useMemo(() => {
     const sortedCategories = Object.entries(categories)
       .sort(([,a], [,b]) => b - a);
-    
+   
     if (sortedCategories.length === 0) return null;
-    
+   
     const [topCategory, topAmount] = sortedCategories[0];
     const total = Object.values(categories).reduce((sum, val) => sum + val, 0);
     const percentage = total > 0 ? ((topAmount / total) * 100).toFixed(1) : '0';
-    
+   
     return { name: topCategory, amount: topAmount, percentage };
   }, [categories]);
 
@@ -303,13 +336,13 @@ const MainView: React.FC<MainViewProps> = ({
           </div>
           {/* <h1>ניתוח הוצאות</h1> */}
           <div className="view-toggle">
-            <button 
+            <button
               onClick={() => setView('monthly')}
               className={view === 'monthly' ? 'active' : ''}
             >
               תצוגה חודשית
             </button>
-            <button 
+            <button
               onClick={() => setView('yearly')}
               className={view === 'yearly' ? 'active' : ''}
             >
@@ -320,6 +353,8 @@ const MainView: React.FC<MainViewProps> = ({
           {/* בורר מקורות (כרטיסי אשראי / בנק) */}
           <SourceFilter
             availableCards={availableCards}
+            lastDateByCard={lastDateByCard}
+            activeInViewByCard={activeInViewByCard}
             selectedCards={selectedCards}
             onToggleCard={toggleCard}
             includeBank={includeBank}
@@ -331,7 +366,7 @@ const MainView: React.FC<MainViewProps> = ({
           />
 
           {/* ניווט חודש / שנה משולב */}
-          <DateNavigator 
+          <DateNavigator
             view={view}
             sortedMonths={sortedMonths}
             selectedMonth={selectedMonth}
@@ -406,7 +441,7 @@ const MainView: React.FC<MainViewProps> = ({
             <div className="mc-value" title={`הכנסות בחודש`}>₪{summary.income.toLocaleString()}</div>
             <div className="mc-sub">כולל כל ההכנסות</div>
           </div>
-          <div className="metric-card tx-count" aria-label={`מספר עסקאות ${filteredTransactions.length}`}> 
+          <div className="metric-card tx-count" aria-label={`מספר עסקאות ${filteredTransactions.length}`}>
             <div className="mc-header">
               <span className="mc-label">מספר עסקאות</span>
             </div>
@@ -459,7 +494,7 @@ const MainView: React.FC<MainViewProps> = ({
             {/* <div className="chart-section-wrapper">
               <div className="chart-header">
                 <h3>גרף עמודות חודשיות</h3>
-                <button 
+                <button
                   className="minimize-btn"
                   onClick={() => setShowBarChart(!showBarChart)}
                   title={showBarChart ? 'מזער גרף' : 'הרחב גרף'}
@@ -469,7 +504,7 @@ const MainView: React.FC<MainViewProps> = ({
               </div>
               {showBarChart && (
                 <div className="chart-section bar-chart">
-                  <MonthBarChart 
+                  <MonthBarChart
                     monthTotals={monthTotals}
                     selectedMonth={selectedMonth}
                     months={months}
@@ -482,7 +517,7 @@ const MainView: React.FC<MainViewProps> = ({
             {/* <div className="chart-section-wrapper">
               <div className="chart-header">
                 <h3>גרף עוגה לפי קטגוריות</h3>
-                <button 
+                <button
                   className="minimize-btn"
                   onClick={() => setShowPieChart(!showPieChart)}
                   title={showPieChart ? 'מזער גרף' : 'הרחב גרף'}
@@ -492,7 +527,7 @@ const MainView: React.FC<MainViewProps> = ({
               </div>
               {showPieChart && (
                 <div className="chart-section pie-chart">
-                  <CategoryPieChart 
+                  <CategoryPieChart
                     categories={categories}
                   />
                 </div>
@@ -501,7 +536,7 @@ const MainView: React.FC<MainViewProps> = ({
 
             {/* טבלת עסקאות */}
             <div className="table-section">
-              <TransactionsTable 
+              <TransactionsTable
                 details={filteredTransactions}
                 onEditCategory={handleOpenEditCategory}
                 categoriesList={categoriesList}
@@ -516,7 +551,7 @@ const MainView: React.FC<MainViewProps> = ({
 
             {/* טבלת עסקאות גם בתצוגה שנתית */}
             <div className="table-section">
-              <TransactionsTable 
+              <TransactionsTable
                 details={filteredTransactions}
                 onEditCategory={handleOpenEditCategory}
                 categoriesList={categoriesList}
