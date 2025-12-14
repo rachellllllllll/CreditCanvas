@@ -19,3 +19,16 @@
 .sf-close:hover { filter:brightness(1.08); }
 .sf-card-line { gap:6px; }
 .sf-card-digits { font-size:12px; font-weight:600; color:#334155; background:#eef2f7; padding:4px 8px; border-radius:8px; letter-spacing:.5px; }
+.sf-card-main { display:flex; flex-direction:column; gap:2px; flex:1; }
+.sf-card-top-row { display:flex; align-items:center; gap:6px; }
+.sf-card-lastdate { font-size:11px; color:#64748b; }
+.sf-card-lastdate-row { font-size:11px; color:#64748b; text-align:right; margin-inline-start:0; }
+.sf-card-lastdate-old { color:#9ca3af; }
+.sf-subtitle { font-size:11px; font-weight:600; color:#64748b; margin-top:4px; margin-bottom:2px; }
+.sf-old-title { color:#9ca3af; }
+.sf-old-cards-toggle { margin-top:8px; margin-bottom:4px; background:none; border:none; color:#4f46e5; font-size:12px; cursor:pointer; padding:0; text-decoration:underline; }
+.sf-old-cards-toggle:hover { color:#4338ca; background:none; box-shadow:none; transform:none; }
+.sf-old-cards-group { margin-top:4px; padding-top:4px; border-top:1px dashed #e5e7eb; }
+.sf-card-old { opacity:0.78; }
+.sf-card-old:hover { opacity:1; }
+.sf-old-chip { font-size:10px; color:#9ca3af; border:1px solid #e5e7eb; border-radius:999px; padding:2px 6px; margin-inline-start:auto; }
