@@ -1,14 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Debug: check if env vars are loaded
-console.log('[Supabase] VITE_SUPABASE_PROJECT_URL:', import.meta.env.VITE_SUPABASE_PROJECT_URL ? '✓ loaded' : '✗ missing');
+console.log('[Supabase] VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? '✓ loaded' : '✗ missing');
 console.log('[Supabase] VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? '✓ loaded' : '✗ missing');
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_PROJECT_URL as string | undefined;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] Missing VITE_SUPABASE_PROJECT_URL or VITE_SUPABASE_ANON_KEY environment variables');
+  console.warn('[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables');
 }
 
 // Create and export the Supabase client instance.
