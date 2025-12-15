@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { supabase } from './lib/supabaseClient';
+import { onAuthChange, signOut as firebaseSignOut } from './lib/firebaseClient';
 import Auth from './components/Auth';
 import React, { useState } from 'react';
 import { readXLSX, sheetToArray, type Workbook, type Sheet } from './utils/xlsxMinimal';
@@ -267,29 +267,13 @@ const App: React.FC = () => {
   const [pendingDirHandle, setPendingDirHandle] = useState<any>(null);
 
   // שמע לשינויים באימות
-  useEffect(() => {
-    // בדוק session נוכחי
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+ useEffect(() => {
+    const unsub = onAuthChange((u) => {
+      setUser(u);
       setAuthLoading(false);
     });
-
-    // האזן לשינויים
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-
-      if (_event === 'SIGNED_IN' && session?.user) {
-        await supabase.from('user_logins').insert({
-          user_id: session.user.id,
-          email: session.user.email
-        });
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => { typeof unsub === 'function' && unsub(); };
   }, []);
-
-
 
   function parseCSV(text: string): string[][] {
     // Robust CSV parsing: supports quoted fields with commas and CRLF

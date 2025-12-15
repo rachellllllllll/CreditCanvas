@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { signUp as fbSignUp, signIn as fbSignIn } from '../lib/firebaseClient';
 import Logo from './Logo';
 import './Auth.css';
 
@@ -15,27 +15,11 @@ export default function Auth() {
 
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        alert('נרשמת בהצלחה! בדוק את המייל לאימות.');
+        await fbSignUp(email, password);
+        alert('נרשמת בהצלחה!');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        await fbSignIn(email, password);
       }
-    } catch (error: any) {
-      alert(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // אופציה: Magic Link (ללא סיסמה)
-  const handleMagicLink = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({ email });
-      if (error) throw error;
-      alert('נשלח קישור למייל שלך!');
     } catch (error: any) {
       alert(error.message);
     } finally {
@@ -76,14 +60,6 @@ export default function Auth() {
             {loading ? '...טוען' : mode === 'signin' ? 'התחבר' : 'הרשם'}
           </button>
         </form>
-
-        <button
-          onClick={handleMagicLink}
-          disabled={loading || !email}
-          className="magic-link-btn"
-        >
-          שלח קישור למייל (ללא סיסמה)
-        </button>
 
         <p className="toggle-mode">
           {mode === 'signin' ? 'אין לך חשבון? ' : 'יש לך כבר חשבון? '}
