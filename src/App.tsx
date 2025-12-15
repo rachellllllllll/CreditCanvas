@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+import { supabase } from './lib/supabaseClient';
+import Auth from './components/Auth';
 import React, { useState } from 'react';
 import { readXLSX, sheetToArray, type Workbook, type Sheet } from './utils/xlsxMinimal';
 import { ensureSheetType, ensureCsvType, detectSheetTypeFromSheet, detectSheetTypeFromCSV, saveSheetTypeOverridesToDir } from './utils/sheetType';
@@ -254,12 +257,39 @@ const App: React.FC = () => {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   // שמור את קבצי האקסל המקוריים בזיכרון (Map fileName -> ArrayBuffer)
   const [excelFiles, setExcelFiles] = useState<Map<string, ArrayBuffer>>(new Map());
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
 
   // File System Access API: Directory handle
   const [dirHandle, setDirHandle] = useState<any>(null);
   // שמור את ה-dirHandle אם נתקלנו בתיקיה עם Excel בלבד
   const [pendingDirHandle, setPendingDirHandle] = useState<any>(null);
+
+  // שמע לשינויים באימות
+  useEffect(() => {
+    // בדוק session נוכחי
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    // האזן לשינויים
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setUser(session?.user ?? null);
+
+      if (_event === 'SIGNED_IN' && session?.user) {
+        await supabase.from('user_logins').insert({
+          user_id: session.user.id,
+          email: session.user.email
+        });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+
 
   function parseCSV(text: string): string[][] {
     // Robust CSV parsing: supports quoted fields with commas and CRLF
@@ -466,20 +496,20 @@ const App: React.FC = () => {
             try {
               const file = await entry.getFile();
               const arrayBuffer = await file.arrayBuffer();
-             
+
               // שמור את קובץ האקסל המקורי בזיכרון
               setExcelFiles(prev => new Map(prev).set(entry.name, arrayBuffer));
-             
+
               // קרא את הקובץ עם Parser המינימלי
               const workbook = await readXLSX(arrayBuffer);
-             
+
               // עבור על כל הגיליונות
               for (const sheet of workbook.sheets) {
                 const sheetData = sheetToArray(sheet);
-               
+
                 // זיהוי סוג הגיליון
                 const type = await ensureSheetType(dir, entry.name, sheet.name, sheetData);
-               
+
                 let details: CreditDetail[] = [];
                 if (type === 'credit') {
                   details = await parseCreditDetailsFromSheet(sheetData, entry.name);
@@ -913,6 +943,16 @@ const App: React.FC = () => {
     return map;
   }, [analysis]);
 
+  // הצג מסך טעינה
+  if (authLoading) {
+    return <div style={{ padding: '2rem' }}>טוען...</div>;
+  }
+
+  // אם אין משתמש - הצג מסך התחברות
+  if (!user) {
+    return <Auth />;
+  }
+
   return (
     <div className="app-container">
       {/* Onboarding screen: show until analysis is ready */}
@@ -921,7 +961,7 @@ const App: React.FC = () => {
           <div className="onboarding-inner">
             <h1 id="onboardingTitle">ברוך הבא למערכת ניתוח חיובי אשראי</h1>
             <p className="onboarding-sub">בחר תיקיה עם קבצי CSV של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
-           
+
             <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f8ff', borderRadius: '8px', borderLeft: '4px solid #2196F3' }}>
               <p style={{ fontSize: '0.95em', lineHeight: '1.6', color: '#0d47a1', marginBottom: '10px' }}>
                 💡 <strong>יש לך קבצי Excel?</strong> השתמש בכלי ההמרה להמיר אותם ל-CSV:
