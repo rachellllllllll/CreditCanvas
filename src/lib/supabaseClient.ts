@@ -1,28 +1,36 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Debug: check if env vars are loaded
-console.log('[Supabase] VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? '✓ loaded' : '✗ missing');
-console.log('[Supabase] VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? '✓ loaded' : '✗ missing');
+// Workaround for Vercel env vars issue
+const getEnvVar = (key: string, fallback: string): string => {
+  const value = import.meta.env[key];
+  // Check if value is undefined, empty, or only whitespace
+  if (!value || typeof value !== 'string' || value.trim().length === 0) {
+    console.warn(`[Supabase] ${key} is empty, using fallback`);
+    return fallback;
+  }
+  return value.trim();
+};
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseUrl = getEnvVar(
+  'VITE_SUPABASE_URL',
+  'https://zjxlpmbdxcplqesxgwbf.supabase.co'
+);
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables');
-}
+const supabaseAnonKey = getEnvVar(
+  'VITE_SUPABASE_ANON_KEY',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeGxwbWJkeGNwbHFlc3hnd2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0MjYxMTksImV4cCI6MjA3OTAwMjExOX0.K9q-yhpHAoB0x_GgLkpEblhpbKsoyYOq3yXZs_kvQ1Q'
+);
 
-// Create and export the Supabase client instance.
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+console.log('[Supabase] Using URL:', supabaseUrl);
+console.log('[Supabase] Key length:', supabaseAnonKey.length);
 
-// Optional helper: get current session quickly
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 export async function getCurrentUser() {
   const { data } = await supabase.auth.getSession();
   return data.session?.user || null;
 }
 
-// Optional helper: sign out
 export async function signOut() {
   await supabase.auth.signOut();
 }
-
-// You can add auth helpers (signIn, signUp) later in src/auth/ if desired.
