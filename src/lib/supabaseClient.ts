@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Load env vars (Vite style). Ensure you define these in a .env file or Vercel project settings.
+// Debug: check if env vars are loaded
+console.log('[Supabase] VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? '✓ loaded' : '✗ missing');
+console.log('[Supabase] VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? '✓ loaded' : '✗ missing');
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
