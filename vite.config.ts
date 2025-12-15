@@ -12,6 +12,12 @@ export default defineConfig({
   define: {
     'process.env': {},
     global: 'globalThis',
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
+      process.env.VITE_SUPABASE_URL || 'https://zjxlpmbdxcplqesxgwbf.supabase.co'
+    ),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(
+      process.env.VITE_SUPABASE_ANON_KEY || ''
+    ),
   },
   resolve: {
     alias: {
