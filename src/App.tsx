@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { onAuthChange, signOut as firebaseSignOut } from './lib/firebaseClient';
+import { onAuthChange, signOut as firebaseSignOut, sendVerificationEmail } from './lib/firebaseClient';
 import Auth from './components/Auth';
 import React, { useState } from 'react';
 import { readXLSX, sheetToArray, type Workbook, type Sheet } from './utils/xlsxMinimal';
@@ -935,6 +935,20 @@ const App: React.FC = () => {
   // אם אין משתמש - הצג מסך התחברות
   if (!user) {
     return <Auth />;
+  }
+
+  // דרישת אימות מייל לפני גישה
+  if (user && user.email && user.emailVerified === false) {
+    return (
+      <div className="modern-card" style={{ maxWidth: 520, margin: '60px auto' }}>
+        <h2>אימות מייל נדרש</h2>
+        <p>שלחנו אליך מייל אימות לכתובת: {user.email}. יש לאמת את המייל לפני כניסה למערכת.</p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+          <button onClick={async () => { try { await sendVerificationEmail(); alert('נשלח מייל אימות נוסף'); } catch (e: any) { const code = e?.code as string | undefined; const map = (c?: string) => c === 'auth/unauthorized-continue-uri' ? 'הדומיין אינו מאושר ב-Firebase Auth' : c === 'auth/invalid-continue-uri' ? 'כתובת החזרה לא חוקית' : c === 'auth/network-request-failed' ? 'שגיאת רשת בעת שליחת המייל' : 'לא ניתן לשלוח מייל אימות'; alert(map(code)); } }}>שלח שוב מייל אימות</button>
+          <button onClick={() => window.location.reload()}>רענן לאחר אימות</button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -5,6 +5,10 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut as firebaseSignOut,
+  setPersistence,
+  browserLocalPersistence,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   type User
 } from 'firebase/auth';
 import {
@@ -27,6 +31,25 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Explicit persistence across tabs/sessions
+setPersistence(auth, browserLocalPersistence).catch(() => {
+  /* ignore – fallback to default persistence */
+});
+
+// Use browser language for auth emails (e.g., Hebrew UI)
+try {
+  // Not critical if fails
+  (auth as any).useDeviceLanguage?.();
+} catch {}
+
+function getActionCodeSettings() {
+  // Redirect back to the app after action completes
+  const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
+  return origin
+    ? { url: origin, handleCodeInApp: false }
+    : undefined;
+}
 
 export async function signUp(email: string, password: string): Promise<User> {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -54,4 +77,15 @@ export async function signOut(): Promise<void> {
 
 export function onAuthChange(cb: (user: User | null) => void) {
   return onAuthStateChanged(auth, cb);
+}
+
+export async function sendPasswordReset(email: string): Promise<void> {
+  const settings = getActionCodeSettings();
+  await sendPasswordResetEmail(auth, email, settings);
+}
+
+export async function sendVerificationEmail(): Promise<void> {
+  if (!auth.currentUser) throw new Error('לא נמצא משתמש מחובר');
+  const settings = getActionCodeSettings();
+  await sendEmailVerification(auth.currentUser, settings);
 }
