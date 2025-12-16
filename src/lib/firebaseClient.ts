@@ -84,11 +84,11 @@ export async function sendPasswordReset(email: string): Promise<void> {
   await sendPasswordResetEmail(auth, email, settings);
 }
 
-export async function sendVerificationEmail(): Promise<void> {
-  if (!auth.currentUser) throw new Error('לא נמצא משתמש מחובר');
-  const settings = getActionCodeSettings();
-  await sendEmailVerification(auth.currentUser, settings);
-}
+// export async function sendVerificationEmail(): Promise<void> {
+//   if (!auth.currentUser) throw new Error('לא נמצא משתמש מחובר');
+//   const settings = getActionCodeSettings();
+//   await sendEmailVerification(auth.currentUser, settings);
+// }
 
 export async function sendVerificationEmail(): Promise<void> {
   const u = auth.currentUser;
