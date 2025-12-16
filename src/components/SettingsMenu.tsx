@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import LoginHistory from './LoginHistory';
 import DescriptionCategoriesMappingDialog from './DescriptionCategoriesMappingDialog';
 import type { CategoryDef } from './CategoryManager';
 
@@ -42,6 +43,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ open, onClose, onOpenCatego
         >
           ניהול שיוך בית עסק לקטגוריה
         </button>
+        <div style={{ borderTop: '1px solid #e0e7ef', marginTop: 12, paddingTop: 12 }} />
+        <LoginHistory />
         {/* אפשר להוסיף כאן עוד אפשרויות הגדרות בעתיד */}
       </div>
       <DescriptionCategoriesMappingDialog

@@ -6,6 +6,7 @@ import type { CategoryDef } from './CategoryManager';
 import './MainView.css';
 import { signedAmount } from '../utils/money';
 import SourceFilter from './filters/SourceFilter';
+import { signOut } from '../lib/supabaseClient';
 
 interface MainViewProps {
   analysis: AnalysisResult;
@@ -189,14 +190,14 @@ const MainView: React.FC<MainViewProps> = ({
   // חישוב הקטגוריה הגדולה ביותר
   const topCategoryData = useMemo(() => {
     const sortedCategories = Object.entries(categories)
-      .sort(([,a], [,b]) => b - a);
-   
+      .sort(([, a], [, b]) => b - a);
+
     if (sortedCategories.length === 0) return null;
-   
+
     const [topCategory, topAmount] = sortedCategories[0];
     const total = Object.values(categories).reduce((sum, val) => sum + val, 0);
     const percentage = total > 0 ? ((topAmount / total) * 100).toFixed(1) : '0';
-   
+
     return { name: topCategory, amount: topAmount, percentage };
   }, [categories]);
 
@@ -208,7 +209,7 @@ const MainView: React.FC<MainViewProps> = ({
     const icon = def?.icon || '🏆';
     // פונקציה לערבוב עם לבן כדי להחליש את הרוויה (ratio = כמה לבן להכניס)
     const blendWithWhite = (hex: string, ratio: number) => {
-      const h = hex.replace('#','');
+      const h = hex.replace('#', '');
       const num = parseInt(h, 16);
       const r = (num >> 16) & 255;
       const g = (num >> 8) & 255;
@@ -325,7 +326,7 @@ const MainView: React.FC<MainViewProps> = ({
     <div className="main-view">
       {/* 1. כותרת ראשית + בחירת תצוגה + פעולות */}
       <div className="main-view-header">
-  <div ref={headerRef} className="header-top" role="toolbar" aria-label="סרגל ראשי של סינון וניווט">
+        <div ref={headerRef} className="header-top" role="toolbar" aria-label="סרגל ראשי של סינון וניווט">
           <div className="folder-cluster" aria-label="תיקיית אקסל נבחרת">
             {selectedFolder && (
               <span className="folder-current" title={selectedFolder}>תיקיה: <b>{selectedFolder}</b></span>
@@ -479,6 +480,15 @@ const MainView: React.FC<MainViewProps> = ({
             </div>
           )}
         </div>
+        <button
+          onClick={async () => {
+            await signOut();
+            window.location.reload();
+          }}
+          style={{ position: 'absolute', top: 10, left: 10 }}
+        >
+          התנתק
+        </button>
 
       </div>
 
