@@ -89,3 +89,21 @@ export async function sendVerificationEmail(): Promise<void> {
   const settings = getActionCodeSettings();
   await sendEmailVerification(auth.currentUser, settings);
 }
+
+export async function sendVerificationEmail(): Promise<void> {
+  const u = auth.currentUser;
+  console.log('[Debug] Current user:', u?.email, 'emailVerified:', u?.emailVerified);
+ 
+  if (!u) throw new Error('אין משתמש מחובר');
+ 
+  try {
+    await sendEmailVerification(u, {
+      url: window.location.origin,
+      handleCodeInApp: false
+    });
+    console.log('[Debug] ✓ Email verification sent successfully');
+  } catch (error: any) {
+    console.error('[Debug] ✗ Failed to send email:', error.code, error.message);
+    throw error;
+  }
+}
