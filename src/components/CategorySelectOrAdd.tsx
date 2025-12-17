@@ -17,15 +17,32 @@ interface CategorySelectOrAddProps {
   allowAdd?: boolean;
   placeholder?: string;
   forbiddenCategoryName?: string; // Prevent selecting this category
+  defaultIcon?: string; // אייקון ברירת מחדל
+  defaultColor?: string; // צבע ברירת מחדל
+  recommendedIcons?: string[]; // אייקונים מומלצים
+  previewVisibility?: 'always' | 'afterAdd'; // שליטה מתי להציג צ'יפ
+  showDefaultChipIfProvided?: boolean; // הצג צ'יפ כאשר יש ברירת מחדל
+  onDraftChange?: (draft: { name: string; icon: string; color: string } | null) => void; // דיווח טיוטה להורה
 }
 
-const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCategoryName?: string }> = ({ categories, value, onChange, onAddCategory, allowAdd = true, placeholder, forbiddenCategoryName }) => {
+const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCategoryName?: string }> = ({ categories, value, onChange, onAddCategory, allowAdd = true, placeholder, forbiddenCategoryName, defaultIcon, defaultColor, recommendedIcons: propRecommendedIcons = [], previewVisibility = 'afterAdd', showDefaultChipIfProvided = false, onDraftChange }) => {
   const [input, setInput] = useState(value || '');
-  const [icon, setIcon] = useState(ICONS[0]);
-  const [color, setColor] = useState(() => colorPalette[Math.floor(Math.random() * colorPalette.length)]);
+  const [icon, setIcon] = useState(defaultIcon || ICONS[0]);
+  const [color, setColor] = useState(defaultColor || colorPalette[Math.floor(Math.random() * colorPalette.length)]);
+  const initialIconRef = useRef<string>(defaultIcon || ICONS[0]);
+  const initialColorRef = useRef<string>(defaultColor || color);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [recommendedIcons, setRecommendedIcons] = useState<string[]>([]);
+  const [recommendedIcons, setRecommendedIcons] = useState<string[]>(propRecommendedIcons);
+  const [editingMode, setEditingMode] = useState(false);
+
+  const getReadableTextColor = (hex: string): string => {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+    if (!m) return '#1f2937';
+    const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness > 160 ? '#1f2937' : '#ffffff';
+  };
 
   // Filter categories by input and forbiddenCategoryName
   const filtered = input.trim()
@@ -39,23 +56,69 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
   };
 
   const handleAdd = () => {
-    if (!input.trim() || exists) return;
-    onAddCategory({ name: input.trim(), icon, color });
-    onChange(input.trim());
+    const name = input.trim();
+    if (!name) return;
+    onAddCategory({ name, icon, color });
+    onChange(name);
     setShowDropdown(false);
+    setEditingMode(false);
+    if (onDraftChange) onDraftChange(null);
   };
+
+  // When a category is selected, load its icon and color for editing
+  useEffect(() => {
+    if (editingMode && input.trim()) {
+      const selected = categories.find(c => c.name === input.trim());
+      if (selected) {
+        setIcon(selected.icon);
+        setColor(selected.color);
+      }
+    }
+  }, [editingMode, input, categories]);
 
   // Fetch recommended icons when icon picker is opened and input is not empty
   useEffect(() => {
     if (showIconPicker && input.trim()) {
-      fetch(`/api/recommend-icons?category=${encodeURIComponent(input.trim())}`)
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.icons)) setRecommendedIcons(data.icons);
-        })
-        .catch(() => setRecommendedIcons([]));
+      // אם יש recommendedIcons מ-props, השתמש בהם
+      if (propRecommendedIcons.length > 0) {
+        setRecommendedIcons(propRecommendedIcons);
+      } else {
+        // אחרת נסה להשיג מ-API
+        // fetch(`/api/recommend-icons?category=${encodeURIComponent(input.trim())}`)
+        //   .then(res => res.json())
+        //   .then(data => {
+        //     if (Array.isArray(data.icons)) setRecommendedIcons(data.icons);
+        //   })
+        //   .catch(() => setRecommendedIcons([]));
+      }
     }
-  }, [showIconPicker, input]);
+  }, [showIconPicker, input, propRecommendedIcons]);
+
+  // דווח טיוטה להורה כאשר יש שינוי בשם/אייקון/צבע ולא אושרה הוספה
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const t = (input || '').trim();
+    const baselineName = (value || '').trim();
+    const isNameEdited = t !== baselineName;
+    const isIconEdited = icon !== initialIconRef.current;
+    const isColorEdited = color !== initialColorRef.current;
+    const touched = editingMode || isNameEdited || isIconEdited || isColorEdited;
+    if (touched) {
+      const draftName = t || baselineName;
+      if (draftName) onDraftChange({ name: draftName, icon: icon || defaultIcon || '', color: color || defaultColor || '' });
+      else onDraftChange(null);
+    } else {
+      onDraftChange(null);
+    }
+  }, [input, icon, color, editingMode, value, defaultIcon, defaultColor, onDraftChange]);
+
+  // עדכן בסיס להשוואה כשמתחלפים ערכי ברירת המחדל (לדוגמה שורה אחרת)
+  useEffect(() => {
+    initialIconRef.current = defaultIcon || icon;
+    initialColorRef.current = defaultColor || color;
+    // איפוס טיוטה כשהקונטקסט מתחלף
+    if (onDraftChange) onDraftChange(null);
+  }, [defaultIcon, defaultColor]);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -124,12 +187,23 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
     };
   }, [showDropdown]);
 
+  // Pre-calc chip visibility when defaults provided vs selection
+  const trimmed = input.trim();
+  const selected = trimmed ? categories.find(c => c.name === trimmed) : undefined;
+  const hasDefault = !!defaultIcon || !!defaultColor;
+  const shouldShowChip = !editingMode && (
+    previewVisibility === 'always'
+      ? !!trimmed
+      : (!!selected || (showDefaultChipIfProvided && hasDefault))
+  );
+
   return (
     <div
       ref={wrapperRef}
       className='CategorySelectOrAdd'
       tabIndex={-1}
     >
+      {!shouldShowChip && (
       <div className="CategorySelectOrAdd-input-wrapper">
         <input
           type="text"
@@ -174,8 +248,27 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
           document.body
         )}
       </div>
-      {/* Show icon and color picker only if input is not an existing category and not empty */}
-      {allowAdd && !exists && input.trim() && (
+      )}
+      {/* Chip preview: afterAdd shows chip רק אחרי הוספה/בחירה; always מציג תמיד */}
+      {shouldShowChip && (() => {
+        const chipIcon = selected?.icon ?? (defaultIcon || icon);
+        const chipColor = selected?.color ?? (defaultColor || color || '#e5e7eb');
+        const textColor = getReadableTextColor(chipColor);
+        const label = trimmed || placeholder || '';
+        return (
+          <span
+            className="CategorySelectOrAdd-chip final"
+            style={{ backgroundColor: chipColor, color: textColor }}
+            title={label}
+            onClick={() => { setEditingMode(true); }}
+          >
+            <span className="CategorySelectOrAdd-chip-icon">{chipIcon}</span>
+            <span className="CategorySelectOrAdd-chip-label">{label}</span>
+          </span>
+        );
+      })()}
+      {/* Show icon and color picker for new OR editing existing */}
+      {allowAdd && trimmed && (!exists || editingMode) && (editingMode || !shouldShowChip) && (
         <>
           <button
             type="button"
@@ -198,7 +291,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
             onClick={handleAdd}
             className="CategorySelectOrAdd-add-btn"
           >
-            הוסף
+            {exists ? 'עדכן' : 'הוסף'}
           </button>
         </>
       )}

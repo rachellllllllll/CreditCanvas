@@ -211,6 +211,15 @@ a:hover {
 .onboarding-hints { list-style:disc; margin:4px 0 0 24px; padding:0; font-size:.85rem; color:#64748b; display:flex; flex-direction:column; gap:4px; }
 .folder-btn.primary { background: linear-gradient(135deg,#6366f1,#8b5cf6 60%,#ec4899); color:#fff; border:none; box-shadow:0 6px 16px -6px rgba(99,102,241,.5); }
 .folder-btn.primary:hover { filter:brightness(1.07); box-shadow:0 8px 20px -6px rgba(99,102,241,.55); }
+.folder-btn.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 280px;
+  padding: 12px 24px;
+  font-size: 1.1rem;
+}
+.cta-row { display:flex; align-items:center; justify-content:center; margin-bottom: 15px; gap:12px; }
 .folder-inline { display:flex; align-items:center; gap:10px; }
 .folder-cluster { display:flex; align-items:center; gap:12px; background:#ffffff; border:1px solid #dbe3ec; padding:6px 14px 7px; border-radius:14px; box-shadow:0 2px 6px -2px rgba(0,0,0,0.08); }
 .folder-current { color:#4a5568; font-size:.85rem; max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -418,6 +427,7 @@ a:hover {
   .app-container {
     padding: 8px;
   }
+  .folder-btn.cta { width: 100%; }
   .edit-dialog-box {
     min-width: 0;
     padding: 12px;

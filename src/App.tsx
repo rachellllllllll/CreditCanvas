@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { readXLSX, sheetToArray, type Workbook, type Sheet } from './utils/xlsxMinimal';
-import { ensureSheetType, ensureCsvType, detectSheetTypeFromSheet, detectSheetTypeFromCSV, saveSheetTypeOverridesToDir } from './utils/sheetType';
-import { parseBankStatementFromSheet, parseBankStatementFromCSV } from './utils/bankParser';
+import { readXLSX, sheetToArray } from './utils/xlsxMinimal';
+import { ensureSheetType } from './utils/sheetType';
+import { parseBankStatementFromSheet } from './utils/bankParser';
 import type { CreditDetail, AnalysisResult } from './types';
 import CategoryManager, { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
@@ -205,7 +205,7 @@ const parseCreditDetailsFromSheet = async (sheetData: any[][], fileName: string)
       // if (refundLike) direction = 'income';
       const amountAbs = Math.abs(raw);
       details.push({
-        id: `${date}-${raw}-${description}`,
+        id: `${fileName}-${i}-${raw}-${description}`,
         date,
         amount: amountAbs, // ערך מוחלט – הכיוון נשמר בשדה direction
         description,
@@ -258,174 +258,9 @@ const App: React.FC = () => {
 
   // File System Access API: Directory handle
   const [dirHandle, setDirHandle] = useState<any>(null);
-  // שמור את ה-dirHandle אם נתקלנו בתיקיה עם Excel בלבד
-  const [pendingDirHandle, setPendingDirHandle] = useState<any>(null);
+  // CSV תמיכה הוסרה: עבודה עם Excel בלבד
 
-  function parseCSV(text: string): string[][] {
-    // Robust CSV parsing: supports quoted fields with commas and CRLF
-    const rows: string[][] = [];
-    let i = 0;
-    const s = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    while (i < s.length) {
-      const row: string[] = [];
-      let field = '';
-      let inQuotes = false;
-      for (; i < s.length; i++) {
-        const ch = s[i];
-        if (inQuotes) {
-          if (ch === '"') {
-            if (s[i + 1] === '"') { // escaped quote
-              field += '"';
-              i++;
-            } else {
-              inQuotes = false;
-            }
-          } else {
-            field += ch;
-          }
-        } else {
-          if (ch === '"') {
-            inQuotes = true;
-          } else if (ch === ',') {
-            row.push(field.trim());
-            field = '';
-          } else if (ch === '\n') {
-            row.push(field.trim());
-            field = '';
-            i++;
-            break;
-          } else {
-            field += ch;
-          }
-        }
-      }
-      // push last field if line ended by EOF
-      if (field.length > 0 || (row.length > 0 && s[i - 1] === ',')) {
-        row.push(field.trim());
-      }
-      if (row.length > 0) rows.push(row);
-    }
-    return rows;
-  }
-
-  // פונקציה שממירה שורות CSV ל־CreditDetail[]
-  function parseCreditDetailsFromCSV(rows: string[][], fileName: string): CreditDetail[] {
-    if (!rows.length) return [];
-    // זיהוי דינאמי של שורת הכותרות, בדומה ללוגיקת XLSX
-    let headerIdx = -1;
-    let headers: string[] = [];
-    let chargeDateFromHeader = '';
-    let cardLast4FromHeader = '';
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i].map((cell: string) => (cell || '').toString().trim());
-      // חילוץ תאריך חיוב ומספר 4 ספרות אחרונות מתוך שורות טקסט בכותרת (אם קיימות)
-      if (!chargeDateFromHeader) {
-        const match = row.join(' ').match(/עסקאות לחיוב ב-(\d{2}\/\d{2}\/\d{4})/);
-        if (match) chargeDateFromHeader = match[1];
-      }
-      if (!cardLast4FromHeader) {
-        const match = row.join(' ').match(/המסתיים ב-(\d{4})/);
-        if (match) cardLast4FromHeader = match[1];
-      }
-      // פורמט פועלים: שורה עם "תאריך"+"עסקה" ושדה "שם בית עסק"
-      if ((row.some((c: string) => c.includes('תאריך') && c.includes('עסקה')) && row.includes('שם בית עסק'))) {
-        headerIdx = i;
-        headers = row;
-        break;
-      }
-      // פורמט סטנדרטי: לפחות שלושה עמודות ידועות
-      if (
-        (row.includes('תאריך עסקה') && row.includes('שם בית העסק') && row.includes('סכום חיוב')) ||
-        (row.includes('תאריךעסקה') && row.includes('שם בית עסק') && row.some((c: string) => c.includes('סכום')))
-      ) {
-        headerIdx = i;
-        headers = row;
-        break;
-      }
-    }
-    if (headerIdx === -1) {
-      // אם לא נמצאה שורת כותרות בצורה חכמה, נניח שהשורה הראשונה היא הכותרת
-      headerIdx = 0;
-      headers = rows[0].map(h => h.replace(/"/g, '').replace(/\r?\n/g, '').trim());
-    }
-    const normalizedHeaders = headers.map(h => h.replace(/"/g, '').replace(/\r?\n/g, '').trim());
-    const details: CreditDetail[] = [];
-    for (let i = headerIdx + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length < 3) continue;
-      const rowObj: Record<string, string> = {};
-      normalizedHeaders.forEach((h, idx) => {
-        rowObj[h] = (row[idx] || '').toString().trim();
-      });
-      let date = rowObj['תאריך עסקה'] || rowObj['תאריךעסקה'] || rowObj['תאריך'] || '';
-      let description = rowObj['שם בית העסק'] || rowObj['שם בית עסק'] || rowObj['בית עסק'] || '';
-      let amount = rowObj['סכום חיוב'] || rowObj['סכום עסקה'] || rowObj['סכוםחיוב'] || rowObj['סכוםעסקה'] || '';
-      let category = rowObj['ענף'] || rowObj['קטגוריה'] || '';
-      let chargeDate = rowObj['תאריך חיוב'] || rowObj['תאריךחיוב'] || chargeDateFromHeader || '';
-      let cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || cardLast4FromHeader || '';
-      // נרמול סכום
-      if (amount && amount.includes('₪')) amount = amount.replace('₪', '').trim();
-      amount = amount.replace(/[^\d.,-]/g, '').replace(',', '.');
-      // נרמול תאריכים (ותמיכה במספר סריאלי אם CSV מכיל מספרים כאלה)
-      const normalizeExcelSerialDate = (val: string) => {
-        if (/^\d{1,5}$/.test(val)) {
-          const excelEpoch = new Date(1899, 11, 30);
-          const serial = parseInt(val, 10);
-          if (!isNaN(serial)) {
-            const d = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
-            return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
-          }
-        }
-        return val.replace(/\./g, '/').replace(/-/g, '/');
-
-        /**
-         *
-         * amount = amount.replace(/[^\d.,-]/g, '').replace(',', '.');
-      // נרמול תאריכים - רק בעמודות תאריך בפועל
-      const dateColumnIndex = normalizedHeaders.indexOf('תאריך עסקה');
-      const chargeDateColumnIndex = normalizedHeaders.indexOf('תאריך חיוב');
-      const normalizeExcelSerialDate = (val: string, isDateField: boolean) => {
-        if (isDateField && /^\d{1,5}$/.test(val)) {
-          const excelEpoch = new Date(1899, 11, 30);
-          const serial = parseInt(val, 10);
-          // בדוק שהוא בטווח תאריכים סביר (בין 1 ל-60000)
-          if (!isNaN(serial) && serial > 0 && serial < 60000) {
-            const d = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
-            return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
-          }
-        }
-        return val.replace(/\./g, '/').replace(/-/g, '/');
-         */
-      };
-      if (date) date = normalizeExcelSerialDate(date);
-      if (chargeDate) chargeDate = normalizeExcelSerialDate(chargeDate);
-      if (date && amount && description) {
-        const raw = parseFloat(amount);
-        if (isNaN(raw)) continue;
-        let direction: 'income' | 'expense' = raw < 0 ? 'income' : 'expense';
-        const amountAbs = Math.abs(raw);
-        details.push({
-          id: `${date}-${raw}-${description}`,
-          date,
-          amount: amountAbs,
-          description,
-          category,
-          chargeDate,
-          cardLast4,
-          fileName,
-          rowIndex: i,
-          headerIdx,
-          source: 'credit',
-          direction,
-          directionDetected: direction,
-          transactionType: 'regular',
-        });
-      }
-    }
-    return details;
-  }
-
-  // File System Access API: Pick directory and read CSV files
+  // File System Access API: Pick directory and read Excel files
   const handlePickDirectory = async () => {
     try {
       // @ts-ignore
@@ -437,12 +272,6 @@ const App: React.FC = () => {
     }
   };
 
-  // פונקציה לנסיון שוב לקרוא את ה-dirHandle שהיה מקודם (אחרי שהמשתמש המיר את הקבצים)
-  const handleRetryPendingDirectory = async () => {
-    if (!pendingDirHandle) return;
-    await handlePickDirectory_Internal(pendingDirHandle);
-  };
-
   // גרסה פנימית של handlePickDirectory שמקבלת dir כפרמטר
   const handlePickDirectory_Internal = async (dir: any) => {
     setError(null);
@@ -450,12 +279,15 @@ const App: React.FC = () => {
     setSelectedMonth(formatMonthYear(new Date()));
     setMonths([]);
     setSelectedFolder(null);
-    setPendingDirHandle(null); // נקה את ה-pending
+    setCategoriesList([]);
+    setCategoryAliases({});
+    setDescToCategory({});
+    setExcelFiles(new Map());
+    originalCategoriesRef.current.clear();
     try {
       setDirHandle(dir);
       setSelectedFolder(dir.name || '');
       let allDetails: CreditDetail[] = [];
-      let hasExcelFiles = false;
       let hasNoFiles = true;
 
       for await (const entry of dir.values()) {
@@ -493,25 +325,12 @@ const App: React.FC = () => {
               // ממשיך לקובץ הבא
             }
           }
-          if (entry.name.endsWith('.csv')) {
-            hasNoFiles = false;
-            const file = await entry.getFile();
-            const text = await file.text();
-            const rows = parseCSV(text);
-            const type = await ensureCsvType(dir, entry.name, rows);
-            let details: CreditDetail[] = [];
-            if (type === 'credit') {
-              details = parseCreditDetailsFromCSV(rows, entry.name);
-            } else {
-              details = parseBankStatementFromCSV(rows, entry.name);
-            }
-            allDetails = allDetails.concat(details);
-          }
+          // קבצי CSV אינם נתמכים עוד
         }
       }
 
       if (hasNoFiles) {
-        setError('לא נמצאו קבצי CSV או XLSX בתיקיה. אנא בחר תיקיה עם קבצי נתונים.');
+        setError('לא נמצאו קבצי Excel (XLSX/XLS) בתיקיה. אנא בחר תיקיה מתאימה.');
         return;
       }
 
@@ -731,12 +550,13 @@ const App: React.FC = () => {
     // הערה: עדכון קבצי XLSX עדיין לא ממומש במלואו ללא ספריית XLSX
     // נדרש parser מלא שיכול גם לכתוב חזרה ל-XLSX
     // בינתיים, פונקציה זו תחזיר אובייקט ריק
-    console.warn('עדכון קבצי Excel לא זמין כרגע ללא ספריית XLSX. שקול לעבוד עם CSV.');
+    console.warn('עדכון קבצי Excel לא זמין כרגע ללא ספריית XLSX.');
     return {};
   };
 
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [categoriesList, setCategoriesList] = useState<CategoryDef[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
 
   // State for multi-category prompt
   const [newCategoriesPrompt, setNewCategoriesPrompt] = useState<null | { names: string[], onConfirm: (mapping: Record<string, CategoryDef>) => void }>(null);
@@ -783,17 +603,23 @@ const App: React.FC = () => {
 
   // Prompt for new categories after both categoriesList and analysis are loaded
   React.useEffect(() => {
-    if (!analysis || !categoriesList.length) return;
+    if (!analysis || categoriesLoading) return;
     // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
     const missingCats = excelCats.filter(catName => !!catName && !categoriesList.find(c => c.name === catName)) as string[];
     if (missingCats.length > 0) {
       setNewCategoriesPrompt({
         names: missingCats,
-        onConfirm: (mapping) => {
+        onConfirm: (mapping: Record<string, CategoryDef>) => {
           const merged = [...categoriesList];
-          Object.values(mapping).forEach(cat => {
-            if (!merged.find(c => c.name === cat.name)) merged.push(cat);
+          Object.entries(mapping).forEach(([excelName, catDef]) => {
+            if (!merged.find(c => c.name === catDef.name)) {
+              merged.push({
+                name: catDef.name,
+                icon: catDef.icon,
+                color: catDef.color,
+              });
+            }
           });
           setCategoriesList(merged);
           if (dirHandle) saveCategoriesToDir(dirHandle, merged);
@@ -810,14 +636,16 @@ const App: React.FC = () => {
         }
       });
     }
-  }, [analysis, categoriesList, dirHandle]);
+  }, [analysis, categoriesList, categoriesLoading, dirHandle]);
 
   // טען קטגוריות מהתיקיה שנבחרה בכל פעם ש-dirHandle משתנה
   React.useEffect(() => {
     if (!dirHandle) return;
     (async () => {
+      setCategoriesLoading(true);
       const loaded = await loadCategoriesFromDir(dirHandle);
       if (loaded) setCategoriesList(loaded);
+      setCategoriesLoading(false);
     })();
   }, [dirHandle]);
 
@@ -920,137 +748,30 @@ const App: React.FC = () => {
         <div className="onboarding" role="dialog" aria-labelledby="onboardingTitle" aria-modal="true">
           <div className="onboarding-inner">
             <h1 id="onboardingTitle">ברוך הבא למערכת ניתוח חיובי אשראי</h1>
-            <p className="onboarding-sub">בחר תיקיה עם קבצי CSV של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
-           
-            <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f8ff', borderRadius: '8px', borderLeft: '4px solid #2196F3' }}>
-              <p style={{ fontSize: '0.95em', lineHeight: '1.6', color: '#0d47a1', marginBottom: '10px' }}>
-                💡 <strong>יש לך קבצי Excel?</strong> השתמש בכלי ההמרה להמיר אותם ל-CSV:
-              </p>
-              <a
-                href="/excel2csv.html"
-                download="excel2csv.html"
-                style={{
-                  display: 'inline-block',
-                  padding: '10px 20px',
-                  backgroundColor: '#ff9800',
-                  color: 'white',
-                  textDecoration: 'none',
-                  borderRadius: '6px',
-                  fontSize: '0.9em',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  border: 'none',
-                  transition: 'background-color 0.3s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f57c00'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff9800'}
-              >
-                📥 הורד כלי המרה Excel ל-CSV
-              </a>
-            </div>
+            <p className="onboarding-sub">בחר תיקיה עם קבצי Excel (XLSX/XLS) של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '15px' }}>
-              <button onClick={handlePickDirectory} className="folder-btn primary" autoFocus>
-                📁 בחר תיקיה עם קבצי CSV
+            <div className="cta-row">
+              <button onClick={handlePickDirectory} className="folder-btn primary cta" autoFocus>
+                📁 בחר תיקיה עם קבצי Excel
               </button>
             </div>
-
-            {/* הצג שגיאה מיד מתחת לכפתור בחירת תיקיה */}
-            {error === 'EXCEL_DETECTED' && (
-              <div style={{
-                marginBottom: '20px',
-                padding: '20px',
-                backgroundColor: '#fff3cd',
-                border: '2px solid #ff9800',
-                borderRadius: '8px'
-              }}>
-                <p style={{ fontSize: '1em', fontWeight: 'bold', marginBottom: '10px', color: '#856404' }}>
-                  💡 יש לך קבצי Excel? התיקיה שבחרת מכילה רק קבצי Excel.
-                </p>
-                <p style={{ fontSize: '0.9em', marginBottom: '15px', color: '#856404' }}>
-                  השתמש בכלי ההמרה כדי להמיר את קבצי Excel ל-CSV, ואז בחר את התיקיה שוב:
-                </p>
-                <a
-                  href="/excel2csv.html"
-                  download="excel2csv.html"
-                  className="folder-btn"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '12px 24px',
-                    backgroundColor: '#ff9800',
-                    color: 'white',
-                    textDecoration: 'none',
-                    borderRadius: '6px',
-                    fontSize: '0.95em',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    border: 'none',
-                    transition: 'background-color 0.3s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f57c00'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff9800'}
-                >
-                  📥 הורד כלי המרה Excel ל-CSV
-                </a>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #ddd' }}>
-              <span style={{ fontSize: '0.85em', color: '#666' }}>או בחר קובץ CSV בודד:</span>
-              <input
-                type="file"
-                accept=".csv"
-                style={{ display: 'inline-block', fontSize: '0.85em' }}
-                onChange={async (e) => {
-                  setError(null);
-                  setAnalysis(null);
-                  setSelectedMonth(formatMonthYear(new Date()));
-                  setMonths([]);
-                  setSelectedFolder(null);
-                  const file = e.target.files && e.target.files[0];
-                  if (!file) return;
-                  try {
-                    let allDetails: CreditDetail[] = [];
-                    if (!file.name.endsWith('.csv')) {
-                      setError('רק קבצי CSV נתמכים. אם יש לך Excel, השתמש בכלי ההמרה.');
-                      return;
-                    }
-                    const text = await file.text();
-                    const rows = parseCSV(text);
-                    // Single-file mode: detect type without overrides
-                    const type = detectSheetTypeFromCSV(rows);
-                    if (type === 'bank') {
-                      allDetails = parseBankStatementFromCSV(rows, file.name);
-                    } else {
-                      allDetails = parseCreditDetailsFromCSV(rows, file.name);
-                    }
-                    setAnalysis({
-                      totalAmount: allDetails.reduce((sum, d) => sum + signedAmount(d), 0),
-                      averageAmount: allDetails.length > 0 ? allDetails.reduce((sum, d) => sum + signedAmount(d), 0) / allDetails.length : 0,
-                      details: allDetails,
-                      creditChargeCycles: [],
-                    });
-                  } catch (err) {
-                    console.error('שגיאה בטעינת קובץ:', err);
-                    setError('טעינת הקובץ נכשלה או בוטלה.');
-                  }
-                }}
-              />
+            {/* מה המערכת עושה */}
+            <div className="modern-card" style={{ textAlign: 'right' }}>
+              <h3 style={{ marginTop: 0, marginBottom: 8 }}>מה המערכת עושה</h3>
+              <ul className="onboarding-hints" aria-label="יכולות וכלים">
+                <li>קוראת קבצי Excel (XLSX/XLS) של בנק וכרטיס אשראי.</li>
+                <li>מזהה אוטומטית סוג גיליון (אשראי/בנק) ומאחדת נתונים.</li>
+                <li>מקטלגת, מנתחת וממחישה בגרפים/טבלאות לפי חודש/שנה.</li>
+                <li>פרטיות: הנתונים נשארים במחשב שלך; לא נשלחים לשרת.</li>
+              </ul>
             </div>
 
-            {/* שגיאות אחרות (לא EXCEL_DETECTED) */}
-            {error && error !== 'EXCEL_DETECTED' && (
+            {/* שגיאות */}
+            {error && (
               <div className="error-msg" style={{ marginTop: '12px' }}>
                 {error}
               </div>
             )}
-            <ul className="onboarding-hints" aria-label="הוראות">
-              <li>ודא שהדפדפן (Chrome / Edge) תומך בגישת תיקיות.</li>
-              <li>מומלץ לאחסן קבצי XLSX מעודכנים בלבד.</li>
-              <li>תוכל להחליף תיקיה או קובץ מאוחר יותר דרך ההגדרות.</li>
-            </ul>
           </div>
         </div>
       )}
@@ -1088,7 +809,7 @@ const App: React.FC = () => {
           {/* header של החלפת תיקיה נמחק – הקלוסטר עבר ל-MainView */}
         </>
       )}
-      {error && error !== 'EXCEL_DETECTED' && (
+      {error && (
         <div className="error-msg">{error}</div>
       )}
       {analysis && (

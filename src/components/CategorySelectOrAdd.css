@@ -100,6 +100,34 @@
   cursor: pointer;
 }
 
+/* Chip preview styles */
+.CategorySelectOrAdd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  font-weight: 600;
+  line-height: 1;
+  margin-inline-start: 6px;
+  cursor: pointer;
+}
+.CategorySelectOrAdd-chip-icon { font-size: 18px; }
+.CategorySelectOrAdd-chip-label { font-size: 14px; }
+.CategorySelectOrAdd-chip.draft {
+  opacity: 0.92;
+  border-style: dashed;
+  box-shadow: none;
+  filter: brightness(1.06);
+}
+.CategorySelectOrAdd-chip.final {
+  opacity: 1;
+  border-style: solid;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+
 .CategorySelectOrAdd-icon-picker-overlay {
   position: fixed;
   top: 0;
