@@ -1,11 +1,17 @@
-/* Force font size in pixels for all table content */
-.TransactionsTable-table,
-.TransactionsTable-table th,
+/* Base font size for table - compact view */
+.TransactionsTable-table {
+  font-size: 13px;
+}
+.TransactionsTable-table th {
+  font-size: 12px;
+}
 .TransactionsTable-table td {
-  font-size: 18px !important;
+  font-size: 13px;
 }
 /* Context menu for month cell */
 .TransactionsTable-context-menu {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   background: #ffffff;
   border: 1px solid #e0e0e0;
@@ -18,8 +24,19 @@
   backdrop-filter: blur(8px);
 }
 
+.TransactionsTable-context-menu-header {
+  padding: 8px 20px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 4px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .TransactionsTable-context-menu-btn {
-  width: 100%;
   padding: 12px 20px;
   background: none;
   border: none;
@@ -31,7 +48,12 @@
   font-weight: 500;
   border-radius: 8px;
   margin: 0 8px;
-  width: calc(100% - 16px);
+  white-space: nowrap;
+}
+
+.TransactionsTable-context-menu-btn.active {
+  background-color: #e0f2fe;
+  color: #0369a1;
 }
 
 .TransactionsTable-context-menu-btn:hover {
@@ -43,6 +65,12 @@
 .TransactionsTable-context-menu-btn:active {
   background-color: #e5e7eb;
   transform: translateX(-1px);
+}
+
+.TransactionsTable-context-menu-divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 4px 0;
 }
 
 /* Yearly view specific styles */
@@ -92,6 +120,8 @@
 
 .TransactionsTable-container {
   width: 100%;
+  padding: 12px 16px;
+  box-sizing: border-box;
 }
 
 .TransactionsTable-title-bar {
@@ -99,8 +129,227 @@
   align-items: center;
   gap: 16px;
   margin-bottom: 12px;
-  padding: 16px 0;
-  border-bottom: 2px solid #f1f5f9;
+  padding: 0 0 12px;
+}
+
+/* RTL Toolbar: controls on left, title on right */
+.TransactionsTable-toolbar {
+  width: 92vw;
+  min-width: 1100px;
+  max-width: 1400px;
+  margin: 0 auto;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+
+.TransactionsTable-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-direction: row-reverse;
+}
+
+/* Dropdown wrapper */
+.TransactionsTable-dropdown-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.TransactionsTable-dropdown-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.TransactionsTable-dropdown {
+  padding: 8px 12px;
+  padding-left: 32px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  color: #1f2937;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 10px center;
+  transition: all 0.2s ease;
+  min-width: 150px;
+}
+
+.TransactionsTable-dropdown:hover {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.TransactionsTable-dropdown:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.TransactionsTable-dropdown:disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+}
+
+.TransactionsTable-dropdown:disabled:hover {
+  border-color: #e5e7eb;
+  box-shadow: none;
+}
+
+/* Settings button */
+.TransactionsTable-settings-wrapper {
+  position: relative;
+}
+
+.TransactionsTable-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+svg {
+  flex-shrink: 0;
+  fill: #6b7280;
+}
+
+.TransactionsTable-settings-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #f5f3ff;
+}
+
+.TransactionsTable-settings-btn[aria-expanded="true"] {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #f5f3ff;
+}
+
+/* Settings popover */
+.TransactionsTable-settings-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  min-width: 250px;
+  z-index: 1000;
+  animation: settingsPopoverFadeIn 0.2s ease;
+}
+
+@keyframes settingsPopoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.TransactionsTable-settings-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Toggle row */
+.TransactionsTable-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.TransactionsTable-toggle-row:hover {
+  background: #f9fafb;
+  margin: 0 -8px;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.TransactionsTable-toggle-label {
+  font-size: 14px;
+  color: #374151;
+}
+
+/* Toggle switch */
+.TransactionsTable-toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+}
+
+.TransactionsTable-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.TransactionsTable-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #d1d5db;
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.TransactionsTable-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.TransactionsTable-toggle-switch input:checked + .TransactionsTable-toggle-slider {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.TransactionsTable-toggle-switch input:checked + .TransactionsTable-toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.TransactionsTable-toggle-switch input:focus + .TransactionsTable-toggle-slider {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Group count badge */
+.TransactionsTable-group-count {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.8;
+  margin-right: 6px;
 }
 
 .TransactionsTable-title {
@@ -119,13 +368,14 @@
   cursor: pointer;
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border: 1px solid #bae6fd;
-  border-radius: 12px;
+  border-radius: 10px;
   font-weight: 600;
-  padding: 8px 12px;
+  padding: 4px 8px;
+  font-size: 13px;
   color: #0369a1;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   transition: all 0.2s ease;
   box-shadow: 0 2px 4px rgba(3, 105, 161, 0.1);
 }
@@ -137,7 +387,7 @@
 }
 
 .TransactionsTable-group-toggle-arrow {
-  font-size: 14px;
+  font-size: 12px;
   margin-left: 4px;
   transition: transform 0.2s ease;
 }
@@ -147,14 +397,15 @@
 }
 
 .TransactionsTable-group-label {
-  font-weight: 700;
-  padding: 0px 12px;
-  border-radius: 12px;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
   transition: all 0.2s ease;
 }
@@ -193,13 +444,16 @@
 }
 
 .TransactionsTable-table {
-  width: 100%;
+  width: 92vw;
+  min-width: 1100px;
+  max-width: 1400px;
+  margin: 0 auto;
   border-collapse: separate;
   border-spacing: 0;
   background: #ffffff;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border-radius: 16px;
-  overflow: hidden;
+  /* overflow: hidden; */
   font-family: 'Heebo', 'Arial', sans-serif;
   border: 1px solid #e5e7eb;
 }
@@ -208,12 +462,16 @@
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   font-weight: 700;
   color: #1e293b;
+  position: sticky;
+  top: var(--main-header-height, 0px);
+  z-index: 150;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .TransactionsTable-th {
-  padding: 10px 8px;
+  padding: 6px 6px;
   border-bottom: 2px solid #e2e8f0;
-  font-size: 15px;
+  font-size: 12px;
   text-align: right;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   position: relative;
@@ -221,7 +479,37 @@
   color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  font-size: 13px;
+}
+
+/* Amount column header - align left to match content */
+.TransactionsTable-th-amount {
+  text-align: left !important;
+  direction: ltr;
+}
+
+
+/* Amount column fixed width - monthly view */
+.TransactionsTable-th-amount,
+.TransactionsTable-td-amount {
+  width: 140px;
+  min-width: 140px;
+  max-width: 140px;
+}
+
+/* Amount columns in yearly view - smaller to fit 12 months */
+.TransactionsTable-yearly-table .TransactionsTable-th-amount,
+.TransactionsTable-yearly-table .TransactionsTable-td-amount {
+  width: auto;
+  min-width: 60px;
+  max-width: none;
+}
+
+/* Date column fixed width - includes source badge, card digits, and transaction type badges */
+.TransactionsTable-th-date,
+.TransactionsTable-td-date {
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
 }
 
 .TransactionsTable-th-top-right {
@@ -233,8 +521,8 @@
 }
 
 .TransactionsTable-td {
-  padding: 8px 6px;
-  font-size: 15px;
+  padding: 5px 6px;
+  font-size: 13px;
   background: #ffffff;
   border-bottom: 1px solid #f1f5f9;
   text-align: right;
@@ -266,20 +554,21 @@
   background: linear-gradient(135deg, #ddd6fe 0%, #ede9fe 100%);
   border-radius: 8px;
   padding: 8px 6px;
-  text-align: center;
+  text-align: left;
+  direction: ltr;
   box-shadow: 0 2px 4px rgba(67, 56, 202, 0.1);
 }
 
 .TransactionsTable-category-label {
-  border-radius: 8px;
-  padding: 4px 12px;
-  font-size: 13px;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
   font-weight: 600;
   color: #ffffff;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
   transition: all 0.2s ease;
 }
@@ -468,8 +757,206 @@
 
 /* Category column width enforcement */
 .TransactionsTable-category-column {
-  width: 170px !important;
-  min-width: 170px !important;
-  max-width: 170px !important;
+  /* width: 220px !important;
+  min-width: 220px !important;
+  max-width: 300px !important; */
   box-sizing: border-box;
+}
+
+/* ==================== Search Styles ==================== */
+
+/* Search wrapper */
+.TransactionsTable-search-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+/* Search input */
+.TransactionsTable-search-input {
+  padding: 8px 12px;
+  padding-left: 32px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  min-width: 180px;
+  background: #fff;
+  color: #1f2937;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: 'Heebo', sans-serif;
+}
+
+.TransactionsTable-search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.TransactionsTable-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Search clear button */
+.TransactionsTable-search-clear {
+  position: absolute;
+  left: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 14px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.TransactionsTable-search-clear:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* Bulk category button */
+.TransactionsTable-bulk-category-btn {
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'Heebo', sans-serif;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
+  white-space: nowrap;
+}
+
+.TransactionsTable-bulk-category-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.35);
+  transform: translateY(-1px);
+}
+
+.TransactionsTable-bulk-category-btn:active {
+  transform: translateY(0);
+}
+
+/* Search results banner */
+.TransactionsTable-search-results-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #1e40af;
+  font-family: 'Heebo', sans-serif;
+}
+
+.TransactionsTable-search-results-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.TransactionsTable-search-results-count strong {
+  color: #1d4ed8;
+}
+
+.TransactionsTable-search-results-total {
+  font-weight: 500;
+}
+
+.TransactionsTable-search-results-total strong {
+  color: #1d4ed8;
+  font-size: 15px;
+}
+
+/* Search highlight */
+.TransactionsTable-highlight {
+  background: linear-gradient(135deg, #fef08a 0%, #fde047 100%);
+  color: #854d0e;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+/* Empty state */
+.TransactionsTable-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  color: #6b7280;
+  background: #f9fafb;
+  border-radius: 12px;
+  margin: 0;
+  width: 92vw;
+  min-width: 1100px;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.TransactionsTable-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+
+.TransactionsTable-empty-text {
+  font-size: 16px;
+  margin: 0;
+  text-align: center;
+}
+
+/* Business category badge */
+.TransactionsTable-business-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.TransactionsTable-business-category-badge:hover {
+  transform: scale(1.05);
+}
+
+/* Neutral business label (when grouped by business) */
+.TransactionsTable-business-label-neutral {
+  background: #374151 !important;
+  color: #fff !important;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ==================== Hybrid Layout Overrides ==================== */
+/* כאשר הטבלה נמצאת בתוך layout היברידי עם גרף בצד */
+@media (min-width: 1200px) {
+  .content-with-sidebar .TransactionsTable-table,
+  .content-with-sidebar .TransactionsTable-toolbar,
+  .content-with-sidebar .TransactionsTable-yearly-table,
+  .content-with-sidebar .TransactionsTable-empty-state {
+    width: 100%;
+    min-width: unset;
+    max-width: unset;
+  }
+
+  .content-with-sidebar .TransactionsTable-yearly-wrapper {
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+  }
 }

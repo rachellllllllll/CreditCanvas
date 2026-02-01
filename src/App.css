@@ -2,11 +2,20 @@
 .chat-modal--hidden {
   display: none !important;
 }
-#root {
-  max-width: 1550px; /* was 1280px: התאמה לעיצוב המצורף */
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+
+/* Loading spinner animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.loading-state {
+  animation: fadeIn 0.3s ease;
 }
 
 .logo {
@@ -48,93 +57,282 @@
   color: #888;
 }
 
-.settings-btn {
+/* Settings Menu Overlay */
+.settings-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1999;
+  animation: overlayFadeIn 0.2s ease;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Settings Panels Container */
+.settings-panels-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 700px;
+  z-index: 2000;
+  overflow: hidden;
+  animation: slideIn 0.25s ease;
+}
+
+/* Settings Panel Base */
+.settings-panel {
   position: absolute;
-  top: 18px;
-  left: 18px;
-  z-index: 100;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
   background: #fff;
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  box-shadow: 0 2px 8px #0001;
-  font-size: 22px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.settings-panel.active {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.settings-panel.hidden-right {
+  transform: translateX(-30%);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.settings-panel.hidden-left {
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Main panel shadow when sub-panel is active */
+.settings-panel-main.hidden-right {
+  filter: brightness(0.95);
+}
+
+/* Sub-panel styling */
+.settings-panel-sub {
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+}
+
+.settings-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Embedded components should not show their own overlay/container */
+.settings-panel-content .category-manager-overlay,
+.settings-panel-content .category-aliases-overlay,
+.settings-panel-content .desc-cat-overlay {
+  display: none !important;
+}
+
+.settings-panel-content .category-manager-dialog,
+.settings-panel-content .category-aliases-dialog,
+.settings-panel-content .desc-cat-dialog {
+  position: static !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  max-height: none !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Back button in sub-panel header */
+.settings-subpanel-header {
+  gap: 12px;
+}
+
+.settings-back-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  width: 36px;
+  height: 36px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
+.settings-back-btn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #6366f1;
+}
+
+/* Embedded dialog styling */
+.desc-cat-box.embedded {
+  min-width: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 16px !important;
+}
+
+.desc-cat-box.embedded table {
+  font-size: 13px;
+}
+
+.desc-cat-box.embedded th,
+.desc-cat-box.embedded td {
+  padding: 10px 8px;
+}
+
+/* Legacy settings-menu class (for backwards compatibility) */
 .settings-menu {
   position: fixed;
   top: 0;
   left: 0;
   bottom: 0;
-  width: 270px;
+  width: 340px;
   background: #fff;
-  box-shadow: 2px 0 16px #0002;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
   z-index: 2000;
-  padding: 0;
   display: flex;
   flex-direction: column;
+  animation: slideIn 0.25s ease;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
 }
 
 .settings-menu-header {
-  padding: 18px 18px 8px 18px;
-  border-bottom: 1px solid #e0e7ef;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: linear-gradient(135deg, #fafbfc 0%, #fff 100%);
+}
+
+.settings-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-weight: 700;
-  font-size: 18px;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.settings-menu-title svg {
+  color: #6366f1;
 }
 
 .settings-menu-close {
-  background: none;
-  border: none;
-  font-size: 22px;
-  cursor: pointer;
-}
-
-.settings-menu-content {
-  padding: 18px;
-}
-
-.settings-menu-btn {
-  width: 100%;
-  padding: 12px 0;
-  font-size: 17px;
-  border-radius: 8px;
-  background: #f1f5fa;
-  color: #222;
-  font-weight: 600;
-  margin-bottom: 12px;
-  border: none;
-  cursor: pointer;
-}
-
-.edit-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.18);
-  z-index: 3000;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s ease;
 }
 
-.edit-dialog-box {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 32px #0002;
-  padding: 32px 28px 24px 28px;
-  min-width: 340px;
-  max-width: 95vw;
+.settings-menu-close:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
 }
+
+.settings-menu-content {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 4px;
+  margin-bottom: 4px;
+}
+
+.settings-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  text-align: right;
+  transition: all 0.2s ease;
+}
+
+.settings-menu-btn:hover {
+  border-color: #6366f1;
+  background: #f5f3ff;
+  transform: translateX(-3px);
+}
+
+.settings-btn-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.settings-btn-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-btn-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.settings-btn-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.settings-btn-arrow {
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.settings-menu-btn:hover .settings-btn-arrow {
+  color: #6366f1;
+  transform: translateX(-3px);
+}
+
+/* Note: .edit-dialog-overlay and .edit-dialog-box base styles moved to index.css */
 
 .logo-container {
   display: flex;
@@ -148,7 +346,6 @@
 }
 
 .footer {
-  margin-top: 48px;
   text-align: center;
   color: #666;
   font-size: 15px;
@@ -162,7 +359,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #36A2EB;
+  background: #6366f1;
   color: white;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   border: none;
@@ -195,7 +392,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #36A2EB;
+  background: #6366f1;
   color: white;
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
@@ -215,4 +412,279 @@
 
 .chat-model-content {
   flex: 1;
+}
+
+/* ===== Income Sources Panel Styles ===== */
+.settings-badge {
+  display: inline-block;
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-right: 6px;
+}
+
+.income-sources-panel {
+  padding: 12px;
+}
+
+.income-sources-section {
+  margin-bottom: 20px;
+}
+
+.income-sources-section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.income-sources-info {
+  background: #e3f2fd;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #1565c0;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.income-sources-empty {
+  color: #888;
+  text-align: center;
+  padding: 16px;
+  font-size: 0.9rem;
+}
+
+.income-sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.income-source-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  gap: 8px;
+}
+
+.income-source-item.pending {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+}
+
+.income-source-item.confirmed {
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+}
+
+.income-source-item.rejected {
+  background: #fafafa;
+  border: 1px dashed #ccc;
+}
+
+.income-source-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.income-source-desc {
+  font-weight: 500;
+  color: #333;
+}
+
+.income-source-amount {
+  color: #4caf50;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.income-source-months {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.income-source-warning {
+  cursor: help;
+}
+
+.income-source-type {
+  background: #e3f2fd;
+  color: #1565c0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.income-source-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.income-source-badge.auto {
+  background: #e8eaf6;
+  color: #3f51b5;
+}
+
+.income-source-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.income-source-select {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.income-source-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.income-source-btn.confirm {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.income-source-btn.confirm:hover {
+  background: #c8e6c9;
+}
+
+.income-source-btn.reject {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.income-source-btn.reject:hover {
+  background: #ffcdd2;
+}
+
+.income-source-btn.delete {
+  background: transparent;
+  color: #999;
+}
+
+.income-source-btn.delete:hover {
+  color: #c62828;
+}
+
+/* ==========================================
+   Privacy & Security Badges
+   ========================================== */
+
+/* Privacy Badge - Onboarding Screen */
+.privacy-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 2px solid #4caf50;
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin: 20px 0;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15);
+}
+
+.privacy-badge-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.privacy-badge-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+
+.privacy-badge-content strong {
+  font-size: 16px;
+  color: #2e7d32;
+}
+
+.privacy-badge-content span {
+  font-size: 14px;
+  color: #33691e;
+  line-height: 1.4;
+}
+
+/* Privacy Details Card */
+.privacy-details-card {
+  background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+  border: 1px solid #ba68c8;
+}
+
+.privacy-details-card h3 {
+  color: #7b1fa2;
+}
+
+.privacy-details-card li {
+  color: #4a148c;
+}
+
+/* Footer Privacy Message */
+.footer-privacy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  border-radius: 20px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.footer-privacy-icon {
+  font-size: 16px;
+}
+
+.footer-links {
+  margin-bottom: 4px;
+}
+
+/* Inline Privacy Hint (for use in header) */
+.privacy-hint-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.1);
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.privacy-hint-inline::before {
+  content: '🔒';
+  font-size: 11px;
+}
+
+/* Security Badge Animation */
+@keyframes securityPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.privacy-badge:hover {
+  animation: securityPulse 0.6s ease;
 }

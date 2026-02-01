@@ -1,48 +1,154 @@
 /* EditCategoryDialog.css */
+/* Note: Base .edit-dialog-overlay and .edit-dialog-box styles are in index.css */
+/* This file contains only component-specific overrides and extensions */
 
+/* אנימציית פתיחה */
 .edit-dialog-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.18);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  animation: fadeIn 0.2s ease-out;
 }
 
 .edit-dialog-box {
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 4px 32px #0002;
-  padding: 28px 28px 18px 28px;
-  min-width: 380px;
-  max-width: 98vw;
-  max-height: 90vh;
-  overflow-y: auto;
-  direction: rtl;
+  animation: scaleIn 0.25s ease-out;
+  position: relative;
+  /* מניעת קפיצות בשינוי גובה */
+  transition: height 0.2s ease-out;
+  min-height: 280px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* כפתור X לסגירה */
+.edit-dialog-close-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 50%;
+  font-size: 16px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.edit-dialog-close-btn:hover {
+  background: #e2e8f0;
+  color: #334155;
+  transform: scale(1.1);
 }
 
 .edit-dialog-details {
   margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 14px;
 }
 
-.edit-dialog-checkbox-label {
-  font-weight: 500;
+.edit-dialog-apply-all-section {
+  margin-bottom: 12px;
+  padding: 8px 0;
 }
 
-.edit-dialog-checkbox {
-  margin-left: 8px;
+/* אנימציה חלקה לאלמנטים מתקפלים - מצב בסיס */
+.edit-dialog-amount-filter,
+.edit-dialog-summary {
+  overflow: hidden;
+  transition: opacity 0.25s ease-out, max-height 0.25s ease-out, margin 0.25s ease-out, padding 0.25s ease-out;
 }
 
+/* מצב גלוי */
+.edit-dialog-amount-filter.visible,
+.edit-dialog-summary.visible {
+  opacity: 1;
+  max-height: 200px;
+  margin-bottom: 12px;
+}
+
+/* מצב מוסתר */
+.edit-dialog-amount-filter.hidden,
+.edit-dialog-summary.hidden {
+  opacity: 0;
+  max-height: 0;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* שדות הסכום */
+.edit-dialog-amount-inputs {
+  overflow: hidden;
+  transition: opacity 0.2s ease-out, max-height 0.2s ease-out, margin 0.2s ease-out;
+}
+
+.edit-dialog-amount-inputs.visible {
+  opacity: 1;
+  max-height: 100px;
+  margin-top: 12px;
+}
+
+.edit-dialog-amount-inputs.hidden {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  pointer-events: none;
+}
+
+/* טבלת עסקאות - מצבים */
 .edit-dialog-candidates-table-wrapper {
-  max-height: 180px;
+  transition: opacity 0.25s ease-out, max-height 0.3s ease-out;
   overflow-y: auto;
   margin-bottom: 12px;
   border: 1px solid #e0e7ef;
   border-radius: 8px;
   background: #fafdff;
   padding: 8px;
+}
+
+.edit-dialog-candidates-table-wrapper.expanded {
+  max-height: 200px;
+  opacity: 1;
+}
+
+.edit-dialog-candidates-table-wrapper.collapsed {
+  max-height: 60px;
+  opacity: 0.5;
+}
+
+.edit-dialog-checkbox-label {
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.edit-dialog-checkbox {
+  margin-left: 8px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
 }
 
 .edit-dialog-candidates-table {
@@ -138,8 +244,8 @@
 }
 
 .edit-dialog-icon.selected {
-  border: 2px solid #36A2EB;
-  background: #e3f2fd;
+  border: 2px solid #6366f1;
+  background: #eef2ff;
 }
 
 .edit-dialog-add-btn {
@@ -157,9 +263,9 @@
 .edit-dialog-cancel-btn {
   padding: 10px 16px;
   border-radius: 4px;
-  border: 1.5px solid #7ecbff;
+  border: 1.5px solid #6366f1;
   background: #fff;
-  color: #36A2EB;
+  color: #6366f1;
   font-weight: 700;
   min-width: 80px;
 }
@@ -168,7 +274,7 @@
   padding: 10px 16px;
   border-radius: 4px;
   border: none;
-  background: #4CAF50;
+  background: #10b981;
   color: #fff;
   cursor: pointer;
   font-weight: 700;
@@ -239,4 +345,158 @@
   0%, 100% { transform: translateX(0); }
   10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
   20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* סגנונות לסינון סכומים */
+.edit-dialog-amount-filter {
+  margin: 12px 0;
+  padding: 12px;
+  background: #f8fafd;
+  border-radius: 10px;
+  border: 1px solid #e0e7ef;
+}
+
+.edit-dialog-amount-inputs {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.edit-dialog-amount-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-dialog-amount-field label {
+  font-size: 14px;
+  color: #555;
+  min-width: 60px;
+}
+
+.edit-dialog-amount-input {
+  width: 100px;
+  padding: 8px 10px;
+  border: 1.5px solid #cfd8dc;
+  border-radius: 8px;
+  font-size: 15px;
+  text-align: left;
+  direction: ltr;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.edit-dialog-amount-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.edit-dialog-amount-input::placeholder {
+  color: #aaa;
+  font-size: 13px;
+}
+
+.edit-dialog-currency {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+/* הסתרת חיצים בשדות מספר */
+.edit-dialog-amount-input::-webkit-outer-spin-button,
+.edit-dialog-amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.edit-dialog-amount-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* סיכום דינמי */
+.edit-dialog-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  border: 1px solid #bae6fd;
+}
+
+.edit-dialog-summary-count {
+  color: #0369a1;
+}
+
+.edit-dialog-summary-amount {
+  color: #0f766e;
+  font-weight: 500;
+}
+
+.edit-dialog-summary strong {
+  font-weight: 700;
+}
+
+/* שורה שלא נבחרה */
+.edit-dialog-candidates-table tbody tr.excluded-row {
+  opacity: 0.5;
+  background: #f8fafc;
+}
+
+.edit-dialog-candidates-table tbody tr.excluded-row td {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.edit-dialog-candidates-table tbody tr.excluded-row td:first-child {
+  text-decoration: none;
+}
+
+/* הודעה כשאין תוצאות */
+.edit-dialog-no-results {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* סקשן כלל אוטומטי */
+.edit-dialog-auto-rule-section {
+  background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.edit-dialog-auto-rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.edit-dialog-auto-rule-hint {
+  font-size: 12px;
+  color: #92400e;
+  font-weight: normal;
+  margin-top: 2px;
+}
+
+/* באנר תוצאות חיפוש */
+.edit-dialog-search-banner {
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  border: 1px solid #3b82f6;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #1e40af;
+  text-align: center;
+}
+
+.edit-dialog-search-banner strong {
+  color: #1d4ed8;
 }

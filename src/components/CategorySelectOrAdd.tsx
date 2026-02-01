@@ -35,6 +35,15 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
   const [showDropdown, setShowDropdown] = useState(false);
   const [recommendedIcons, setRecommendedIcons] = useState<string[]>(propRecommendedIcons);
   const [editingMode, setEditingMode] = useState(false);
+  const [userTyped, setUserTyped] = useState(false); // מעקב אם המשתמש הקליד
+
+  // סנכרון input עם value prop
+  useEffect(() => {
+    if (value !== input && !editingMode && !showDropdown) {
+      setInput(value || '');
+      setUserTyped(false);
+    }
+  }, [value]);
 
   const getReadableTextColor = (hex: string): string => {
     const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
@@ -45,13 +54,15 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
   };
 
   // Filter categories by input and forbiddenCategoryName
-  const filtered = input.trim()
+  // אם המשתמש הקליד, סנן לפי input. אחרת הצג הכל
+  const filtered = (input.trim() && userTyped)
     ? categories.filter(cat => cat.name.includes(input.trim()) && cat.name !== forbiddenCategoryName)
     : categories.filter(cat => cat.name !== forbiddenCategoryName);
   const exists = categories.some(cat => cat.name === input.trim());
 
   const handleSelect = (catName: string) => {
     setInput(catName);
+    setUserTyped(false); // איפוס דגל הקלדה
     onChange(catName);
   };
 
@@ -110,7 +121,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
     } else {
       onDraftChange(null);
     }
-  }, [input, icon, color, editingMode, value, defaultIcon, defaultColor, onDraftChange]);
+  }, [input, icon, color, editingMode, value, defaultIcon, defaultColor]);
 
   // עדכן בסיס להשוואה כשמתחלפים ערכי ברירת המחדל (לדוגמה שורה אחרת)
   useEffect(() => {
@@ -118,6 +129,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
     initialColorRef.current = defaultColor || color;
     // איפוס טיוטה כשהקונטקסט מתחלף
     if (onDraftChange) onDraftChange(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultIcon, defaultColor]);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -167,17 +179,25 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
     };
   }, [showDropdown]);
 
-  // סגירה בלחיצה מחוץ או Escape
+  // סגירה בלחיצה מחוץ או Escape - כולל איפוס מצב עריכה
   useEffect(() => {
-    if (!showDropdown) return;
+    if (!showDropdown && !editingMode) return;
     const onDown = (e: MouseEvent) => {
       if (!wrapperRef.current) return;
       if (wrapperRef.current.contains(e.target as Node)) return;
       if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) return;
       setShowDropdown(false);
+      setEditingMode(false);
+      setInput(value || '');
+      setUserTyped(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowDropdown(false);
+      if (e.key === 'Escape') {
+        setShowDropdown(false);
+        setEditingMode(false);
+        setInput(value || '');
+        setUserTyped(false);
+      }
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -185,7 +205,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [showDropdown]);
+  }, [showDropdown, editingMode, value]);
 
   // Pre-calc chip visibility when defaults provided vs selection
   const trimmed = input.trim();
@@ -210,6 +230,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
           value={input}
           onChange={e => {
             setInput(e.target.value);
+            setUserTyped(true); // סמן שהמשתמש הקליד
             onChange('');
             setShowDropdown(true);
           }}
@@ -225,6 +246,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
                 el.setSelectionRange(el.value.length, el.value.length);
               }, 0);
             }
+            setUserTyped(false); // כשפותחים דרופדאון, הצג הכל
             setShowDropdown(true);
           }}
         />
@@ -332,24 +354,18 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps & { forbiddenCatego
                     className={
                       'CategorySelectOrAdd-icon-picker-icon' + (ic === icon ? ' selected' : '')
                     }
-                    onClick={() => { setIcon(ic); setShowIconPicker(false); }}
-                    title={ic}
-                  >{ic}</span>
-                ))}
-              </div>
-            </div>
-            <button onClick={() => setShowIconPicker(false)} className="CategorySelectOrAdd-icon-picker-cancel">ביטול</button>
-          </div>
-        </div>
+            onClick={() => { setIcon(ic); setShowIconPicker(false); }}
+            title={ic}
+          >{ic}</span>
+        ))}
+      </div>
+    </div>
+    <button onClick={() => setShowIconPicker(false)} className="CategorySelectOrAdd-icon-picker-cancel">ביטול</button>
+  </div>
+</div>
       )}
     </div>
   );
 };
-
-// Usage in CategoryAliasesManager (example):
-// <CategorySelectOrAdd
-//   ...
-//   forbiddenCategoryName={otherSelectedCategory}
-// />
 
 export default CategorySelectOrAdd;

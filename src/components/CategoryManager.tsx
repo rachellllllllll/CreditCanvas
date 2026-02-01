@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ICONS } from './icons';
+import CategorySelectOrAdd from './CategorySelectOrAdd';
 import './CategoryManager.css';
 
 export interface CategoryDef {
@@ -16,19 +17,21 @@ interface CategoryManagerProps {
   onClose: () => void;
   categoriesCount?: Record<string, number>; // מיפוי שם קטגוריה לכמות עסקאות
   transactionsByCategory: Record<string, CreditDetail[]>; // מיפוי שם קטגוריה לרשימת עסקאות
+  embedded?: boolean; // האם מוטמע בתוך פאנל אחר
 }
 
-const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange, onClose, categoriesCount = {}, transactionsByCategory }) => {
+const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange, onClose, categoriesCount = {}, transactionsByCategory, embedded = false }) => {
   const [cats, setCats] = useState<CategoryDef[]>(categories);
-  const [newCat, setNewCat] = useState<CategoryDef>({ name: '', color: '#36A2EB', icon: ICONS[0] });
-  const [iconPickerIdx, setIconPickerIdx] = useState<number|null>(null);
-  const [colorPickerIdx, setColorPickerIdx] = useState<number|null>(null);
-  const [editNameIdx, setEditNameIdx] = useState<number|null>(null);
-  const [editNameValue, setEditNameValue] = useState<string>('');
+  
+  // סנכרון state מקומי כאשר ה-prop משתנה מבחוץ
+  useEffect(() => {
+    setCats(categories);
+  }, [categories]);
+
   const [saveStatus, setSaveStatus] = useState<'idle'|'success'|'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
   // הצעות לאיחוד/שמות חדשים
-  const [suggestions, setSuggestions] = useState<any>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, any> | null>(null);
   const [showSuggestionsDialog, setShowSuggestionsDialog] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
@@ -38,42 +41,11 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
     window.dispatchEvent(new CustomEvent('categoriesChanged'));
   }
 
-  // הוספת קטגוריה בראש
-  const handleAddCategory = () => {
-    if (!newCat.name.trim()) return;
-    const updated = [...cats, { ...newCat }];
-    setCats(updated);
-    setNewCat({ name: '', color: '#36A2EB', icon: ICONS[0] });
-    handleChangeAndNotify(updated);
-  };
-  // עריכת שם
-  const handleNameEdit = (idx: number) => {
-    setEditNameIdx(idx);
-    setEditNameValue(cats[idx].name);
-  };
-  const handleNameSave = (idx: number) => {
-    if (!editNameValue.trim()) return;
+  // עדכון קטגוריה (שם, אייקון, צבע)
+  const handleCategoryUpdate = (idx: number, updatedCat: CategoryDef) => {
     const updated = cats.slice();
-    updated[idx] = { ...updated[idx], name: editNameValue };
+    updated[idx] = updatedCat;
     setCats(updated);
-    setEditNameIdx(null);
-    setEditNameValue('');
-    handleChangeAndNotify(updated);
-  };
-  // בחירת אייקון
-  const handleIconPick = (idx: number, icon: string) => {
-    setIconPickerIdx(null); // סגור מיד
-    const updated = cats.slice();
-    updated[idx] = { ...updated[idx], icon };
-    setCats(updated);
-    handleChangeAndNotify(updated);
-  };
-  // בחירת צבע
-  const handleColorPick = (idx: number, color: string) => {
-    const updated = cats.slice();
-    updated[idx] = { ...updated[idx], color };
-    setCats(updated);
-    setColorPickerIdx(null);
     handleChangeAndNotify(updated);
   };
   // מחיקה
@@ -159,8 +131,8 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
           }
           
           const retryData = await retryRes.json();
-          setSuggestions((prev: Record<string, any> = {}) => ({
-            ...prev,
+          setSuggestions(prev => ({
+            ...(prev || {}),
             [cat.name]: {
               ...retryData,
               limited: true // סמן שזו תוצאה מוגבלת
@@ -168,8 +140,8 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
           }));
         } else {
           const data = await res.json();
-          setSuggestions((prev: Record<string, any> = {}) => {
-            const next = { ...prev };
+          setSuggestions(prev => {
+            const next = { ...(prev || {}) };
             next[cat.name] = data;
             // אם יש הצעת איחוד, דלג על הקטגוריה השנייה
             if (data.mergeSuggestions && Array.isArray(data.mergeSuggestions)) {
@@ -184,8 +156,8 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
         }
       } catch (error) {
         console.error(`שגיאה בקבלת הצעות עבור ${cat.name}:`, error);
-        setSuggestions((prev: Record<string, any> = {}) => ({ 
-          ...prev, 
+        setSuggestions(prev => ({ 
+          ...(prev || {}), 
           [cat.name]: { 
             error: 'שגיאה בקבלת הצעות. ייתכן שגודל הבקשה גדול מדי.' 
           } 
@@ -195,90 +167,117 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
     setLoadingSuggestions(false);
   };
 
-  return (
-    <div className="edit-dialog-overlay category-manager-overlay">
-      <div className="edit-dialog-box category-manager-box">
-        {/* Header */}
-        <div className="category-manager-header">
-          <h3>ניהול קטגוריות</h3>
-          <div>
-            <button className="category-manager-add-btn" onClick={handleAddCategory}>+ הוסף קטגוריה</button>
+  // פונקציה להוספת קטגוריה חדשה עם דיאלוג
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+
+  const handleAddNewCategory = () => {
+    if (!newCatName.trim()) return;
+    const newCategory: CategoryDef = { 
+      name: newCatName.trim(), 
+      color: '#6366f1', 
+      icon: ICONS[Math.floor(Math.random() * ICONS.length)] 
+    };
+    const updated = [...cats, newCategory];
+    setCats(updated);
+    setNewCatName('');
+    setShowAddDialog(false);
+    handleChangeAndNotify(updated);
+  };
+
+  const content = (
+    <div className={`edit-dialog-box category-manager-box ${embedded ? 'embedded' : ''}`}>
+      {/* Header */}
+      <div className="category-manager-header">
+        <h3>ניהול קטגוריות</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="category-manager-add-btn" onClick={() => setShowAddDialog(true)}>+ הוסף קטגוריה</button>
+          {cats.length > 0 && (
             <button 
               className="category-manager-suggest-btn" 
-              style={{ marginRight: 8 }} 
               onClick={fetchSuggestions} 
               disabled={loadingSuggestions}
             >
-              {loadingSuggestions ? '⏳ טוען הצעות...' : '✨ הצג הצעות חכמות'}
+              {loadingSuggestions ? '⏳ טוען...' : '✨ הצעות חכמות'}
             </button>
+          )}
+        </div>
+      </div>
+      
+      {/* Add Category Dialog */}
+      {showAddDialog && (
+        <div className="category-manager-iconpicker-backdrop" onClick={() => setShowAddDialog(false)}>
+          <div className="category-manager-iconpicker-popup" onClick={e => e.stopPropagation()} style={{ minWidth: 320 }}>
+            <div className="category-manager-iconpicker-title">הוספת קטגוריה חדשה</div>
+            <input
+              type="text"
+              placeholder="שם הקטגוריה..."
+              value={newCatName}
+              onChange={e => setNewCatName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddNewCategory(); }}
+              autoFocus
+              className="category-manager-name-input"
+              style={{ width: '100%', marginBottom: 16, padding: '10px 14px', fontSize: 15 }}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button 
+                className="category-manager-add-btn" 
+                onClick={handleAddNewCategory}
+                disabled={!newCatName.trim()}
+                style={{ opacity: newCatName.trim() ? 1 : 0.5 }}
+              >
+                הוסף
+              </button>
+              <button className="category-manager-iconpicker-cancel" onClick={() => setShowAddDialog(false)}>
+                ביטול
+              </button>
+            </div>
           </div>
         </div>
-        {/* Content (scrollable) */}
-        <div className="category-manager-content">
-          <div style={{ marginBottom: 16, display: 'none' }}>
-            {/* שדה הוספה ישן - מוסתר */}
+      )}
+
+      {/* Content (scrollable) */}
+      <div className="category-manager-content">
+        {/* Empty State */}
+        {cats.length === 0 ? (
+          <div className="category-manager-empty">
+            <div className="category-manager-empty-icon">🏷️</div>
+            <div className="category-manager-empty-title">אין קטגוריות עדיין</div>
+            <div className="category-manager-empty-desc">
+              צור קטגוריות כדי לארגן את העסקאות שלך לפי נושאים - מזון, תחבורה, בילויים ועוד
+            </div>
+            <button className="category-manager-empty-btn" onClick={() => setShowAddDialog(true)}>
+              + הוסף קטגוריה ראשונה
+            </button>
           </div>
+        ) : (
           <div className="category-manager-table-wrapper">
             <table className="category-manager-table">
               <thead>
                 <tr>
-                  <th>אייקון</th>
-                  <th>שם</th>
-                  <th>כמות עסקאות</th>
-                  <th>צבע</th>
+                  <th>קטגוריה</th>
+                  <th>עסקאות</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {cats.map((cat, idx) => (
                   <tr key={cat.name+idx}>
-                    <td className="category-manager-icon-cell" onClick={() => setIconPickerIdx(idx)}>
-                      {cat.icon}
-                      {/* פופאפ בחירת אייקון */}
-                      {iconPickerIdx === idx && (
-                        <>
-                          <div className="category-manager-iconpicker-backdrop" onClick={() => setIconPickerIdx(null)} />
-                          <div className="category-manager-iconpicker-popup" onClick={e => e.stopPropagation()}>
-                            <div className="category-manager-iconpicker-title">{cat.name}</div>
-                            <div className="category-manager-iconpicker-list">
-                              {ICONS.map(ic => (
-                                <span key={ic} className={ic === cat.icon ? 'category-manager-iconpicker-selected' : ''} onClick={() => { setIconPickerIdx(null); handleIconPick(idx, ic); }}>{ic}</span>
-                              ))}
-                            </div>
-                            <button className="category-manager-iconpicker-cancel" onClick={() => setIconPickerIdx(null)}>ביטול</button>
-                          </div>
-                        </>
-                      )}
-                    </td>
-                    <td className="category-manager-name-cell" onClick={() => handleNameEdit(idx)}>
-                      {editNameIdx === idx ? (
-                        <input
-                          value={editNameValue}
-                          autoFocus
-                          onChange={e => setEditNameValue(e.target.value)}
-                          onBlur={() => handleNameSave(idx)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleNameSave(idx); }}
-                          className="category-manager-name-input"
-                        />
-                      ) : (
-                        <span>{cat.name}</span>
-                      )}
+                    <td className="category-manager-chip-cell">
+                      <CategorySelectOrAdd
+                        categories={cats}
+                        value={cat.name}
+                        onChange={() => {}}
+                        onAddCategory={(updatedCat) => handleCategoryUpdate(idx, updatedCat)}
+                        allowAdd={true}
+                        defaultIcon={cat.icon}
+                        defaultColor={cat.color}
+                        previewVisibility="always"
+                        showDefaultChipIfProvided={true}
+                      />
                     </td>
                     <td className="category-manager-count-cell">
                       {categoriesCount[cat.name] || 0}
-                    </td>
-                    <td className="category-manager-color-cell" onClick={() => setColorPickerIdx(idx)}>
-                      <span className="category-manager-color-preview" style={{ background: cat.color }}></span>
-                      {colorPickerIdx === idx && (
-                        <input
-                          type="color"
-                          value={cat.color}
-                          autoFocus
-                          className="category-manager-color-input"
-                          onChange={e => handleColorPick(idx, e.target.value)}
-                          onBlur={() => setColorPickerIdx(null)}
-                        />
-                      )}
                     </td>
                     <td>
                       <button className="category-manager-delete-btn" onClick={() => handleDelete(idx)} title="מחק קטגוריה">🗑️</button>
@@ -288,8 +287,9 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
               </tbody>
             </table>
           </div>
-        </div>
-        {/* דיאלוג הצעות - עיצוב משופר */}
+        )}
+      </div>
+      {/* דיאלוג הצעות - עיצוב משופר */}
         {showSuggestionsDialog && (
           <div className="category-manager-suggestions-dialog">
             <div className="category-manager-suggestions-box">
@@ -445,6 +445,16 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
           </div>
         )}
       </div>
+  );
+
+  // If embedded, don't show overlay
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="edit-dialog-overlay category-manager-overlay">
+      {content}
     </div>
   );
 };

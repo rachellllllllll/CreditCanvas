@@ -4,7 +4,7 @@ export type DirectionOverrides = Record<string, { direction: 'income' | 'expense
 
 const DIRECTION_OVERRIDES_FILE = 'directionOverrides.json';
 
-export async function loadDirectionOverridesFromDir(dirHandle: any): Promise<DirectionOverrides> {
+export async function loadDirectionOverridesFromDir(dirHandle: FileSystemDirectoryHandle): Promise<DirectionOverrides> {
   try {
     const fileHandle = await dirHandle.getFileHandle(DIRECTION_OVERRIDES_FILE);
     const file = await fileHandle.getFile();
@@ -16,7 +16,7 @@ export async function loadDirectionOverridesFromDir(dirHandle: any): Promise<Dir
   }
 }
 
-export async function saveDirectionOverridesToDir(dirHandle: any, overrides: DirectionOverrides): Promise<void> {
+export async function saveDirectionOverridesToDir(dirHandle: FileSystemDirectoryHandle, overrides: DirectionOverrides): Promise<void> {
   const fileHandle = await dirHandle.getFileHandle(DIRECTION_OVERRIDES_FILE, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(JSON.stringify(overrides, null, 2));

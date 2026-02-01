@@ -13,9 +13,11 @@ interface SourceFilterProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   dirHandle?: any; // לשמירת כינויים בתיקיה שנבחרה (File System Access API)
+  inline?: boolean; // מצב inline - להציג ישירות את התוכן ללא כפתור
+  onCardNameChange?: (last4: string, newName: string) => void; // callback לעדכון שם כרטיס
 }
 
-const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByCard, activeInViewByCard, selectedCards, onToggleCard, includeBank, onToggleBank, allSelected, onSelectAll, onClearSelection, dirHandle }) => {
+const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByCard, activeInViewByCard, selectedCards, onToggleCard, includeBank, onToggleBank, allSelected, onSelectAll, onClearSelection, dirHandle, inline = false, onCardNameChange }) => {
   // כל ה-state הפנימי (editing, saving, cardNames) נשאר כאן
   // MainView רק מעביר את המינימום הדרוש
   const [showSourceMenu, setShowSourceMenu] = useState(false);
@@ -107,7 +109,8 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
   const saveCardAlias = async (last4: string, newAlias: string) => {
     setSavingCard(last4);
     setCardNamesError(null);
-    const updated = { ...cardNames, [last4]: newAlias.trim() };
+    const trimmedAlias = newAlias.trim();
+    const updated = { ...cardNames, [last4]: trimmedAlias };
     try {
       // כתיבה לתיקיה אם זמינה
       if (dirHandle) {
@@ -120,6 +123,10 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
       }
       // עדכון סטייט מקומי
       setCardNames(updated);
+      // הודע ל-parent על השינוי כדי לעדכן את הטבלה
+      if (onCardNameChange) {
+        onCardNameChange(last4, trimmedAlias);
+      }
       setEditingCard(null);
       setSavingCard(null);
       setSavedCard(last4);
@@ -131,20 +138,25 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
     }
   };
 
+  // במצב inline - מציג תמיד את התוכן בלי כפתור
+  const showContent = inline || showSourceMenu;
+
   return (
-    <div className="source-filter-wrapper" style={{ position: 'relative' }}>
-      <button
-        type="button"
-        className={`source-filter-btn ${showSourceMenu ? 'open' : ''}`}
-        onClick={() => setShowSourceMenu(s => !s)}
-        aria-haspopup="true"
-        aria-expanded={showSourceMenu}
-        aria-controls="source-filter-pop"
-      >
-        מקורות {allSelected && includeBank ? '(הכל)' : ''}
-      </button>
-      {showSourceMenu && (
-        <div id="source-filter-pop" className="source-filter-popover" role="dialog" aria-label="בחירת מקורות נתונים">
+    <div className={`source-filter-wrapper ${inline ? 'source-filter-inline' : ''}`} style={{ position: 'relative' }}>
+      {!inline && (
+        <button
+          type="button"
+          className={`source-filter-btn ${showSourceMenu ? 'open' : ''}`}
+          onClick={() => setShowSourceMenu(s => !s)}
+          aria-haspopup="true"
+          aria-expanded={showSourceMenu}
+          aria-controls="source-filter-pop"
+        >
+          מקורות {allSelected && includeBank ? '(הכל)' : ''}
+        </button>
+      )}
+      {showContent && (
+        <div id="source-filter-pop" className={`source-filter-popover ${inline ? 'source-filter-popover-inline' : ''}`} role="dialog" aria-label="בחירת מקורות נתונים">
           <div className="sf-section">
             <div className="sf-title">כרטיסי אשראי</div>
             {availableCards.length === 0 && <div className="sf-empty">לא נמצאו כרטיסים</div>}
@@ -253,7 +265,7 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
                           <div className="sf-card-main">
                             <div className="sf-card-top-row">
                               <span className="sf-card-digits" aria-hidden="true">••••{last4}</span>
-                              <span className="sf-old-chip">היסטורי</span>
+                              {/* <span className="sf-old-chip">היסטורי</span> */}
 
                               {!isEditing ? (
                                 <>
@@ -322,9 +334,11 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
               <span>חשבון עו"ש</span>
             </label>
           </div>
-          <div className="sf-footer">
-            <button type="button" className="sf-close" onClick={() => setShowSourceMenu(false)}>סגור</button>
-          </div>
+          {!inline && (
+            <div className="sf-footer">
+              <button type="button" className="sf-close" onClick={() => setShowSourceMenu(false)}>סגור</button>
+            </div>
+          )}
         </div>
       )}
     </div>

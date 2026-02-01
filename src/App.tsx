@@ -1,25 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { readXLSX, sheetToArray } from './utils/xlsxMinimal';
 import { ensureSheetType } from './utils/sheetType';
 import { parseBankStatementFromSheet } from './utils/bankParser';
 import type { CreditDetail, AnalysisResult } from './types';
-import CategoryManager, { type CategoryDef } from './components/CategoryManager';
+import { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
-import EditCategoryDialog from './components/EditCategoryDialog';
+import EditCategoryDialog, { type EditDialogState } from './components/EditCategoryDialog';
 import Footer from './components/Footer';
 import './App.css';
 import './index.css';
 import MainView from './components/MainView';
 import NewCategoriesTablePrompt from './components/NewCategoriesTablePrompt';
-import CategoryAliasesManager from './components/CategoryAliasesManager';
 import TransactionsChat from './components/TransactionsChat';
+import AnalyticsConsentBanner from './components/AnalyticsConsentBanner';
+import OnboardingTour from './components/OnboardingTour';
+import {
+  type UserProfile,
+  getOrCreateUserProfile,
+  updateAnalyticsConsent,
+  trackSessionStart,
+  trackConsentDecision,
+  trackFilesLoaded,
+  trackFeatureUsage,
+  wasConsentAsked,
+  markConsentAsked,
+  updateLastActivity,
+  saveSessionDurationForLater
+} from './utils/analytics';
 import { signedAmount } from './utils/money';
 import { processCreditChargeMatching } from './utils/creditChargePatterns';
-import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule } from './utils/categoryRules';
+import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, saveCategoryRules } from './utils/categoryRules';
+import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
+import {
+  loadIncomeSourceRules,
+  saveIncomeSourceRules,
+  detectAutoIncomeSources,
+  applyIncomeSourceRules,
+  addIncomeSourceRule,
+  addCategoryIncomeSourceRule,
+  removeIncomeSourceRule,
+  markAsNotIncomeSource
+} from './utils/incomeSourceRules';
 
 // Helpers for categories and aliases persistence + application
-async function loadCategoriesFromDir(dirHandle: any): Promise<CategoryDef[] | null> {
+async function loadCategoriesFromDir(dirHandle: FileSystemDirectoryHandle): Promise<CategoryDef[] | null> {
   try {
     const fh = await dirHandle.getFileHandle('categories.json');
     const f = await fh.getFile();
@@ -30,14 +55,14 @@ async function loadCategoriesFromDir(dirHandle: any): Promise<CategoryDef[] | nu
     return null;
   }
 }
-async function saveCategoriesToDir(dirHandle: any, categories: CategoryDef[]): Promise<void> {
+async function saveCategoriesToDir(dirHandle: FileSystemDirectoryHandle, categories: CategoryDef[]): Promise<void> {
   try {
     const fh = await dirHandle.getFileHandle('categories.json', { create: true });
     const w = await fh.createWritable();
     await w.write(JSON.stringify(categories, null, 2));
     await w.close();
-  } catch (err: any) {
-    if (err.name === 'SecurityError') {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'SecurityError') {
       console.warn('אין רשאות לשמור categories.json');
       return;
     }
@@ -46,7 +71,7 @@ async function saveCategoriesToDir(dirHandle: any, categories: CategoryDef[]): P
 }
 
 type AliasType = 'category' | 'description';
-async function loadAliasesFromDir(dirHandle: any, type: AliasType): Promise<Record<string, string>> {
+async function loadAliasesFromDir(dirHandle: FileSystemDirectoryHandle, type: AliasType): Promise<Record<string, string>> {
   const fileName = type === 'category' ? 'categories-aliases.json' : 'description-categories.json';
   try {
     const fh = await dirHandle.getFileHandle(fileName);
@@ -57,15 +82,15 @@ async function loadAliasesFromDir(dirHandle: any, type: AliasType): Promise<Reco
     return {};
   }
 }
-async function saveAliasesToDir(dirHandle: any, aliases: Record<string, string>, type: AliasType): Promise<void> {
+async function saveAliasesToDir(dirHandle: FileSystemDirectoryHandle, aliases: Record<string, string>, type: AliasType): Promise<void> {
   const fileName = type === 'category' ? 'categories-aliases.json' : 'description-categories.json';
   try {
     const fh = await dirHandle.getFileHandle(fileName, { create: true });
     const w = await fh.createWritable();
     await w.write(JSON.stringify(aliases, null, 2));
     await w.close();
-  } catch (err: any) {
-    if (err.name === 'SecurityError') {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'SecurityError') {
       console.warn(`אין רשאות לשמור ${fileName}`);
       return;
     }
@@ -81,16 +106,16 @@ function applyAliases(details: CreditDetail[], categoryAliases: Record<string, s
   });
 }
 
-const parseCreditDetailsFromSheet = async (sheetData: any[][], fileName: string): Promise<CreditDetail[]> => {
+const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: string): Promise<CreditDetail[]> => {
   // sheetData הוא כבר מערך דו-ממדי (לא sheet של XLSX)
-  const json: any[][] = sheetData;
+  const json: unknown[][] = sheetData;
   // Find the header row index by searching for a row with known column names
   let headerIdx = -1;
   let headers: string[] = [];
   let chargeDateFromHeader = '';
   let cardLast4FromHeader = '';
   for (let i = 0; i < json.length; i++) {
-    const row = json[i].map((cell: string) => (cell || '').toString().trim());
+    const row = json[i].map((cell) => (cell != null ? String(cell) : '').trim());
     // Support Poalim format: header with '\r\n' or '\n' in header names
     // const normalizedRow = row.map((c: string) => c.replace(/"/g, '').replace(/\r?\n/g, '').trim());
     // --- extract charge date and card last 4 from header lines if present ---
@@ -135,12 +160,36 @@ const parseCreditDetailsFromSheet = async (sheetData: any[][], fileName: string)
     });
     // Try to extract fields for all supported formats
     let date = rowObj['תאריך עסקה'] || rowObj['תאריךעסקה'] || rowObj['תאריך'] || '';
-    let description = rowObj['שם בית העסק'] || rowObj['שם בית עסק'] || rowObj['בית עסק'] || '';
-    let amount = rowObj['סכום חיוב'] || rowObj['סכום עסקה'] || rowObj['סכוםחיוב'] || rowObj['סכוםעסקה'] || '';
-    let category = rowObj['ענף'] || rowObj['קטגוריה'] || '';
+    const description = rowObj['שם בית העסק'] || rowObj['שם בית עסק'] || rowObj['בית עסק'] || '';
+    // העדפה לסכום חיוב - זה מה שבאמת יורד מהחשבון
+    // סכום עסקה נשמר בנפרד להצגה (תשלומים, מט"ח וכו')
+    const chargeAmountRaw = rowObj['סכום חיוב'] || rowObj['סכוםחיוב'] || '';
+    const transactionAmountRaw = rowObj['סכום עסקה'] || rowObj['סכוםעסקה'] || '';
+    const transactionCurrency = rowObj['מטבע עסקה'] || rowObj['מטבעעסקה'] || '';
+   
+    // אם יש סכום חיוב - השתמש בו. אם אין אבל יש סכום עסקה - בדוק אם זו עסקת צבירה
+    let amount = chargeAmountRaw;
+    if (!chargeAmountRaw && transactionAmountRaw) {
+      // בדוק אם זו עסקת צבירת נקודות (סכום עסקה קיים אבל סכום חיוב ריק)
+      // const transType = rowObj['סוג עסקה'] || rowObj['סוגעסקה'] || '';
+      // if (transType.includes('צבירה') || description.includes('צבירה')) {
+      //   // דלג על עסקאות צבירה - הן לא משפיעות על החיוב
+      //   continue;
+      // }
+      // אם זה לא צבירה, השתמש בסכום עסקה כ-fallback
+      // amount = transactionAmountRaw;
+    }
+    const category = rowObj['ענף'] || rowObj['קטגוריה'] || '';
     // --- extract charge date and card last 4 ---
     let chargeDate = rowObj['תאריך חיוב'] || chargeDateFromHeader || '';
-    let cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || cardLast4FromHeader || '';
+    const cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || cardLast4FromHeader || '';
+   
+    // --- זיהוי עסקאות בחיוב מיידי (משיכת מזומן וכד') ---
+    const transactionType = rowObj['סוג עסקה'] || rowObj['סוגעסקה'] || '';
+    if (transactionType.includes('משיכת מזומן') || transactionType.includes('חיוב מיידי')) {
+      // בחיוב מיידי: תאריך החיוב = תאריך העסקה
+      chargeDate = date;
+    }
     // Special handling for Poalim format: amount may be in the form '₪ 11.68'
     if (amount && amount.includes('₪')) {
       amount = amount.replace('₪', '').trim();
@@ -201,13 +250,26 @@ const parseCreditDetailsFromSheet = async (sheetData: any[][], fileName: string)
       // const refundLike = /(זיכוי|החזר|ביטול)/.test(description);
       const raw = parseFloat(amount);
       if (isNaN(raw)) continue;
-      let direction: 'income' | 'expense' = raw < 0 ? 'income' : 'expense';
+      const direction: 'income' | 'expense' = raw < 0 ? 'income' : 'expense';
       // if (refundLike) direction = 'income';
       const amountAbs = Math.abs(raw);
+     
+      // חשב סכום עסקה מקורי (אם שונה מסכום החיוב)
+      let origTransactionAmount: number | undefined;
+      if (transactionAmountRaw) {
+        const cleanTransAmount = transactionAmountRaw.replace(/[^\d.,-]/g, '').replace(',', '.');
+        const parsedTransAmount = Math.abs(parseFloat(cleanTransAmount));
+        if (!isNaN(parsedTransAmount) && parsedTransAmount !== amountAbs) {
+          origTransactionAmount = parsedTransAmount;
+        }
+      }
+     
       details.push({
         id: `${fileName}-${i}-${raw}-${description}`,
         date,
-        amount: amountAbs, // ערך מוחלט – הכיוון נשמר בשדה direction
+        amount: amountAbs, // סכום חיוב – ערך מוחלט, הכיוון נשמר בשדה direction
+        transactionAmount: origTransactionAmount, // סכום עסקה מקורי (רק אם שונה)
+        transactionCurrency: transactionCurrency || undefined, // מטבע מקורי (אם קיים)
         description,
         category,
         chargeDate,
@@ -229,7 +291,7 @@ const getMonthYear = (dateStr: string): string => {
   // Try to extract month/year from dd/m/yy or dd/mm/yyyy
   const parts = dateStr.split('/');
   if (parts.length >= 3) {
-    let month = parts[1];
+    const month = parts[1];
     let year = parts[2];
     if (year.length === 2) year = '20' + year;
     return `${month.padStart(2, '0')}/${year}`;
@@ -240,30 +302,153 @@ const getMonthYear = (dateStr: string): string => {
 const App: React.FC = () => {
   // מצב לפתיחת חלון הצ'אט
   const [chatOpen, setChatOpen] = useState(false);
+
+  // --- שמירת העדפות משתמש ב-localStorage ---
+  const APP_PREFS_KEY = 'appPreferences';
+  const loadAppPrefs = () => {
+    try {
+      const saved = localStorage.getItem(APP_PREFS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* localStorage may be unavailable */ }
+    return {};
+  };
+  const initialAppPrefs = React.useMemo(() => loadAppPrefs(), []);
+
   // --- מצב חדש: בחירת בסיס תאריך להצגה ---
-  const [dateMode, setDateMode] = useState<'transaction' | 'charge'>('transaction');
+  const [dateMode, setDateMode] = useState<'transaction' | 'charge'>(initialAppPrefs.dateMode ?? 'transaction');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+ 
+  // --- מצב טעינה עם שלבים ---
+  type LoadingStep = {
+    step: 'scanning' | 'reading' | 'processing' | 'categories' | 'finalizing' | 'done';
+    message: string;
+    progress?: { current: number; total: number };
+  };
+  const [loadingState, setLoadingState] = useState<LoadingStep | null>(null);
+ 
+  // --- מצב הדרכת משתמש חדש (Tour) ---
+  const TOUR_COMPLETED_KEY = 'onboardingTourCompleted';
+  const [showTour, setShowTour] = useState(false);
+ 
+  // בדוק אם המשתמש כבר סיים את הטור - מבוסס תיקייה
+  // אם יש קבצי הגדרות (כמו categories.json) - זה משתמש קיים
+  const checkShouldShowTour = useCallback(async (dir: FileSystemDirectoryHandle): Promise<boolean> => {
+    // 1. בדוק localStorage (מהיר, למקרה שהמשתמש דילג באותה תיקייה)
+    try {
+      const completedFolders = localStorage.getItem(TOUR_COMPLETED_KEY);
+      if (completedFolders) {
+        const folders = JSON.parse(completedFolders) as string[];
+        if (folders.includes(dir.name)) return false;
+      }
+    } catch { /* continue */ }
+   
+    // 2. בדוק אם יש קבצי הגדרות בתיקייה (משתמש קיים)
+    try {
+      await dir.getFileHandle('categories.json');
+      return false; // יש קובץ = משתמש קיים, לא להציג Tour
+    } catch {
+      // אין קובץ = משתמש חדש, להציג Tour
+      return true;
+    }
+  }, []);
+ 
   // selectedMonth unified to string format 'MM/YYYY'
   const formatMonthYear = (date: Date) => `${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
   const [selectedMonth, setSelectedMonth] = useState<string>(formatMonthYear(new Date()));
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [months, setMonths] = useState<string[]>([]);
-  const [view, setView] = useState<'monthly' | 'yearly'>('monthly');
+  const [view, setView] = useState<'monthly' | 'yearly'>(initialAppPrefs.view ?? 'monthly');
   // Add state to store selected folder path
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   // שמור את קבצי האקסל המקוריים בזיכרון (Map fileName -> ArrayBuffer)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [excelFiles, setExcelFiles] = useState<Map<string, ArrayBuffer>>(new Map());
 
+  // --- מצב אנליטיקס ---
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [analyticsStats, setAnalyticsStats] = useState<{
+    fileCount: number;
+    transactionCount: number;
+    monthCount: number;
+    categoryCount: number;
+  } | null>(null);
 
-  // File System Access API: Directory handle
-  const [dirHandle, setDirHandle] = useState<any>(null);
+  // --- מצב מקורות הכנסה ---
+  const [incomeSourceRules, setIncomeSourceRules] = useState<IncomeSourceRule[]>([]);
+
+  // --- מעקב זמן שהייה באפליקציה ---
+  useEffect(() => {
+    // עדכון lastActivity בכל פעולה משמעותית
+    const handleActivity = () => updateLastActivity();
+   
+    // האזנה לאירועי פעילות
+    document.addEventListener('click', handleActivity);
+    document.addEventListener('keydown', handleActivity);
+    document.addEventListener('scroll', handleActivity);
+   
+    // שמירת משך סשן כשסוגרים את הדף
+    const handleBeforeUnload = () => saveSessionDurationForLater();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+   
+    return () => {
+      document.removeEventListener('click', handleActivity);
+      document.removeEventListener('keydown', handleActivity);
+      document.removeEventListener('scroll', handleActivity);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  // --- פונקציה למעקב פיצ'רים (רק אם יש פרופיל ואישר) ---
+  const trackFeature = useCallback((feature: string) => {
+    if (userProfile) {
+      trackFeatureUsage(userProfile, feature);
+    }
+  }, [userProfile]);
+
+  // File System Access API: Directory handle (מוגדר כאן כדי שיהיה זמין ל-callbacks)
+  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+
+  // --- Callbacks להדרכת משתמש חדש (Tour) ---
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false);
+    // שמור את שם התיקייה כדי לא להציג שוב באותה תיקייה
+    if (dirHandle) {
+      try {
+        const existing = localStorage.getItem(TOUR_COMPLETED_KEY);
+        const folders: string[] = existing ? JSON.parse(existing) : [];
+        if (!folders.includes(dirHandle.name)) {
+          folders.push(dirHandle.name);
+          localStorage.setItem(TOUR_COMPLETED_KEY, JSON.stringify(folders));
+        }
+      } catch { /* ignore */ }
+    }
+    trackFeature('tour_completed');
+  }, [trackFeature, dirHandle]);
+ 
+  const handleTourSkip = useCallback(() => {
+    setShowTour(false);
+    // שמור את שם התיקייה גם בדילוג
+    if (dirHandle) {
+      try {
+        const existing = localStorage.getItem(TOUR_COMPLETED_KEY);
+        const folders: string[] = existing ? JSON.parse(existing) : [];
+        if (!folders.includes(dirHandle.name)) {
+          folders.push(dirHandle.name);
+          localStorage.setItem(TOUR_COMPLETED_KEY, JSON.stringify(folders));
+        }
+      } catch { /* ignore */ }
+    }
+    trackFeature('tour_skipped');
+  }, [trackFeature, dirHandle]);
+
   // CSV תמיכה הוסרה: עבודה עם Excel בלבד
 
   // File System Access API: Pick directory and read Excel files
   const handlePickDirectory = async () => {
     try {
-      // @ts-ignore
+      // @ts-expect-error - showDirectoryPicker is not in all TS libs
       const dir = await window.showDirectoryPicker();
       await handlePickDirectory_Internal(dir);
     } catch (err) {
@@ -272,8 +457,44 @@ const App: React.FC = () => {
     }
   };
 
+  // פונקציית עזר לאיסוף קבצי Excel רקורסיבית מכל תת-תיקיות
+  // מחזירה רשימת אובייקטים עם FileSystemFileHandle ונתיב יחסי
+  type ExcelFileEntry = { handle: FileSystemFileHandle; relativePath: string };
+ 
+  async function collectExcelFilesRecursive(
+    dirHandle: FileSystemDirectoryHandle,
+    relativePath: string = '',
+    depth: number = 0,
+    maxDepth: number = 10
+  ): Promise<ExcelFileEntry[]> {
+    if (depth > maxDepth) return [];
+   
+    const files: ExcelFileEntry[] = [];
+   
+    // @ts-expect-error - values() exists on FileSystemDirectoryHandle but not in all TS libs
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === 'file') {
+        // תמיכה בקריאת קבצי XLSX ישירות
+        if (entry.name.endsWith('.xlsx') || entry.name.endsWith('.xls')) {
+          const filePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+          files.push({ handle: entry, relativePath: filePath });
+        }
+      } else if (entry.kind === 'directory') {
+        // דלג על תיקיות נסתרות (מתחילות בנקודה)
+        if (entry.name.startsWith('.')) continue;
+       
+        // סרוק תת-תיקייה רקורסיבית
+        const subPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+        const subFiles = await collectExcelFilesRecursive(entry, subPath, depth + 1, maxDepth);
+        files.push(...subFiles);
+      }
+    }
+   
+    return files;
+  }
+
   // גרסה פנימית של handlePickDirectory שמקבלת dir כפרמטר
-  const handlePickDirectory_Internal = async (dir: any) => {
+  const handlePickDirectory_Internal = async (dir: FileSystemDirectoryHandle) => {
     setError(null);
     setAnalysis(null);
     setSelectedMonth(formatMonthYear(new Date()));
@@ -281,58 +502,85 @@ const App: React.FC = () => {
     setSelectedFolder(null);
     setCategoriesList([]);
     setCategoryAliases({});
-    setDescToCategory({});
+    setCategoryRules([]);
     setExcelFiles(new Map());
     originalCategoriesRef.current.clear();
+    // אפס לתצוגה חודשית כדי שה-Tour יעבוד נכון
+    setView('monthly');
+   
+    // התחל להציג מצב טעינה
+    setLoadingState({ step: 'scanning', message: '🔍 סורק תיקיות...' });
+   
     try {
       setDirHandle(dir);
       setSelectedFolder(dir.name || '');
       let allDetails: CreditDetail[] = [];
-      let hasNoFiles = true;
 
-      for await (const entry of dir.values()) {
-        if (entry.kind === 'file') {
-          // תמיכה בקריאת קבצי XLSX ישירות
-          if (entry.name.endsWith('.xlsx') || entry.name.endsWith('.xls')) {
-            hasNoFiles = false;
-            try {
-              const file = await entry.getFile();
-              const arrayBuffer = await file.arrayBuffer();
-             
-              // שמור את קובץ האקסל המקורי בזיכרון
-              setExcelFiles(prev => new Map(prev).set(entry.name, arrayBuffer));
-             
-              // קרא את הקובץ עם Parser המינימלי
-              const workbook = await readXLSX(arrayBuffer);
-             
-              // עבור על כל הגיליונות
-              for (const sheet of workbook.sheets) {
-                const sheetData = sheetToArray(sheet);
-               
-                // זיהוי סוג הגיליון
-                const type = await ensureSheetType(dir, entry.name, sheet.name, sheetData);
-               
-                let details: CreditDetail[] = [];
-                if (type === 'credit') {
-                  details = await parseCreditDetailsFromSheet(sheetData, entry.name);
-                } else {
-                  details = await parseBankStatementFromSheet(sheetData, entry.name, sheet.name);
-                }
-                allDetails = allDetails.concat(details);
-              }
-            } catch (err) {
-              console.error(`שגיאה בקריאת קובץ ${entry.name}:`, err);
-              // ממשיך לקובץ הבא
+      // איסוף כל קבצי Excel מהתיקייה ומכל תת-תיקיות (עד עומק 10)
+      const excelFileEntries = await collectExcelFilesRecursive(dir);
+     
+      if (excelFileEntries.length === 0) {
+        setLoadingState(null);
+        setError('לא נמצאו קבצי Excel (XLSX/XLS) בתיקיה או בתת-תיקיות. אנא בחר תיקיה מתאימה.');
+        return;
+      }
+     
+      setLoadingState({
+        step: 'reading',
+        message: `📂 נמצאו ${excelFileEntries.length} קבצים, קורא...`,
+        progress: { current: 0, total: excelFileEntries.length }
+      });
+
+      // עבור על כל הקבצים שנמצאו
+      let fileIndex = 0;
+      for (const { handle: fileHandle, relativePath } of excelFileEntries) {
+        fileIndex++;
+        setLoadingState({
+          step: 'reading',
+          message: `📄 קורא: ${fileHandle.name}`,
+          progress: { current: fileIndex, total: excelFileEntries.length }
+        });
+        try {
+          const file = await fileHandle.getFile();
+          const arrayBuffer = await file.arrayBuffer();
+         
+          // שמור את קובץ האקסל המקורי בזיכרון (עם נתיב יחסי)
+          setExcelFiles((prev: Map<string, ArrayBuffer>) => new Map(prev).set(relativePath, arrayBuffer));
+         
+          // קרא את הקובץ עם Parser המינימלי
+          const workbook = await readXLSX(arrayBuffer);
+         
+          // עבור על כל הגיליונות
+          for (const sheet of workbook.sheets) {
+            const sheetData = sheetToArray(sheet);
+           
+            // זיהוי סוג הגיליון (שימוש בשם הקובץ בלבד לשמירת סוג הגיליון)
+            const type = await ensureSheetType(dir, fileHandle.name, sheet.name, sheetData);
+           
+            let details: CreditDetail[] = [];
+            if (type === 'credit') {
+              details = await parseCreditDetailsFromSheet(sheetData, relativePath);
+            } else {
+              details = await parseBankStatementFromSheet(sheetData, relativePath, sheet.name);
             }
+            allDetails = allDetails.concat(details);
           }
-          // קבצי CSV אינם נתמכים עוד
+        } catch (err) {
+          console.error(`שגיאה בקריאת קובץ ${relativePath}:`, err);
+          // ממשיך לקובץ הבא
         }
       }
 
-      if (hasNoFiles) {
-        setError('לא נמצאו קבצי Excel (XLSX/XLS) בתיקיה. אנא בחר תיקיה מתאימה.');
+      if (allDetails.length === 0) {
+        setLoadingState(null);
+        setError('לא נמצאו עסקאות בקבצי Excel. ודא שהקבצים מכילים נתוני אשראי או בנק בפורמט נתמך.');
         return;
       }
+     
+      setLoadingState({
+        step: 'processing',
+        message: `⚙️ מעבד ${allDetails.length.toLocaleString()} עסקאות...`
+      });
 
       allDetails = applyAliases(allDetails, await loadAliasesFromDir(dir, 'category'), await loadAliasesFromDir(dir, 'description'));
       const categoryRules = await loadCategoryRules(dir);
@@ -341,6 +589,25 @@ const App: React.FC = () => {
       allDetails = applyDirectionOverrides(allDetails, directionOverrides);
       const { details: finalDetails, creditChargeCycles: finalCycles } = await processCreditChargeMatching(allDetails, dir);
       allDetails = finalDetails;
+
+      setLoadingState({
+        step: 'categories',
+        message: '🏷️ מזהה קטגוריות ומקורות הכנסה...'
+      });
+     
+      // --- טעינת וזיהוי מקורות הכנסה ---
+      let loadedIncomeRules = await loadIncomeSourceRules(dir);
+     
+      // זיהוי אוטומטי של מקורות הכנסה חדשים (3+ חודשים ללא יציאות מקבילות)
+      const newAutoRules = detectAutoIncomeSources(allDetails, loadedIncomeRules);
+      if (newAutoRules.length > 0) {
+        loadedIncomeRules = [...loadedIncomeRules, ...newAutoRules];
+        await saveIncomeSourceRules(dir, loadedIncomeRules);
+      }
+      setIncomeSourceRules(loadedIncomeRules);
+     
+      // החל כללי מקורות הכנסה על העסקאות
+      allDetails = applyIncomeSourceRules(allDetails, loadedIncomeRules);
 
       const uniqueMonths = Array.from(new Set(allDetails.map(d => getMonthYear(d.date)).filter(Boolean)));
       setMonths(uniqueMonths);
@@ -351,17 +618,97 @@ const App: React.FC = () => {
       }).pop();
       setSelectedMonth(latest || formatMonthYear(new Date()));
 
+      setLoadingState({
+        step: 'finalizing',
+        message: '✨ מסיים...'
+      });
+     
       const totalAmount = allDetails.reduce((sum, d) => sum + signedAmount(d), 0);
       const averageAmount = allDetails.length > 0 ? totalAmount / allDetails.length : 0;
-      setAnalysis({ totalAmount, averageAmount, details: finalDetails, creditChargeCycles: finalCycles });
+      setAnalysis({ totalAmount, averageAmount, details: allDetails, creditChargeCycles: finalCycles });
+     
+      // סיום הטעינה
+      setLoadingState(null);
+     
+      // הפעל את ה-Tour למשתמש חדש (אחרי delay קצר לתת לממשק להיטען)
+      const shouldShowTour = await checkShouldShowTour(dir);
+      if (shouldShowTour) {
+        setTimeout(() => setShowTour(true), 500);
+      }
+
+      // --- Analytics: טיפול בפרופיל משתמש ---
+      // שולחים session_start תמיד (לכל המשתמשים)
+      try {
+        const { profile, isNewUser } = await getOrCreateUserProfile(dir);
+        setUserProfile({ ...profile, _isNewUser: isNewUser } as UserProfile & { _isNewUser: boolean });
+       
+        // שלח session_start תמיד - לכל המשתמשים (גם מי שסירב)
+        await trackSessionStart(profile, isNewUser);
+       
+        // שמור סטטיסטיקות לשליחה ברגע ההחלטה
+        const uniqueCategories = new Set(allDetails.map(d => d.category).filter(Boolean));
+        setAnalyticsStats({
+          fileCount: excelFileEntries.length,
+          transactionCount: allDetails.length,
+          monthCount: uniqueMonths.length,
+          categoryCount: uniqueCategories.size
+        });
+       
+        // אם המשתמש עדיין לא ענה על שאלת ההסכמה - הצג באנר
+        if (profile.analyticsConsent === null && !wasConsentAsked()) {
+          setShowConsentBanner(true);
+        }
+        // אם כבר הסכים בעבר - שלח סטטיסטיקות טעינה
+        else if (profile.analyticsConsent === true) {
+          await trackFilesLoaded(profile, {
+            fileCount: excelFileEntries.length,
+            transactionCount: allDetails.length,
+            monthCount: uniqueMonths.length,
+            categoryCount: uniqueCategories.size
+          });
+        }
+      } catch (analyticsError) {
+        // אנליטיקס נכשל - לא משפיע על האפליקציה
+        console.debug('[Analytics] Error:', analyticsError);
+      }
     } catch (err) {
       console.error('שגיאה בבחירת תיקיה:', err);
+      setLoadingState(null);
       setError('בחירת התיקיה נכשלה או בוטלה.');
     }
   };
 
   // מצבי תצוגה/פילטרים חדשים
-  const [displayMode, setDisplayMode] = useState<'all' | 'expense' | 'income'>('all');
+  const [displayMode, setDisplayModeInternal] = useState<'all' | 'expense' | 'income'>(initialAppPrefs.displayMode ?? 'all');
+
+
+  const setDisplayMode = useCallback((mode: 'all' | 'expense' | 'income') => {
+    setDisplayModeInternal(mode);
+    const featureMap = {
+      'all': 'filter_all',
+      'expense': 'filter_expense',
+      'income': 'filter_income'
+    };
+    trackFeature(featureMap[mode]);
+  }, [trackFeature]);
+
+  const setDateModeWithTracking = useCallback((mode: 'transaction' | 'charge') => {
+    setDateMode(mode);
+    trackFeature('change_date_mode');
+  }, [trackFeature]);
+
+  const handleOpenChatWithTracking = useCallback(() => {
+    setChatOpen(true);
+    trackFeature('use_chat');
+  }, [trackFeature]);
+
+  // שמירת העדפות App ב-localStorage בכל שינוי
+  React.useEffect(() => {
+    const prefs = { view, displayMode, dateMode };
+    try {
+      localStorage.setItem(APP_PREFS_KEY, JSON.stringify(prefs));
+    } catch { /* localStorage may be unavailable or quota exceeded */ }
+  }, [view, displayMode, dateMode]);
 
   // פונקציית עזר לקבל תאריך אפקטיבי לפי מצב התצוגה
   const getEffectiveDate = (d: CreditDetail): string => {
@@ -389,6 +736,7 @@ const App: React.FC = () => {
       }).pop();
       setSelectedMonth(latest || formatMonthYear(new Date()));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, dateMode]);
 
   // Filtered details: בתצוגה חודשית או שנתית לפי מצב תאריך
@@ -405,7 +753,21 @@ const App: React.FC = () => {
     : [];
 
   // פילטר: הסתר חיובי בנק של כרטיס אשראי רק אם יש להם פירוט (relatedTransactionIds) כדי למנוע כפל.
-  const filteredDetails = scopedDetails.filter(d => (displayMode === 'all' ? true : d.direction === displayMode));
+  // סינון לפי displayMode:
+  // - 'income' = עסקאות שסומנו כמקור הכנסה
+  // - 'expense' = עסקאות הוצאה (כולל ביטולי הוצאה שמקטינים את ההוצאה)
+  const filteredDetails = scopedDetails.filter(d => {
+    if (displayMode === 'all') return true;
+    if (displayMode === 'income') {
+      // הכנסות (כולל ביטולי הכנסה שמקטינים את ההכנסה)
+      return d.transactionNature === 'income';
+    }
+    if (displayMode === 'expense') {
+      // הוצאות + ביטולי הוצאה (החזרים)
+      return d.transactionNature === 'expense' || d.transactionNature === 'expense_reversal' || !d.transactionNature;
+    }
+    return true;
+  });
 
   // סכימה: לא לספור חיובי בנק אשראי עם פירוט (כדי לא לכפול). כן לספור חיוב אשראי בנקאי ללא פירוט (אין פירוט אשראי שנכנס במקומו).
   const filteredTotal = filteredDetails.reduce((sum, d) => {
@@ -441,13 +803,22 @@ const App: React.FC = () => {
 
   // Smart analysis: categories, vendor stats
   // Extract categories from the category field only
-  const categories = (() => {
-    const catCounts: Record<string, number> = {};
-    filteredDetails.forEach(d => {
-      if (d.category) catCounts[d.category] = (catCounts[d.category] || 0) + d.amount;
-    });
-    return catCounts;
-  })();
+  // משתמשים ב-signedAmount כמו בחישוב filteredTotal לעקביות
+  // const categories = (() => {
+  //   const catCounts: Record<string, number> = {};
+  //   filteredDetails.forEach(d => {
+  //     // דלג על חיובי בנק אשראי עם פירוט (כמו בחישוב filteredTotal)
+  //     if (d.source === 'bank' && d.transactionType === 'credit_charge') {
+  //       const hasBreakdown = (d.relatedTransactionIds?.length || 0) > 0;
+  //       if (hasBreakdown) return;
+  //     }
+  //     if (d.neutral) return;
+  //     // השתמש בקטגוריה אם קיימת, אחרת "לא מסווג"
+  //     const categoryName = d.category || 'לא מסווג';
+  //     catCounts[categoryName] = (catCounts[categoryName] || 0) + signedAmount(d);
+  //   });
+  //   return catCounts;
+  // })();
 
   // חישוב נתוני סיכום חודשי לכל השנה (עפ"י תאריך אפקטיבי)
   const yearlySummary = React.useMemo(() => {
@@ -463,22 +834,18 @@ const App: React.FC = () => {
       summary[key] = (summary[key] || 0) + signedAmount(d);
     });
     return summary;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, dateMode]);
 
   // הצג עמודה חדשה בטבלת העסקאות: שם קובץ מקור
   // (נדרש גם ב-TransactionsTable.tsx, אך כאן נתחיל מהוספת onEditCategory)
   // הוספת state ודיאלוג לשינוי קטגוריה (כולל קובץ מקור)
-  const [editDialog, setEditDialog] = useState<{
-    open: boolean;
-    transaction?: CreditDetail;
-    candidates: CreditDetail[];
-    newCategory: string;
-    applyToAll: boolean;
-    excludeIds: Set<string>;
-  } | null>(null);
+  const [editDialog, setEditDialog] = useState<EditDialogState | null>(null);
 
   const handleOpenEditCategory = (transaction: CreditDetail) => {
     if (!analysis) return;
+    // מעקב פיצ'ר
+    trackFeature('edit_category');
     // מצא את כל ההוצאות עם אותו תיאור (בכל הקבצים)
     const candidates = analysis.details.filter(d => d.description === transaction.description);
     setEditDialog({
@@ -491,13 +858,34 @@ const App: React.FC = () => {
     });
   };
 
+  // --- פתיחת דיאלוג לשינוי קטגוריה מרוכז (מחיפוש) ---
+  const handleBulkEditCategory = (transactions: CreditDetail[], searchTerm: string) => {
+    if (!analysis || transactions.length === 0) return;
+    // השתמש בעסקה הראשונה כבסיס, אבל candidates = כל העסקאות מהחיפוש
+    const transaction = transactions[0];
+    setEditDialog({
+      open: true,
+      transaction,
+      candidates: transactions,
+      newCategory: transaction.category || '',
+      applyToAll: true,
+      excludeIds: new Set(),
+      searchTerm, // שמור את מילת החיפוש להצגה בדיאלוג
+    });
+  };
+
   // --- פונקציה ליישום שינוי קטגוריה ---
   const handleApplyCategoryChange = async (editDialogParam?: typeof editDialog) => {
     const dialog = editDialogParam || editDialog;
     if (!dialog || !analysis) return;
-    const { candidates = [], newCategory = '', applyToAll = false, excludeIds = new Set(), transaction } = dialog;
+    const { candidates = [], newCategory = '', applyToAll = false, excludeIds = new Set(), transaction, amountFilter, searchTerm, createAutoRule } = dialog;
     let idsToUpdate: string[];
-    if (applyToAll) {
+   
+    // אם נפתח מחיפוש, תמיד applyToAll=true בפועל
+    const isFromSearch = !!searchTerm;
+    const effectiveApplyToAll = isFromSearch || applyToAll;
+   
+    if (effectiveApplyToAll) {
       idsToUpdate = candidates.filter(d => !excludeIds.has?.(d.id)).map(d => d.id);
     } else {
       idsToUpdate = [transaction?.id].filter(Boolean) as string[];
@@ -509,13 +897,43 @@ const App: React.FC = () => {
       return d;
     });
 
-    // אם בוצע שינוי לכל העסקאות עם אותו תיאור – צור כלל מתמשך (rule) לעתיד
-    if (applyToAll && transaction?.description && newCategory) {
-      await addDescriptionEqualsRule(dirHandle, transaction.description, newCategory);
+    // שמירת כלל קטגוריה (רק אם createAutoRule מופעל)
+    const shouldCreateRule = createAutoRule !== false; // ברירת מחדל: כן
+   
+    if (effectiveApplyToAll && newCategory && shouldCreateRule && dirHandle) {
+      if (!excludeIds || excludeIds.size === 0) {
+        // אם נפתח מחיפוש - צור כלל regex שמכיל את מילת החיפוש
+        if (isFromSearch && searchTerm) {
+          await addDescriptionContainsRule(dirHandle, searchTerm, newCategory);
+        } else if (transaction?.description) {
+          // שינוי רגיל - כלל על תיאור מדויק
+          // בדוק אם יש סינון סכום
+          if (amountFilter && (amountFilter.minAmount !== undefined || amountFilter.maxAmount !== undefined)) {
+            await addRuleWithAmountRange(
+              dirHandle,
+              transaction.description,
+              newCategory,
+              amountFilter.minAmount,
+              amountFilter.maxAmount
+            );
+          } else {
+            await addDescriptionEqualsRule(dirHandle, transaction.description, newCategory);
+          }
+        }
+      } else {
+        // יש החרגות - שמור כל עסקה מסומנת בנפרד
+        for (const id of idsToUpdate) {
+          await addTransactionCategoryRule(dirHandle, id, newCategory);
+        }
+      }
+    } else if (!effectiveApplyToAll && transaction?.id && newCategory && dirHandle) {
+      // שמירת קטגוריה לעסקה בודדת
+      await addTransactionCategoryRule(dirHandle, transaction.id, newCategory);
     }
     // עדכן את קבצי האקסל בזיכרון וגם בתיקיה (אם נבחרה)
-    const detailsToUpdate = newDetails.filter(d => idsToUpdate.includes(d.id));
-    const newFiles = await updateExcelFilesWithCategories(detailsToUpdate, newCategory);
+    // Note: updateExcelFilesWithCategories is not fully implemented yet
+    // const detailsToUpdate = newDetails.filter(d => idsToUpdate.includes(d.id));
+    // await updateExcelFilesWithCategories(detailsToUpdate, newCategory);
     // בינתיים updateExcelFilesWithCategories מחזיר אובייקט ריק, אז נדלג על עדכון קבצים
     // setExcelFiles(prev => {
     //   const updated = new Map(prev);
@@ -541,78 +959,194 @@ const App: React.FC = () => {
     //     }
     //   }
     // }
+   
+    // רענון רשימת הכללים מהקובץ אחרי שמירה
+    if (dirHandle) {
+      const updatedRules = await loadCategoryRules(dirHandle);
+      setCategoryRules(updatedRules);
+    }
+   
     setAnalysis({ ...analysis, details: newDetails });
     setEditDialog(null);
   };
 
-  // פונקציה לעדכון קבצי אקסל בזיכרון לפי שינויים בקטגוריה
-  const updateExcelFilesWithCategories = async (changedDetails: CreditDetail[], newCategory: string) => {
-    // הערה: עדכון קבצי XLSX עדיין לא ממומש במלואו ללא ספריית XLSX
-    // נדרש parser מלא שיכול גם לכתוב חזרה ל-XLSX
-    // בינתיים, פונקציה זו תחזיר אובייקט ריק
-    console.warn('עדכון קבצי Excel לא זמין כרגע ללא ספריית XLSX.');
-    return {};
-  };
-
-  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [categoriesList, setCategoriesList] = useState<CategoryDef[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+
+  // פונקציה אחידה להוספה/עדכון קטגוריה - מונעת כפילויות
+  const upsertCategory = React.useCallback((cat: CategoryDef) => {
+    setCategoriesList(prev => {
+      const idx = prev.findIndex(c => c.name === cat.name);
+      let updated: CategoryDef[];
+      if (idx >= 0) {
+        // עדכון קטגוריה קיימת
+        updated = [...prev];
+        updated[idx] = cat;
+      } else {
+        // הוספת קטגוריה חדשה
+        updated = [...prev, cat];
+      }
+      if (dirHandle) saveCategoriesToDir(dirHandle, updated);
+      return updated;
+    });
+  }, [dirHandle]);
 
   // State for multi-category prompt
   const [newCategoriesPrompt, setNewCategoriesPrompt] = useState<null | { names: string[], onConfirm: (mapping: Record<string, CategoryDef>) => void }>(null);
 
   const [categoryAliases, setCategoryAliases] = useState<Record<string, string>>({});
-  const [descriptionAliases, setDescriptionAliases] = useState<Record<string, string>>({});
-  // replace with unused-safe names
-  const [_descriptionAliases, _setDescriptionAliases] = [descriptionAliases, setDescriptionAliases];
-
-  // File System Access API: Read/write categories.json in Excel folder
-  const CATEGORIES_JSON = 'categories.json';
-  const CATEGORIES_ALIASES_JSON = 'categories-aliases.json';
-  const [_CATEGORIES_JSON, _CATEGORIES_ALIASES_JSON] = [CATEGORIES_JSON, CATEGORIES_ALIASES_JSON];
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_descriptionAliases, _setDescriptionAliases] = useState<Record<string, string>>({});
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // --- תיאור לקטגוריה: שמירה וטעינה ---
-  const [descToCategory, setDescToCategory] = useState<Record<string, string>>({});
+  // --- Category Rules (unified system) ---
+  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
 
-  // טען mapping תיאור->קטגוריה מהתיקיה (משתמש בקובץ description-categories.json)
+  // Load category rules from directory
   React.useEffect(() => {
     if (!dirHandle) return;
     (async () => {
-      try {
-        const fileHandle = await dirHandle.getFileHandle('description-categories.json');
-        const file = await fileHandle.getFile();
-        const content = await file.text();
-        setDescToCategory(JSON.parse(content));
-      } catch {
-        setDescToCategory({});
-      }
+      const rules = await loadCategoryRules(dirHandle);
+      setCategoryRules(rules);
     })();
   }, [dirHandle]);
 
-  // שמור mapping תיאור->קטגוריה
-  async function saveDescToCategory(aliases: Record<string, string>) {
+  // Update a rule's category
+  async function handleUpdateRule(ruleId: string, newCategory: string) {
     if (!dirHandle) return;
-    const fileHandle = await dirHandle.getFileHandle('description-categories.json', { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(aliases, null, 2));
-    await writable.close();
-    setDescToCategory(aliases);
+    const updated = categoryRules.map(r =>
+      r.id === ruleId ? { ...r, category: newCategory } : r
+    );
+    await saveCategoryRules(dirHandle, updated);
+    setCategoryRules(updated);
+    // Reapply rules to analysis
+    if (analysis) {
+      setAnalysis(a => a ? { ...a, details: applyCategoryRules(a.details, updated) } : a);
+    }
   }
 
+  // Delete a rule
+  async function handleDeleteRule(ruleId: string) {
+    if (!dirHandle) return;
+    const updated = categoryRules.filter(r => r.id !== ruleId);
+    await saveCategoryRules(dirHandle, updated);
+    setCategoryRules(updated);
+  }
+
+  // Legacy support: keep descToCategory derived from rules for backwards compatibility
+  // const descToCategory = React.useMemo(() => {
+  //   const map: Record<string, string> = {};
+  //   categoryRules
+  //     .filter(r => r.active && r.conditions.descriptionEquals)
+  //     .forEach(r => {
+  //       map[r.conditions.descriptionEquals!] = r.category;
+  //     });
+  //   return map;
+  // }, [categoryRules]);
+
   // Prompt for new categories after both categoriesList and analysis are loaded
+  // מיפוי קטגוריות ידועות לברירות מחדל (אייקון + צבע)
+  const KNOWN_CATEGORY_DEFAULTS: Record<string, { icon: string; color: string }> = {
+    'אופנה': { icon: '👗', color: '#00a3ad' },
+    'ביטוח': { icon: '🛡️', color: '#2550ff' },
+    'חשמל': { icon: '💡', color: '#ffb300' },
+    'כספים': { icon: '💰', color: '#aa82ff' },
+    'מזון': { icon: '🛒', color: '#ff3f9b' },
+    'מסעדות': { icon: '🍴', color: '#13e2bf' },
+    'ספרים': { icon: '📚', color: '#8bc34a' },
+    'בית': { icon: '🛋️', color: '#c20017' },
+    'עירייה': { icon: '🏛️', color: '#ff6f61' },
+    'פנאי': { icon: '🎉', color: '#ff7121' },
+    'קוסמטיקה': { icon: '💄', color: '#ff8dab' },
+    'רפואה': { icon: '💊', color: '#879aff' },
+    'שונות': { icon: '🔖', color: '#ecd400' },
+    'תחבורה': { icon: '🚗', color: '#009950' },
+    'תקשורת': { icon: '📱', color: '#b6c700' },
+    'תיירות': { icon: '✈️', color: '#4a90d9' },
+    'תרומות': { icon: '💰', color: '#e57373' },
+    'חינוך': { icon: '🎓', color: '#7b68ee' },
+    'משרד': { icon: '📋', color: '#607d8b' },
+    'מזל': { icon: '🎰', color: '#d4af37' },
+  };
+ 
+  // פונקציה לבדוק אם לקטגוריה יש דיפולט
+  const getCategoryDefaults = (catName: string): { icon: string; color: string } | null => {
+    const lowerName = catName.toLowerCase();
+    for (const [key, val] of Object.entries(KNOWN_CATEGORY_DEFAULTS)) {
+      if (lowerName.includes(key)) {
+        return val;
+      }
+    }
+    return null;
+  };
+ 
   React.useEffect(() => {
     if (!analysis || categoriesLoading) return;
-    // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList
+    // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList וגם לא ב-categoryAliases (כבר מופו)
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
-    const missingCats = excelCats.filter(catName => !!catName && !categoriesList.find(c => c.name === catName)) as string[];
-    if (missingCats.length > 0) {
+    const missingCats = excelCats.filter(catName =>
+      !!catName &&
+      !categoriesList.find(c => c.name === catName) &&
+      !categoryAliases[catName] // לא להציג קטגוריות שכבר מופו
+    ) as string[];
+   
+    if (missingCats.length === 0) return;
+   
+    // הפרד בין קטגוריות עם דיפולט לאלו בלי
+    const catsWithDefaults: string[] = [];
+    const catsWithoutDefaults: string[] = [];
+   
+    for (const cat of missingCats) {
+      if (getCategoryDefaults(cat)) {
+        catsWithDefaults.push(cat);
+      } else {
+        catsWithoutDefaults.push(cat);
+      }
+    }
+   
+    // אשר אוטומטית קטגוריות עם דיפולט
+    if (catsWithDefaults.length > 0) {
+      const autoApprovedMapping: Record<string, CategoryDef> = {};
+      for (const cat of catsWithDefaults) {
+        const defaults = getCategoryDefaults(cat)!;
+        autoApprovedMapping[cat] = {
+          name: cat,
+          icon: defaults.icon,
+          color: defaults.color,
+        };
+      }
+     
+      // הוסף לרשימת הקטגוריות
+      const merged = [...categoriesList];
+      Object.values(autoApprovedMapping).forEach(catDef => {
+        if (!merged.find(c => c.name === catDef.name)) {
+          merged.push(catDef);
+        }
+      });
+     
+      setCategoriesList(merged);
+      if (dirHandle) {
+        saveCategoriesToDir(dirHandle, merged);
+      }
+     
+      console.log(`✅ נוספו אוטומטית ${catsWithDefaults.length} קטגוריות:`, catsWithDefaults.join(', '));
+    }
+   
+    // אם יש קטגוריות בלי דיפולט - הצג דיאלוג
+    if (catsWithoutDefaults.length > 0) {
       setNewCategoriesPrompt({
-        names: missingCats,
-        onConfirm: (mapping: Record<string, CategoryDef>) => {
+        names: catsWithoutDefaults, // רק קטגוריות שדורשות התייחסות
+        onConfirm: async (mapping: Record<string, CategoryDef>) => {
           const merged = [...categoriesList];
+          const newAliases = { ...categoryAliases };
+         
           Object.entries(mapping).forEach(([excelName, catDef]) => {
+            // אם שם הקטגוריה שונה משם המקור - זה מיפוי/איחוד
+            if (excelName !== catDef.name) {
+              newAliases[excelName] = catDef.name;
+            }
+            // הוסף את הקטגוריה לרשימה אם לא קיימת
             if (!merged.find(c => c.name === catDef.name)) {
               merged.push({
                 name: catDef.name,
@@ -621,8 +1155,18 @@ const App: React.FC = () => {
               });
             }
           });
+         
           setCategoriesList(merged);
-          if (dirHandle) saveCategoriesToDir(dirHandle, merged);
+          setCategoryAliases(newAliases);
+         
+          if (dirHandle) {
+            await saveCategoriesToDir(dirHandle, merged);
+            // שמור את המיפויים כדי שלא יציע שוב בפעם הבאה
+            if (Object.keys(newAliases).length > 0) {
+              await saveAliasesToDir(dirHandle, newAliases, 'category');
+            }
+          }
+         
           setAnalysis(a => a ? ({
             ...a,
             details: a.details.map(d => {
@@ -636,6 +1180,7 @@ const App: React.FC = () => {
         }
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, categoriesList, categoriesLoading, dirHandle]);
 
   // טען קטגוריות מהתיקיה שנבחרה בכל פעם ש-dirHandle משתנה
@@ -669,7 +1214,6 @@ const App: React.FC = () => {
     return map;
   }, [analysis]);
 
-  const [categoryAliasesManagerOpen, setCategoryAliasesManagerOpen] = useState(false);
 
   // עדכון ושמירה של כללי alias
   const handleCategoryAliasesChange = (newAliases: Record<string, string>) => {
@@ -700,31 +1244,62 @@ const App: React.FC = () => {
     });
   };
 
-  // מאזין חדש לאירוע setDescriptionAlias: שמור mapping תיאור->קטגוריה ועדכן סטייט
+  // מאזין חדש לאירוע setDescriptionAlias: יוצר חוק חדש ב-categoryRules
   React.useEffect(() => {
-    function handleSetDescriptionAlias(e: any) {
-      if (!e?.detail?.description || !e?.detail?.category) return;
+    function handleSetDescriptionAlias(e: Event) {
+      const customEvent = e as CustomEvent<{ description: string; category: string }>;
+      if (!customEvent?.detail?.description || !customEvent?.detail?.category || !dirHandle) return;
       (async () => {
-        const newAliases = { ...descToCategory, [e.detail.description]: e.detail.category };
-        await saveDescToCategory(newAliases);
+        // בדוק אם כבר קיים חוק לתיאור הזה
+        const existingRuleIndex = categoryRules.findIndex(
+          r => r.conditions.descriptionEquals === customEvent.detail.description
+        );
+       
+        let updatedRules: CategoryRule[];
+        if (existingRuleIndex >= 0) {
+          // עדכן חוק קיים
+          updatedRules = categoryRules.map((r, i) =>
+            i === existingRuleIndex
+              ? { ...r, category: customEvent.detail.category }
+              : r
+          );
+        } else {
+          // צור חוק חדש
+          const newRule: CategoryRule = {
+            id: crypto.randomUUID(),
+            category: customEvent.detail.category,
+            active: true,
+            createdAt: new Date().toISOString(),
+            source: 'user',
+            conditions: {
+              descriptionEquals: customEvent.detail.description
+            }
+          };
+          updatedRules = [...categoryRules, newRule];
+        }
+       
+        await saveCategoryRules(dirHandle, updatedRules);
+        setCategoryRules(updatedRules);
       })();
     }
     window.addEventListener('setDescriptionAlias', handleSetDescriptionAlias);
     return () => window.removeEventListener('setDescriptionAlias', handleSetDescriptionAlias);
-  }, [descToCategory, dirHandle]);
+  }, [categoryRules, dirHandle]);
 
   // עדכון כל העסקאות עם תיאור מסוים לקטגוריה חדשה לפי mapping
-  function applyDescToCategory(details: CreditDetail[], mapping: Record<string, string>): CreditDetail[] {
-    return details.map(d =>
-      mapping[d.description] ? { ...d, category: mapping[d.description] } : d
-    );
-  }
+  // function applyDescToCategory(details: CreditDetail[], mapping: Record<string, string>): CreditDetail[] {
+  //   return details.map(d =>
+  //     mapping[d.description] ? { ...d, category: mapping[d.description] } : d
+  //   );
+  // }
 
-  // עדכון סטייט העסקאות כאשר mapping משתנה
+  // עדכון סטייט העסקאות כאשר categoryRules משתנה - השתמש ב-applyCategoryRules המלא
+  // (הוסר useEffect ישן שהשתמש ב-applyDescToCategory והתעלם מכללי סכום)
   React.useEffect(() => {
-    if (!analysis) return;
-    setAnalysis(a => a ? { ...a, details: applyDescToCategory(a.details, descToCategory) } : a);
-  }, [descToCategory]);
+    if (!analysis || !categoryRules.length) return;
+    setAnalysis(a => a ? { ...a, details: applyCategoryRules(a.details, categoryRules) } : a);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryRules]);
 
   const originalCategoriesRef = React.useRef<Map<string, string>>(new Map());
 
@@ -741,6 +1316,123 @@ const App: React.FC = () => {
     return map;
   }, [analysis]);
 
+  // סימון עסק או קטגוריה כהכנסה (מתוך טבלת העסקאות)
+  const handleMarkAsIncomeSource = async (description: string, sourceType: 'business' | 'category' = 'business') => {
+    if (!dirHandle) return;
+   
+    // בדוק אם כבר קיים כלל
+    const existingRule = incomeSourceRules.find(r =>
+      r.description === description &&
+      (r.sourceType === sourceType || (!r.sourceType && sourceType === 'business'))
+    );
+   
+    if (existingRule && existingRule.isIncomeSource) {
+      // כבר מסומן כהכנסה
+      return;
+    }
+   
+    // אם יש כלל קיים (שלילי), נמחק אותו קודם
+    if (existingRule) {
+      await removeIncomeSourceRule(dirHandle, existingRule.id);
+    }
+   
+    // צור כלל חדש
+    let newRule: IncomeSourceRule;
+    if (sourceType === 'category') {
+      newRule = await addCategoryIncomeSourceRule(dirHandle, description);
+    } else {
+      newRule = await addIncomeSourceRule(dirHandle, description);
+    }
+   
+    const updatedRules = [...incomeSourceRules.filter(r => r.id !== existingRule?.id), newRule];
+    setIncomeSourceRules(updatedRules);
+   
+    // החל מחדש על העסקאות
+    if (analysis) {
+      const updatedDetails = applyIncomeSourceRules(analysis.details, updatedRules);
+      setAnalysis({ ...analysis, details: updatedDetails });
+    }
+  };
+
+  // סימון עסק או קטגוריה כ-"לא הכנסה" (מתוך טבלת העסקאות)
+  // זה יגרום לעסקה להיספר כהוצאה ולא כהכנסה או ביטול הוצאה
+  const handleMarkAsNotIncomeSource = async (description: string, sourceType: 'business' | 'category' = 'business') => {
+    if (!dirHandle) return;
+   
+    // מצא ומחק כלל קיים אם יש (כלל חיובי או שלילי)
+    const existingRule = incomeSourceRules.find(r =>
+      r.description === description &&
+      (r.sourceType === sourceType || (!r.sourceType && sourceType === 'business'))
+    );
+   
+    if (existingRule) {
+      await removeIncomeSourceRule(dirHandle, existingRule.id);
+    }
+   
+    // צור כלל שלילי חדש - סימון שזה לא מקור הכנסה
+    await markAsNotIncomeSource(dirHandle, description, sourceType);
+   
+    // טען מחדש את הכללים
+    const updatedRules = await loadIncomeSourceRules(dirHandle);
+    setIncomeSourceRules(updatedRules);
+   
+    // החל מחדש על העסקאות
+    if (analysis) {
+      const updatedDetails = applyIncomeSourceRules(analysis.details, updatedRules);
+      setAnalysis({ ...analysis, details: updatedDetails });
+    }
+  };
+
+  // סימון עסקה בודדת כהכנסה או הוצאה (override ברמת עסקה)
+  const handleMarkTransactionAsIncomeSource = async (transactionId: string, isIncome: boolean) => {
+    if (!dirHandle || !analysis) return;
+   
+    // מצא את העסקה
+    const tx = analysis.details.find(d => d.id === transactionId);
+    if (!tx) return;
+   
+    // בדוק אם כבר יש כלל לעסקה זו
+    const existingRule = incomeSourceRules.find(r =>
+      r.sourceType === 'transaction' && r.transactionId === transactionId
+    );
+   
+    if (existingRule) {
+      await removeIncomeSourceRule(dirHandle, existingRule.id);
+    }
+   
+    // צור כלל חדש לעסקה בודדת
+    const newRule: IncomeSourceRule = {
+      id: `tx-${transactionId}-${Date.now()}`,
+      sourceType: 'transaction',
+      description: tx.description || '',
+      transactionId,
+      matchType: 'equals',
+      isIncomeSource: isIncome,
+      autoDetected: false,
+      confirmedByUser: true,
+      createdAt: new Date().toISOString()
+    };
+   
+    // שמור את הכלל
+    const updatedRules = [...incomeSourceRules.filter(r => r.id !== existingRule?.id), newRule];
+    await saveIncomeSourceRules(dirHandle, updatedRules);
+    setIncomeSourceRules(updatedRules);
+   
+    // עדכן את העסקה הספציפית
+    const updatedDetails = analysis.details.map(d => {
+      if (d.id === transactionId) {
+        return {
+          ...d,
+          direction: isIncome ? 'income' as const : 'expense' as const,
+          userAdjustedDirection: true,
+          incomeSourceId: newRule.id
+        };
+      }
+      return d;
+    });
+    setAnalysis({ ...analysis, details: updatedDetails });
+  };
+
   return (
     <div className="app-container">
       {/* Onboarding screen: show until analysis is ready */}
@@ -748,23 +1440,90 @@ const App: React.FC = () => {
         <div className="onboarding" role="dialog" aria-labelledby="onboardingTitle" aria-modal="true">
           <div className="onboarding-inner">
             <h1 id="onboardingTitle">ברוך הבא למערכת ניתוח חיובי אשראי</h1>
-            <p className="onboarding-sub">בחר תיקיה עם קבצי Excel (XLSX/XLS) של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
+           
+            {/* מצב טעינה - הצגת התקדמות */}
+            {loadingState ? (
+              <div className="loading-state" style={{
+                padding: '32px 24px',
+                textAlign: 'center',
+                animation: 'fadeIn 0.3s ease'
+              }}>
+                <div className="loading-spinner" style={{
+                  width: 48,
+                  height: 48,
+                  margin: '0 auto 16px',
+                  border: '4px solid #e5e7eb',
+                  borderTopColor: '#3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                <p style={{
+                  fontSize: '1.25rem',
+                  fontWeight: 500,
+                  marginBottom: 8,
+                  color: '#1f2937'
+                }}>
+                  {loadingState.message}
+                </p>
+                {loadingState.progress && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{
+                      width: '100%',
+                      maxWidth: 300,
+                      height: 8,
+                      backgroundColor: '#e5e7eb',
+                      borderRadius: 4,
+                      margin: '0 auto',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${(loadingState.progress.current / loadingState.progress.total) * 100}%`,
+                        height: '100%',
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 4,
+                        transition: 'width 0.3s ease'
+                      }} />
+                    </div>
+                    <p style={{
+                      fontSize: '0.875rem',
+                      color: '#6b7280',
+                      marginTop: 8
+                    }}>
+                      {loadingState.progress.current} / {loadingState.progress.total}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <p className="onboarding-sub">בחר תיקיה עם קבצי Excel (XLSX/XLS) של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
 
-            <div className="cta-row">
-              <button onClick={handlePickDirectory} className="folder-btn primary cta" autoFocus>
-                📁 בחר תיקיה עם קבצי Excel
-              </button>
-            </div>
-            {/* מה המערכת עושה */}
-            <div className="modern-card" style={{ textAlign: 'right' }}>
-              <h3 style={{ marginTop: 0, marginBottom: 8 }}>מה המערכת עושה</h3>
-              <ul className="onboarding-hints" aria-label="יכולות וכלים">
-                <li>קוראת קבצי Excel (XLSX/XLS) של בנק וכרטיס אשראי.</li>
-                <li>מזהה אוטומטית סוג גיליון (אשראי/בנק) ומאחדת נתונים.</li>
-                <li>מקטלגת, מנתחת וממחישה בגרפים/טבלאות לפי חודש/שנה.</li>
-                <li>פרטיות: הנתונים נשארים במחשב שלך; לא נשלחים לשרת.</li>
-              </ul>
-            </div>
+                <div className="cta-row">
+                  <button onClick={handlePickDirectory} className="folder-btn primary cta" autoFocus>
+                    📁 בחר תיקיה עם קבצי Excel
+                  </button>
+                </div>
+                {/* מה המערכת עושה */}
+                <div className="modern-card" style={{ textAlign: 'right' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>מה המערכת עושה</h3>
+                  <ul className="onboarding-hints" aria-label="יכולות וכלים">
+                    <li>קוראת קבצי Excel (XLSX/XLS) של בנק וכרטיס אשראי – גם מתת-תיקיות.</li>
+                    <li>מזהה אוטומטית סוג גיליון (אשראי/בנק) ומאחדת נתונים.</li>
+                    <li>מקטלגת, מנתחת וממחישה בגרפים/טבלאות לפי חודש/שנה.</li>
+                  </ul>
+                </div>
+                {/* Privacy Details */}
+                <div className="modern-card privacy-details-card" style={{ textAlign: 'right' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>🛡️ אבטחה ופרטיות</h3>
+                  <ul className="onboarding-hints" aria-label="אבטחה ופרטיות">
+                    <li><strong>Zero-Knowledge:</strong> אנחנו לא מבקשים סיסמאות לבנק או לאשראי.</li>
+                    <li><strong>עיבוד מקומי:</strong> כל הניתוח מתבצע בדפדפן שלך, לא בשרתים שלנו.</li>
+                    <li><strong>ללא העלאה:</strong> הקבצים שלך לא עוזבים את המחשב שלך.</li>
+                    <li><strong>קוד פתוח:</strong> ניתן לבדוק את הקוד ולוודא בעצמך.</li>
+                  </ul>
+                </div>
+              </>
+            )}
 
             {/* שגיאות */}
             {error && (
@@ -774,40 +1533,6 @@ const App: React.FC = () => {
             )}
           </div>
         </div>
-      )}
-      {selectedFolder && (
-        <>
-          {dirHandle && (
-            <button
-              className="settings-btn"
-              onClick={() => setSettingsOpen(v => !v)}
-              title="הגדרות"
-            >
-              <span role="img" aria-label="הגדרות">⚙️</span>
-            </button>
-          )}
-          <SettingsMenu
-            open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-            onOpenCategoryManager={() => { setCategoryManagerOpen(true); setSettingsOpen(false); }}
-            dirHandle={dirHandle}
-            onOpenCategoryAliasesManager={() => { setCategoryAliasesManagerOpen(true); setSettingsOpen(false); }}
-            descToCategory={descToCategory}
-            categoriesList={categoriesList}
-            onChangeMapping={async (desc, newCategory) => {
-              const newMap = { ...descToCategory, [desc]: newCategory };
-              await saveDescToCategory(newMap);
-            }}
-            onAddCategory={(cat: CategoryDef) => {
-              setCategoriesList(prev => {
-                const updated = [...prev, cat];
-                if (dirHandle) saveCategoriesToDir(dirHandle, updated);
-                return updated;
-              });
-            }}
-          />
-          {/* header של החלפת תיקיה נמחק – הקלוסטר עבר ל-MainView */}
-        </>
       )}
       {error && (
         <div className="error-msg">{error}</div>
@@ -831,10 +1556,10 @@ const App: React.FC = () => {
             filteredTotal={filteredTotal}
             view={view}
             setView={setView}
-            categories={categories}
             monthTotals={monthTotals}
             yearlySummary={yearlySummary}
             handleOpenEditCategory={handleOpenEditCategory}
+            handleBulkEditCategory={handleBulkEditCategory}
             categoriesList={categoriesList}
             selectedYear={selectedYear}
             setSelectedYear={setSelectedYear}
@@ -848,16 +1573,25 @@ const App: React.FC = () => {
             displayMode={displayMode}
             setDisplayMode={setDisplayMode}
             dateMode={dateMode}
-            setDateMode={setDateMode}
+            setDateMode={setDateModeWithTracking}
             selectedFolder={selectedFolder}
             onPickDirectory={handlePickDirectory}
-            dirHandle={dirHandle}
+            dirHandle={dirHandle ?? undefined}
+            onOpenAdvancedSettings={() => {
+              setSettingsOpen(true);
+              trackFeature('open_settings');
+            }}
+            incomeSourceRules={incomeSourceRules}
+            onMarkAsIncomeSource={handleMarkAsIncomeSource}
+            onMarkAsNotIncomeSource={handleMarkAsNotIncomeSource}
+            onMarkTransactionAsIncomeSource={handleMarkTransactionAsIncomeSource}
+            onTrackFeature={trackFeature}
           />
           {/* אייקון צ'אט בפינה */}
           <button
             className="chat-fab"
             title="שאל שאלה על העסקאות"
-            onClick={() => setChatOpen(true)}
+            onClick={handleOpenChatWithTracking}
             style={{
               display: chatOpen ? 'none' : 'flex',
             }}
@@ -884,35 +1618,8 @@ const App: React.FC = () => {
         categoriesList={categoriesList}
         setEditDialog={setEditDialog}
         handleApplyCategoryChange={handleApplyCategoryChange}
-        onAddCategory={(cat: CategoryDef) => {
-          setCategoriesList(prev => {
-            const updated = [...prev, cat];
-            if (dirHandle) saveCategoriesToDir(dirHandle, updated);
-            return updated;
-          });
-        }}
+        onAddCategory={upsertCategory}
       />
-      {categoryManagerOpen && (
-        <CategoryManager
-          categories={categoriesList}
-          onChange={(cats) => {
-            setCategoriesList(cats);
-            if (dirHandle) saveCategoriesToDir(dirHandle, cats);
-          }}
-          onClose={() => setCategoryManagerOpen(false)}
-          categoriesCount={categoriesCount}
-          transactionsByCategory={transactionsByCategory}
-        />
-      )}
-      {categoryAliasesManagerOpen && (
-        <CategoryAliasesManager
-          aliases={categoryAliases}
-          categories={categoriesList}
-          onChange={handleCategoryAliasesChange}
-          onClose={() => setCategoryAliasesManagerOpen(false)}
-          onAliasAdded={() => { }}
-        />
-      )}
       {newCategoriesPrompt && (
         <NewCategoriesTablePrompt
           names={newCategoriesPrompt.names}
@@ -920,9 +1627,65 @@ const App: React.FC = () => {
           onConfirm={newCategoriesPrompt.onConfirm}
           onCancel={() => setNewCategoriesPrompt(null)}
           allDetails={analysis?.details || []}
-          handleApplyCategoryChange={handleApplyCategoryChange}
         />
       )}
+      {settingsOpen && dirHandle && (
+        <SettingsMenu
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          dirHandle={dirHandle}
+          categoryRules={categoryRules}
+          categoriesList={categoriesList}
+          onUpdateRule={handleUpdateRule}
+          onDeleteRule={handleDeleteRule}
+          onAddCategory={upsertCategory}
+          onCategoriesChange={(cats) => {
+            setCategoriesList(cats);
+            if (dirHandle) saveCategoriesToDir(dirHandle, cats);
+          }}
+          categoriesCount={categoriesCount}
+          transactionsByCategory={transactionsByCategory}
+          categoryAliases={categoryAliases}
+          onAliasesChange={handleCategoryAliasesChange}
+        />
+      )}
+      {/* Analytics Consent Banner */}
+      {showConsentBanner && (
+        <AnalyticsConsentBanner
+          onAccept={async () => {
+            setShowConsentBanner(false);
+            markConsentAsked();
+            if (dirHandle && userProfile) {
+              const updated = await updateAnalyticsConsent(dirHandle, true);
+              if (updated) {
+                setUserProfile(updated);
+                // שלח אירוע החלטת הסכמה + סטטיסטיקות
+                const isNewUser = (userProfile as UserProfile & { _isNewUser?: boolean })._isNewUser ?? false;
+                await trackConsentDecision(updated, true, isNewUser, analyticsStats || undefined);
+              }
+            }
+          }}
+          onDecline={async () => {
+            setShowConsentBanner(false);
+            markConsentAsked();
+            if (dirHandle && userProfile) {
+              const updated = await updateAnalyticsConsent(dirHandle, false);
+              if (updated) {
+                setUserProfile(updated);
+                // שלח אירוע החלטת הסכמה (בלי סטטיסטיקות)
+                const isNewUser = (userProfile as UserProfile & { _isNewUser?: boolean })._isNewUser ?? false;
+                await trackConsentDecision(updated, false, isNewUser);
+              }
+            }
+          }}
+        />
+      )}
+      {/* Onboarding Tour למשתמש חדש */}
+      <OnboardingTour
+        isOpen={showTour}
+        onComplete={handleTourComplete}
+        onSkip={handleTourSkip}
+      />
       <Footer />
     </div>
   );

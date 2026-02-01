@@ -13,6 +13,7 @@
   "dependencies": {
     "buffer": "^6.0.3",
     "chart.js": "^4.5.0",
+    "firebase": "^12.8.0",
     "jszip": "^3.10.1",
     "pdfjs-dist": "^5.3.31",
     "process": "^0.11.10",

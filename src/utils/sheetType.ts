@@ -2,16 +2,16 @@
 
 export type SheetType = 'bank' | 'credit' | 'unknown';
 
-function normCell(s: any): string {
+function normCell(s: unknown): string {
   return String(s ?? '')
     .replace(/"/g, '')
     .replace(/\r?\n/g, '')
     .trim();
 }
 
-export function detectSheetTypeFromSheet(sheetData: any[][]): SheetType {
+export function detectSheetTypeFromSheet(sheetData: unknown[][]): SheetType {
   // sheetData הוא כבר מערך דו-ממדי
-  const rows: any[] = sheetData;
+  const rows: unknown[][] = sheetData;
   const tokens = new Set<string>();
 
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
@@ -60,7 +60,7 @@ export function detectSheetTypeFromCSV(rows: string[][]): SheetType {
 export type SheetTypeOverrides = Record<string, 'bank' | 'credit'>;
 const SHEET_TYPE_OVERRIDES_FILE = 'sheetTypeOverrides.json';
 
-export async function loadSheetTypeOverridesFromDir(dirHandle: any): Promise<SheetTypeOverrides> {
+export async function loadSheetTypeOverridesFromDir(dirHandle: FileSystemDirectoryHandle): Promise<SheetTypeOverrides> {
   try {
     const fh = await dirHandle.getFileHandle(SHEET_TYPE_OVERRIDES_FILE);
     const f = await fh.getFile();
@@ -70,7 +70,7 @@ export async function loadSheetTypeOverridesFromDir(dirHandle: any): Promise<She
   }
 }
 
-export async function saveSheetTypeOverridesToDir(dirHandle: any, data: SheetTypeOverrides | null) {
+export async function saveSheetTypeOverridesToDir(dirHandle: FileSystemDirectoryHandle, data: SheetTypeOverrides | null) {
   try {
     const fh = await dirHandle.getFileHandle(SHEET_TYPE_OVERRIDES_FILE, { create: true });
     if (data) {
@@ -78,10 +78,10 @@ export async function saveSheetTypeOverridesToDir(dirHandle: any, data: SheetTyp
       await w.write(JSON.stringify(data, null, 2));
       await w.close();
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // SecurityError: User activation is required
     // בעת קריאה מרובה של קבצים, לא תמיד יש רשאות לכתוב
-    if (err.name === 'SecurityError') {
+    if (err instanceof Error && err.name === 'SecurityError') {
       console.warn('אין רשאות לשמור שינויים (SecurityError), דלג...');
       return;
     }
@@ -95,10 +95,10 @@ async function askUserSheetType(fileName: string, sheetName: string): Promise<'b
 }
 
 export async function ensureSheetType(
-  dirHandle: any,
+  dirHandle: FileSystemDirectoryHandle,
   fileName: string,
   sheetName: string,
-  sheetData: any[][]
+  sheetData: unknown[][]
 ): Promise<'bank' | 'credit'> {
   const key = `${fileName}::${sheetName}`;
   const overrides = await loadSheetTypeOverridesFromDir(dirHandle);
@@ -119,7 +119,7 @@ export async function ensureSheetType(
 
 // CSV counterpart to ensureSheetType (no sheetName)
 export async function ensureCsvType(
-  dirHandle: any,
+  dirHandle: FileSystemDirectoryHandle,
   fileName: string,
   rows: string[][]
 ): Promise<'bank' | 'credit'> {

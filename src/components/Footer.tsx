@@ -2,7 +2,12 @@ import React from 'react';
 
 const Footer: React.FC = () => (
   <div className="footer">
-    <div>
+    {/* Privacy Message */}
+    <div className="footer-privacy">
+      <span className="footer-privacy-icon">🔒</span>
+      <span>הנתונים שלך נשארים במחשב שלך בלבד • ללא סיסמאות • ללא שרתים</span>
+    </div>
+    <div className="footer-links">
       <a href="https://github.com/yourusername/your-repo" target="_blank" rel="noopener noreferrer">
         על האפליקציה הזו
       </a>

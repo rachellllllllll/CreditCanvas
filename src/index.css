@@ -31,9 +31,12 @@ body {
 
 #root {
   max-width: 1550px; /* was 1280px: התאמה לשלב ראשון בעיצוב החדש */
+  min-height: 100vh;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 2.5rem 1.5rem;
+  padding: 2rem 1.5rem;
   text-align: center;
+  display: flex;
+  flex-direction: column;
 }
 
 h1, h2, h3, h4 {
@@ -47,7 +50,7 @@ h1, h2, h3, h4 {
 h1 {
   font-size: 2.7em;
   margin-bottom: 0.7em;
-  background: linear-gradient(90deg, #7ecbff 0%, #ffb3c6 100%);
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -66,14 +69,14 @@ h3 {
 .card, .modern-card {
   background: #fff;
   border-radius: 18px;
-  box-shadow: 0 4px 32px #0001, 0 1.5px 6px #7ecbff22;
+  box-shadow: 0 4px 32px #0001, 0 1.5px 6px rgba(99, 102, 241, 0.15);
   padding: 2.2em 2em 2em 2em;
-  margin: 1.5em auto;
+  margin: 0.5em auto;
   max-width: 900px;
   transition: box-shadow 0.2s, transform 0.2s;
 }
 .card:hover, .modern-card:hover {
-  box-shadow: 0 8px 40px #7ecbff33, 0 2px 8px #ffb3c622;
+  box-shadow: 0 8px 40px rgba(99, 102, 241, 0.2), 0 2px 8px rgba(139, 92, 246, 0.15);
   transform: translateY(-2px) scale(1.01);
 }
 
@@ -84,21 +87,21 @@ button {
   font-size: 1.08em;
   font-weight: 600;
   font-family: inherit;
-  background: linear-gradient(90deg, #7ecbff 0%, #ffb3c6 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 2px 8px #7ecbff22;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
   transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
 }
 button:hover {
-  background: linear-gradient(90deg, #ffb3c6 0%, #7ecbff 100%);
-  box-shadow: 0 4px 16px #ffb3c622;
+  /* background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); */
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
   transform: translateY(-1px) scale(1.03);
 }
-button:focus,
+/* button:focus,
 button:focus-visible {
-  outline: 3px solid #7ecbff;
-}
+  outline: 3px solid rgba(99, 102, 241, 0.5);
+} */
 
 input, select {
   border-radius: 8px;
@@ -107,12 +110,12 @@ input, select {
   font-size: 1.08em;
   font-family: inherit;
   background: #fafdff;
-  margin: 0.2em 0.5em;
+  /* margin: 0.2em 0.5em; */
   transition: border 0.2s, box-shadow 0.2s;
 }
 input:focus, select:focus {
-  border: 1.5px solid #7ecbff;
-  box-shadow: 0 2px 8px #7ecbff22;
+  border: 1.5px solid #6366f1;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
 ::-webkit-scrollbar {
@@ -127,16 +130,16 @@ input:focus, select:focus {
 
 a {
   font-weight: 500;
-  color: #7ecbff;
+  color: #6366f1;
   text-decoration: none;
   transition: color 0.2s;
 }
 a:hover {
-  color: #ffb3c6;
+  color: #8b5cf6;
 }
 
 .table-modern thead tr {
-  background: linear-gradient(90deg, #7ecbff 0%, #ffb3c6 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: #fff;
 }
 
@@ -170,8 +173,10 @@ a:hover {
   max-width: 100%; /* משתמשת ברוחב של ההורה (#root) */
   width: 100%;
   margin: 0 auto;
-  padding: 24px;
   direction: rtl;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Logo container */
@@ -184,7 +189,7 @@ a:hover {
 
 .logo-svg {
   margin-bottom: 8px;
-  filter: drop-shadow(0 2px 12px #7ecbff44);
+  filter: drop-shadow(0 2px 12px rgba(99, 102, 241, 0.3));
 }
 
 /* Main title */
@@ -205,7 +210,7 @@ a:hover {
   justify-content: flex-start;
 }
 .onboarding { min-height: 70vh; display:flex; align-items:center; justify-content:center; padding:40px 20px; }
-.onboarding-inner { background:#ffffff; border:1px solid #dbe3ec; border-radius:20px; padding:38px 46px 44px; max-width:720px; width:100%; box-shadow:0 12px 28px -8px rgba(0,0,0,0.18),0 4px 10px rgba(0,0,0,0.08); display:flex; flex-direction:column; gap:18px; }
+.onboarding-inner { background:#ffffff; border:1px solid #dbe3ec; border-radius:20px; padding:38px 46px; max-width:720px; width:100%; box-shadow:0 12px 28px -8px rgba(0,0,0,0.18),0 4px 10px rgba(0,0,0,0.08); display:flex; flex-direction:column; gap:18px; }
 .onboarding-inner h1 { margin:0; font-size:2rem; font-weight:700; background:linear-gradient(90deg,#6366f1,#8b5cf6); -webkit-background-clip:text; background-clip:text; color:transparent; }
 .onboarding-sub { margin:0; font-size:1rem; line-height:1.4; color:#475569; font-weight:500; }
 .onboarding-hints { list-style:disc; margin:4px 0 0 24px; padding:0; font-size:.85rem; color:#64748b; display:flex; flex-direction:column; gap:4px; }
@@ -282,10 +287,10 @@ a:hover {
   transition: background 0.2s, color 0.2s;
 }
 .sticky-nav button.active {
-  background: linear-gradient(90deg, #36A2EB 0%, #FF6384 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 2px 8px #7ecbff22;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 }
 
 /* Month navigation */
@@ -319,23 +324,28 @@ a:hover {
   min-width: 110px;
 }
 
-/* Dialog overlay and box */
+/* Dialog overlay and box - Base styles for all dialogs */
 .edit-dialog-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: #0008;
+  background: rgba(0, 0, 0, 0.18);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 .edit-dialog-box {
   background: #fff;
-  border-radius: 10px;
-  padding: 32px;
-  min-width: 400px;
+  border-radius: 14px;
+  padding: 28px 28px 18px 28px;
+  min-width: 480px;
   max-width: 700px;
-  box-shadow: 0 4px 24px #0002;
+  width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 32px #0002;
+  direction: rtl;
 }
 .edit-dialog-box h3 {
   margin-top: 0;
@@ -345,8 +355,8 @@ a:hover {
 }
 .edit-dialog-box input[type='text'],
 .edit-dialog-box input[type='checkbox'] {
-  margin-right: 8px;
-  font-size: 16px;
+  /* margin-right: 8px;
+  font-size: 16px; */
 }
 .edit-dialog-table {
   max-height: 260px;
@@ -389,7 +399,7 @@ a:hover {
   border-bottom: 1px solid #e0e7ef;
 }
 .edit-dialog-table .remove-btn {
-  background: #FF6384;
+  background: #ef4444;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -418,7 +428,7 @@ a:hover {
   transition: background 0.2s, color 0.2s;
 }
 .edit-dialog-actions button:last-child {
-  background: #36A2EB;
+  background: #6366f1;
   color: #fff;
 }
 

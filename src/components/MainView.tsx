@@ -1,10 +1,13 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import TransactionsTable from './TransactionsTable';
 import DateNavigator from './DateNavigator';
+import CategoryDonutChart from './CategoryDonutChart';
+import MiniMonthsChart from './MiniMonthsChart';
+import YearlyMonthsChart from './YearlyMonthsChart';
+import MissingDataAlert from './MissingDataAlert';
 import type { CreditDetail, AnalysisResult } from '../types';
 import type { CategoryDef } from './CategoryManager';
 import './MainView.css';
-import { signedAmount } from '../utils/money';
 import SourceFilter from './filters/SourceFilter';
 
 interface MainViewProps {
@@ -20,10 +23,10 @@ interface MainViewProps {
   filteredTotal: number;
   view: 'monthly' | 'yearly';
   setView: (view: 'monthly' | 'yearly') => void;
-  categories: Record<string, number>;
   monthTotals: Record<string, number>;
   yearlySummary: Record<string, number>;
   handleOpenEditCategory: (tx: CreditDetail) => void;
+  handleBulkEditCategory?: (transactions: CreditDetail[], searchTerm: string) => void;
   categoriesList: CategoryDef[];
   selectedYear: string;
   setSelectedYear: (year: string) => void;
@@ -36,23 +39,52 @@ interface MainViewProps {
   // חדשים: תיקיה נבחרת + פעולה להחלפה
   selectedFolder: string | null;
   onPickDirectory: () => void;
-  dirHandle?: any;
+  dirHandle?: FileSystemDirectoryHandle;
+  // פתיחת הגדרות מתקדמות
+  onOpenAdvancedSettings?: () => void;
+  // מעקב פיצ'רים
+  onTrackFeature?: (feature: string) => void;
+  // ניהול מקורות הכנסה
+  incomeSourceRules?: import('../types').IncomeSourceRule[];
+  onMarkAsIncomeSource?: (description: string, sourceType: 'business' | 'category') => void;
+  onMarkAsNotIncomeSource?: (description: string, sourceType: 'business' | 'category') => void;
+  // חדש: סימון עסקה בודדת כהכנסה/הוצאה
+  onMarkTransactionAsIncomeSource?: (transactionId: string, isIncome: boolean) => void;
 }
 
 const MainView: React.FC<MainViewProps> = ({
   selectedMonth, setSelectedMonth, sortedMonths, currentMonthIdx,
   diff, percent, filteredDetails,
-  view, setView, categories, yearlySummary,
-  handleOpenEditCategory, categoriesList, selectedYear, setSelectedYear,
+  view, setView, yearlySummary,
+  handleOpenEditCategory, handleBulkEditCategory, categoriesList, selectedYear, setSelectedYear,
   displayMode, setDisplayMode,
-  dateMode, setDateMode, analysis, selectedFolder, onPickDirectory, dirHandle
+  dateMode, setDateMode, analysis, selectedFolder, onPickDirectory, dirHandle,
+  onOpenAdvancedSettings,
+  onTrackFeature,
+  incomeSourceRules,
+  onMarkAsIncomeSource,
+  onMarkAsNotIncomeSource,
+  onMarkTransactionAsIncomeSource
 }) => {
-  // State לניהול סינון
-  const [selectedCategory] = useState<string | null>(null);
+  // State לניהול סינון קטגוריה (מגרף הדונאט)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchTerm] = useState('');
   const [amountFilter] = useState('all');
+  
+  // פונקציה למעקב פיצ'רים עם tracking לתצוגה חודשית/שנתית
+  const setViewWithTracking = useCallback((newView: 'monthly' | 'yearly') => {
+    setView(newView);
+    onTrackFeature?.(newView === 'yearly' ? 'view_yearly' : 'view_monthly');
+  }, [setView, onTrackFeature]);
+  
   // רפרנס לכותרת העליונה לצורך מעבר למצב מכווץ בגלילה
   const headerRef = useRef<HTMLDivElement | null>(null);
+
+  // State for filter and settings popovers
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const [showSettingsPopover, setShowSettingsPopover] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   // רשימת כרטיסים זמינים (4 ספרות אחרונות) + תאריך שימוש אחרון לכל כרטיס
   // וכן אינדיקציה האם הכרטיס מופיע בטווח התאריכים המוצג (filteredDetails)
@@ -63,7 +95,7 @@ const MainView: React.FC<MainViewProps> = ({
 
     const parseToTs = (raw: string | undefined) => {
       if (!raw) return 0;
-      const parts = raw.split(/[\/\-]/);
+      const parts = raw.split(/[/-]/);
       if (parts.length < 3) return 0;
       const dd = parts[0].padStart(2, '0');
       const mm = parts[1].padStart(2, '0');
@@ -95,21 +127,80 @@ const MainView: React.FC<MainViewProps> = ({
     const cards = Array.from(set).sort();
     return { availableCards: cards, lastDateByCard: lastDateMap, activeInViewByCard: activeMap };
   }, [analysis.details, filteredDetails, dateMode]);
-  // בחירת הכרטיסים המוצגים (ברירת מחדל: כולם)
-  const [selectedCards, setSelectedCards] = useState<string[]>(availableCards);
-  // האם להציג עסקאות בנק
-  const [includeBank, setIncludeBank] = useState(true);
 
-  // עדכון בחירת הכרטיסים אם נוספו/הוסרו (נתונים חדשים) – שומר על בחירות קיימות ככל האפשר
+  // --- שמירת העדפות סינון ב-localStorage ---
+  const FILTER_PREFS_KEY = 'mainViewFilterPreferences';
+  const loadFilterPrefs = () => {
+    try {
+      const saved = localStorage.getItem(FILTER_PREFS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // localStorage may be unavailable (private browsing) or data corrupted
+    }
+    return {};
+  };
+  const initialFilterPrefs = useMemo(() => loadFilterPrefs(), []);
+
+  // בחירת הכרטיסים המוצגים (ברירת מחדל: כולם או מה ששמור)
+  const [selectedCards, setSelectedCards] = useState<string[]>(() => {
+    // אם יש כרטיסים שמורים, השתמש רק באלה שקיימים ב-availableCards
+    if (initialFilterPrefs.selectedCards && Array.isArray(initialFilterPrefs.selectedCards)) {
+      const savedCards = initialFilterPrefs.selectedCards.filter((c: string) => availableCards.includes(c));
+      // אם כל הכרטיסים השמורים עדיין קיימים, החזר אותם
+      if (savedCards.length > 0) return savedCards;
+    }
+    return availableCards;
+  });
+  // שמירת הכרטיסים הידועים כדי לזהות כרטיסים חדשים באמת
+  const knownCardsRef = useRef<Set<string>>(new Set(availableCards));
+  // האם להציג עסקאות בנק
+  const [includeBank, setIncludeBank] = useState(initialFilterPrefs.includeBank ?? true);
+
+  // שמירת העדפות סינון ב-localStorage בכל שינוי
   React.useEffect(() => {
-    setSelectedCards(prev => {
-      // אם prev ריק (למשל לאחר איפוס) לא נוסיף אוטומטית כרטיסים חדשים
-      if (prev.length === 0) return prev;
-      // ודא שכל כרטיס חדש שנוסף נכנס, אבל אל תמחק בחירות קיימות שלא קיימות עוד
-      const next = new Set(prev);
-      for (const c of availableCards) next.add(c);
-      return Array.from(next);
-    });
+    const prefs = { selectedCards, includeBank };
+    try {
+      localStorage.setItem(FILTER_PREFS_KEY, JSON.stringify(prefs));
+    } catch {
+      // localStorage may be unavailable (private browsing, quota exceeded)
+    }
+  }, [selectedCards, includeBank]);
+
+  // טעינת שמות כרטיסים מקובץ cards-aliases.json
+  const [cardNames, setCardNames] = useState<Record<string, string>>({});
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadCardNames = async () => {
+      if (!dirHandle) return;
+      try {
+        const fileName = 'cards-aliases.json';
+        const fh = await dirHandle.getFileHandle(fileName);
+        const f = await fh.getFile();
+        const text = await f.text();
+        const parsed = JSON.parse(text);
+        if (!cancelled && parsed && typeof parsed === 'object') {
+          // תומך בשני פורמטים: {cards: {...}} או {...}
+          setCardNames(parsed.cards || parsed);
+        }
+      } catch {
+        // File doesn't exist or can't be read - that's OK
+      }
+    };
+    loadCardNames();
+    return () => { cancelled = true; };
+  }, [dirHandle]);
+
+  React.useEffect(() => {
+    const known = knownCardsRef.current;
+    const trulyNewCards = availableCards.filter(c => !known.has(c));
+
+    // עדכן את הידועים
+    for (const c of availableCards) known.add(c);
+
+    // הוסף לבחירה רק כרטיסים חדשים באמת
+    if (trulyNewCards.length > 0) {
+      setSelectedCards(prev => [...prev, ...trulyNewCards]);
+    }
   }, [availableCards]);
 
   const toggleCard = (last4: string) => {
@@ -126,18 +217,25 @@ const MainView: React.FC<MainViewProps> = ({
   // const [showPieChart, setShowPieChart] = useState(false);
 
   // סיכומי הכנסות/הוצאות/נטו לפי filteredDetails שהתקבלו מההורה
-  const summary = useMemo(() => {
-    const income = filteredDetails
-      .filter(d => d.direction === 'income')
-      .reduce((s, d) => s + Math.abs(d.amount), 0);
-    const expense = filteredDetails
-      .filter(d => d.direction === 'expense')
-      .reduce((s, d) => s + Math.abs(d.amount), 0);
-    const net = filteredDetails.reduce((s, d) => s + signedAmount(d), 0);
-    return { income, expense, net };
-  }, [filteredDetails]);
+  // משתמש ב-transactionNature לזיהוי הכנסות אמיתיות
+  // Helper: בדיקה אם עסקה צריכה להידלג בחישובים (חיוב אשראי עם פירוט, או neutral)
+  const shouldSkipInCalculation = (d: CreditDetail): boolean => {
+    // חיוב אשראי בנקאי עם פירוט - דלג (כבר נספר דרך עסקאות האשראי)
+    if (d.source === 'bank' && d.transactionType === 'credit_charge') {
+      const hasBreakdown = (d.relatedTransactionIds?.length || 0) > 0;
+      if (hasBreakdown) return true;
+    }
+    // חיוב מאוחד - דלג
+    if (d.transactionType === 'credit_charge_combined') {
+      return true;
+    }
+    // עסקה neutral - דלג
+    if (d.neutral) return true;
+    return false;
+  };
 
   // סינון העסקאות לפי הקטגוריה הנבחרת וחיפוש
+  // מועבר למעלה כי summary צריך להתבסס על filteredTransactions
   const filteredTransactions = useMemo(() => {
     let filtered = filteredDetails;
 
@@ -186,19 +284,148 @@ const MainView: React.FC<MainViewProps> = ({
     return filtered;
   }, [filteredDetails, selectedCategory, searchTerm, amountFilter, selectedCards, includeBank]);
 
-  // חישוב הקטגוריה הגדולה ביותר
+  const summary = useMemo(() => {
+    // הסיכום מחושב מ-filteredTransactions - אותם נתונים שמוצגים בטבלה
+    // filteredDetails כבר מסונן לפי displayMode ב-App.tsx
+    
+    // חישוב סיכום הטבלה (כמו שהטבלה מחשבת) - זה המספר שצריך להתאים
+    const tableSum = filteredTransactions
+      .filter(d => !shouldSkipInCalculation(d))
+      .reduce((sum, d) => {
+        // הטבלה משתמשת בסימן לפי direction
+        const signed = d.direction === 'income' ? Math.abs(d.amount) : -Math.abs(d.amount);
+        return sum + signed;
+      }, 0);
+    
+    // לוגים לדיבוג
+    console.group('📊 Summary Calculation');
+    console.log('displayMode:', displayMode);
+    console.log('filteredTransactions count:', filteredTransactions.length);
+    console.log('Table sum (this should match table footer):', tableSum);
+    
+    // מה להציג בתמציות לפי מצב התצוגה:
+    let income = 0;
+    let expense = 0;
+    let net = 0;
+    
+    if (displayMode === 'expense') {
+      // במצב הוצאות: הסיכום של הטבלה הוא סה"כ ההוצאות (אחרי החזרים)
+      // tableSum שלילי (הוצאות), נהפוך לחיובי לתצוגה
+      expense = Math.abs(tableSum);
+      income = 0;
+      net = tableSum; // שלילי - הוצאות
+      console.log('Mode: expense -> expense:', expense, 'income: 0');
+    } else if (displayMode === 'income') {
+      // במצב הכנסות: הסיכום של הטבלה הוא סה"כ ההכנסות
+      income = tableSum; // חיובי
+      expense = 0;
+      net = tableSum;
+      console.log('Mode: income -> income:', income, 'expense: 0');
+    } else {
+      // במצב "הכל": עקביות עם מצבי הסינון
+      // הכנסות = רק הכנסות אמיתיות (transactionNature === 'income')
+      // הוצאות = הוצאות נטו (כולל החזרי הוצאות שמקטינים)
+      
+      // הכנסות אמיתיות בלבד (לא החזרי הוצאות)
+      const realIncomeItems = filteredTransactions.filter(d => 
+        d.transactionNature === 'income' && !shouldSkipInCalculation(d)
+      );
+      income = realIncomeItems.reduce((s, d) => s + Math.abs(d.amount), 0);
+      
+      // הוצאות נטו: כל מה שלא הכנסה אמיתית (הוצאות + החזרי הוצאות)
+      // החזרי הוצאות (expense_reversal) מקטינים את ההוצאה
+      const expenseItems = filteredTransactions.filter(d => 
+        d.transactionNature !== 'income' && !shouldSkipInCalculation(d)
+      );
+      const expenseNet = expenseItems.reduce((s, d) => {
+        // direction = 'expense' -> שלילי, direction = 'income' (החזר) -> חיובי
+        const signed = d.direction === 'income' ? Math.abs(d.amount) : -Math.abs(d.amount);
+        return s + signed;
+      }, 0);
+      
+      // expenseNet שלילי = הוצאות רגילות, expenseNet חיובי = עודף החזרים
+      // בתצוגה: הוצאות מוצגות כערך חיובי אם יש הוצאות, 0 אם יש עודף החזרים
+      // עודף החזרים יתווסף להכנסות בחישוב הנטו
+      if (expenseNet <= 0) {
+        // מקרה רגיל: יש הוצאות נטו
+        expense = Math.abs(expenseNet);
+        net = income - expense;
+      } else {
+        // מקרה קצה: החזרים גדולים מההוצאות - "עודף החזרים"
+        // נציג הוצאות = 0 (או שלילי לסימון עודף)
+        expense = -expenseNet; // שלילי כדי להראות שזה עודף החזרים
+        net = income + expenseNet; // מוסיפים את העודף להכנסות
+      }
+      
+      console.log('Mode: all -> realIncome:', income, 'expenseNet:', expenseNet, 'expense display:', expense, 'net:', net);
+    }
+    
+    console.groupEnd();
+    
+    return { income, expense, net };
+  }, [filteredTransactions, displayMode]);
+
+  // חישוב קטגוריות לפי direction (הוצאות/הכנסות) - לדונאט ולגרף עמודות
+  // זה מבטיח עקביות עם הסיכומים למעלה
+  const categoriesByDirection = useMemo(() => {
+    const catCounts: Record<string, number> = {};
+    
+    if (displayMode === 'income') {
+      // במצב הכנסות: רק הכנסות אמיתיות (transactionNature === 'income')
+      filteredTransactions.forEach(d => {
+        if (shouldSkipInCalculation(d)) return;
+        if (d.transactionNature !== 'income') return;
+        
+        const categoryName = d.category || 'לא מסווג';
+        catCounts[categoryName] = (catCounts[categoryName] || 0) + Math.abs(d.amount);
+      });
+    } else if (displayMode === 'expense') {
+      // במצב הוצאות: הוצאות נטו לפי קטגוריה (כולל החזרים שמקטינים)
+      filteredTransactions.forEach(d => {
+        if (shouldSkipInCalculation(d)) return;
+        
+        const categoryName = d.category || 'לא מסווג';
+        // direction = 'expense' -> חיובי (הוצאה), direction = 'income' -> שלילי (החזר)
+        const amount = d.direction === 'expense' ? Math.abs(d.amount) : -Math.abs(d.amount);
+        catCounts[categoryName] = (catCounts[categoryName] || 0) + amount;
+      });
+      // הסר קטגוריות עם ערך 0 בלבד - קטגוריות שליליות (עודף החזרים) נשארות
+      Object.keys(catCounts).forEach(cat => {
+        if (catCounts[cat] === 0) delete catCounts[cat];
+      });
+    } else {
+      // במצב "הכל": הוצאות נטו לפי קטגוריה (רק מה שלא הכנסה אמיתית)
+      filteredTransactions.forEach(d => {
+        if (shouldSkipInCalculation(d)) return;
+        if (d.transactionNature === 'income') return; // דלג על הכנסות אמיתיות
+        
+        const categoryName = d.category || 'לא מסווג';
+        // direction = 'expense' -> חיובי (הוצאה), direction = 'income' -> שלילי (החזר)
+        const amount = d.direction === 'expense' ? Math.abs(d.amount) : -Math.abs(d.amount);
+        catCounts[categoryName] = (catCounts[categoryName] || 0) + amount;
+      });
+      // הסר קטגוריות עם ערך 0 בלבד - קטגוריות שליליות (עודף החזרים) נשארות
+      Object.keys(catCounts).forEach(cat => {
+        if (catCounts[cat] === 0) delete catCounts[cat];
+      });
+    }
+    
+    return catCounts;
+  }, [filteredTransactions, displayMode]);
+
+  // חישוב הקטגוריה הגדולה ביותר (משתמש ב-categoriesByDirection לעקביות)
   const topCategoryData = useMemo(() => {
-    const sortedCategories = Object.entries(categories)
-      .sort(([,a], [,b]) => b - a);
-   
+    const sortedCategories = Object.entries(categoriesByDirection)
+      .sort(([, a], [, b]) => b - a);
+
     if (sortedCategories.length === 0) return null;
-   
+
     const [topCategory, topAmount] = sortedCategories[0];
-    const total = Object.values(categories).reduce((sum, val) => sum + val, 0);
+    const total = Object.values(categoriesByDirection).reduce((sum, val) => sum + val, 0);
     const percentage = total > 0 ? ((topAmount / total) * 100).toFixed(1) : '0';
-   
+
     return { name: topCategory, amount: topAmount, percentage };
-  }, [categories]);
+  }, [categoriesByDirection]);
 
   // הפקת צבע ואייקון לקטגוריה מובילה (אם קיימת בהגדרות)
   const topCategoryVisual = useMemo(() => {
@@ -208,7 +435,7 @@ const MainView: React.FC<MainViewProps> = ({
     const icon = def?.icon || '🏆';
     // פונקציה לערבוב עם לבן כדי להחליש את הרוויה (ratio = כמה לבן להכניס)
     const blendWithWhite = (hex: string, ratio: number) => {
-      const h = hex.replace('#','');
+      const h = hex.replace('#', '');
       const num = parseInt(h, 16);
       const r = (num >> 16) & 255;
       const g = (num >> 8) & 255;
@@ -232,7 +459,7 @@ const MainView: React.FC<MainViewProps> = ({
     const monthOf = (d: CreditDetail) => {
       const raw = (dateMode === 'charge' && d.chargeDate) ? d.chargeDate : d.date;
       // פורמט צפוי: DD/MM/YYYY או D/M/YY
-      const parts = raw.split(/[\/\-]/);
+      const parts = raw.split(/[/-]/);
       if (parts.length < 3) return '';
       const mm = parts[1].padStart(2, '0');
       const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
@@ -303,69 +530,76 @@ const MainView: React.FC<MainViewProps> = ({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // אפקט מדידת גובה דינמי של הכותרת והזרקה כמשתנה CSS
+  // מדידה דינמית של גובה הכותרת העליונה לטובת sticky של כותרת הטבלה
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const applyHeight = () => {
+    const updateHeaderHeight = () => {
       const h = el.getBoundingClientRect().height;
-      document.documentElement.style.setProperty('--header-height', h + 'px');
+      document.documentElement.style.setProperty('--main-header-height', `${h}px`);
     };
-    applyHeight();
-    const resizeObserver = new ResizeObserver(applyHeight);
+    updateHeaderHeight();
+    const resizeObserver = new ResizeObserver(updateHeaderHeight);
     resizeObserver.observe(el);
-    window.addEventListener('resize', applyHeight);
+    window.addEventListener('resize', updateHeaderHeight);
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener('resize', applyHeight);
+      window.removeEventListener('resize', updateHeaderHeight);
     };
+  }, []);
+
+  // חישוב מספר הפילטרים הפעילים
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    // כרטיסים שלא נבחרו
+    if (selectedCards.length < availableCards.length) count++;
+    // בנק מוסתר
+    if (!includeBank) count++;
+    // קטגוריה נבחרת מגרף הדונאט
+    if (selectedCategory) count++;
+    return count;
+  }, [selectedCards, availableCards, includeBank, selectedCategory]);
+
+  // איפוס סינון קטגוריה כשמחליפים חודש/שנה/תצוגה
+  useEffect(() => {
+    setSelectedCategory(null);
+  }, [selectedMonth, selectedYear, view]);
+
+  // Close popovers when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilterPopover(false);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setShowSettingsPopover(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
     <div className="main-view">
-      {/* 1. כותרת ראשית + בחירת תצוגה + פעולות */}
-      <div className="main-view-header">
-  <div ref={headerRef} className="header-top" role="toolbar" aria-label="סרגל ראשי של סינון וניווט">
-          <div className="folder-cluster" aria-label="תיקיית אקסל נבחרת">
-            {selectedFolder && (
-              <span className="folder-current" title={selectedFolder}>תיקיה: <b>{selectedFolder}</b></span>
-            )}
-            <button onClick={onPickDirectory} className="folder-btn swap" title="החלפת תיקיה">
-              📁 החלפת תיקיה
-            </button>
-          </div>
-          {/* <h1>ניתוח הוצאות</h1> */}
+      {/* 1. כותרת ראשית מחודשת - שורה אחת נקייה */}
+      <div ref={headerRef} className="header-top header-top-new" role="toolbar" aria-label="סרגל ראשי של סינון וניווט">
+        {/* צד ימין: ניווט תאריך + תצוגה */}
+        <div className="header-right-group" data-tour="date-navigation">
           <div className="view-toggle">
             <button
-              onClick={() => setView('monthly')}
+              onClick={() => setViewWithTracking('monthly')}
               className={view === 'monthly' ? 'active' : ''}
             >
-              תצוגה חודשית
+              חודשי
             </button>
             <button
-              onClick={() => setView('yearly')}
+              onClick={() => setViewWithTracking('yearly')}
               className={view === 'yearly' ? 'active' : ''}
             >
-              תצוגה שנתית
+              שנתי
             </button>
           </div>
 
-          {/* בורר מקורות (כרטיסי אשראי / בנק) */}
-          <SourceFilter
-            availableCards={availableCards}
-            lastDateByCard={lastDateByCard}
-            activeInViewByCard={activeInViewByCard}
-            selectedCards={selectedCards}
-            onToggleCard={toggleCard}
-            includeBank={includeBank}
-            onToggleBank={setIncludeBank}
-            allSelected={allCardsSelected}
-            onSelectAll={selectAllCards}
-            onClearSelection={clearSelection}
-            dirHandle={dirHandle}
-          />
-
-          {/* ניווט חודש / שנה משולב */}
           <DateNavigator
             view={view}
             sortedMonths={sortedMonths}
@@ -376,110 +610,219 @@ const MainView: React.FC<MainViewProps> = ({
             setSelectedYear={setSelectedYear}
             availableYears={availableYears}
           />
+        </div>
 
-          {/* בורר מצב תאריך (מעוצב כסגמנט) */}
-          <div className="date-mode-wrapper">
-            <div className="date-mode-toggle" role="radiogroup" aria-label="בחירת מצב תאריך">
-              <button
-                type="button"
-                className={`mode-transaction ${dateMode === 'transaction' ? 'active' : ''}`}
-                aria-pressed={dateMode === 'transaction'}
-                onClick={() => setDateMode('transaction')}
-              >לפי תאריך עסקה</button>
-              <button
-                type="button"
-                className={`mode-charge ${dateMode === 'charge' ? 'active' : ''}`}
-                aria-pressed={dateMode === 'charge'}
-                onClick={() => setDateMode('charge')}
-              >לפי תאריך חיוב</button>
-            </div>
-          </div>
-
-          {/* Segmented control: הכל | הוצאות | הכנסות */}
-          <div>
-            <div className="display-mode-toggle" style={{ display: 'flex', gap: 8 }}>
-              <button className={`mode-all ${displayMode === 'all' ? 'active' : ''}`} onClick={() => setDisplayMode('all')}>הכל</button>
-              <button className={`mode-expense ${displayMode === 'expense' ? 'active' : ''}`} onClick={() => setDisplayMode('expense')}>הוצאות</button>
-              <button className={`mode-income ${displayMode === 'income' ? 'active' : ''}`} onClick={() => setDisplayMode('income')}>הכנסות</button>
-            </div>
+        {/* אמצע: סינון הכל/הוצאות/הכנסות */}
+        <div className="header-center-group" data-tour="display-mode">
+          <div className="display-mode-toggle">
+            <button className={`mode-all ${displayMode === 'all' ? 'active' : ''}`} onClick={() => setDisplayMode('all')}>הכל</button>
+            <button className={`mode-expense ${displayMode === 'expense' ? 'active' : ''}`} onClick={() => setDisplayMode('expense')}>הוצאות</button>
+            <button className={`mode-income ${displayMode === 'income' ? 'active' : ''}`} onClick={() => setDisplayMode('income')}>הכנסות</button>
           </div>
         </div>
 
-        {/* מדדים מאוחדים (Pattern A) */}
-        <div className="metrics-cards" role="group" aria-label="מדדי מצב">
-          <div className={`metric-card net ${summary.net < 0 ? 'neg' : 'pos'}`} aria-label={`נטו ${summary.net.toLocaleString()} ₪`}>
-            <div className="mc-header">
-              <span className="mc-label">סך הכל נטו</span>
-              {view === 'monthly' && percent !== null && diff !== null && (
-                <span className={`mc-badge ${percent >= 0 ? 'pos' : 'neg'}`} aria-label={`שינוי נטו מהחודש הקודם ${Math.abs(percent).toFixed(1)}%`}>
-                  {Math.abs(percent).toFixed(1)}%{percent >= 0 ? '+' : '-'}
-                </span>
+        {/* צד שמאל: כפתורי פילטר והגדרות */}
+        <div className="header-left-group">
+          {/* כפתור פילטר */}
+          <div className="header-btn-wrapper" ref={filterRef}>
+            <button
+              className={`header-icon-btn ${activeFilterCount > 0 ? 'has-filter' : ''} ${showFilterPopover ? 'open' : ''}`}
+              onClick={() => { setShowFilterPopover(!showFilterPopover); setShowSettingsPopover(false); }}
+              aria-label="סינון מקורות"
+              aria-expanded={showFilterPopover}
+              title="סינון מקורות"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              {activeFilterCount > 0 && (
+                <span className="filter-badge">{activeFilterCount}</span>
               )}
-            </div>
-            <div className="mc-value" title={`נטו בחודש`}>₪{summary.net.toLocaleString()}</div>
-            <div className="mc-sub">לעומת החודש הקודם</div>
-            {view === 'monthly' && diff !== null && percent !== null && (
-              <span className="visually-hidden" aria-live="polite">נטו השתנה ב {Math.abs(diff).toLocaleString()} ₪ ({Math.abs(percent).toFixed(1)}%)</span>
+            </button>
+
+            {/* Filter popover */}
+            {showFilterPopover && (
+              <div className="header-popover filter-popover">
+                <SourceFilter
+                  availableCards={availableCards}
+                  lastDateByCard={lastDateByCard}
+                  activeInViewByCard={activeInViewByCard}
+                  selectedCards={selectedCards}
+                  onToggleCard={toggleCard}
+                  includeBank={includeBank}
+                  onToggleBank={setIncludeBank}
+                  allSelected={allCardsSelected}
+                  onSelectAll={selectAllCards}
+                  onClearSelection={clearSelection}
+                  dirHandle={dirHandle}
+                  inline={true}
+                  onCardNameChange={(last4, newName) => {
+                    setCardNames(prev => ({ ...prev, [last4]: newName }));
+                  }}
+                />
+              </div>
             )}
           </div>
-          <div className="metric-card expense" aria-label={`סה"כ הוצאות ${summary.expense.toLocaleString()} ₪`}>
-            <div className="mc-header">
-              <span className="mc-label">הוצאות</span>
-              {expensePrevChange && (
-                <span className={`mc-badge ${expensePrevChange.percent >= 0 ? 'pos' : 'neg'}`} aria-label={`שינוי בהוצאות לעומת חודש קודם ${Math.abs(expensePrevChange.percent).toFixed(1)}%`}>
-                  {Math.abs(expensePrevChange.percent).toFixed(1)}%{expensePrevChange.percent >= 0 ? '+' : '-'}
-                </span>
-              )}
-            </div>
-            <div className="mc-value" title={`הוצאות בחודש`}>₪{summary.expense.toLocaleString()}</div>
-            <div className="mc-sub">סה"כ עסקאות מחויבות</div>
-          </div>
-          <div className="metric-card income" aria-label={`סה"כ הכנסות ${summary.income.toLocaleString()} ₪`}>
-            <div className="mc-header">
-              <span className="mc-label">הכנסות</span>
-            </div>
-            <div className="mc-value" title={`הכנסות בחודש`}>₪{summary.income.toLocaleString()}</div>
-            <div className="mc-sub">כולל כל ההכנסות</div>
-          </div>
-          <div className="metric-card tx-count" aria-label={`מספר עסקאות ${filteredTransactions.length}`}>
-            <div className="mc-header">
-              <span className="mc-label">מספר עסקאות</span>
-            </div>
-            <div className="mc-value" title={`סה"כ עסקאות בחודש`}>{filteredTransactions.length}</div>
-            <div className="mc-sub">פעילות החודש</div>
-          </div>
-          {topCategoryData && topCategoryVisual && (
-            <div
-              className="metric-card top-cat dynamic"
-              aria-label={`קטגוריה מובילה ${topCategoryData.name} אחוז ${topCategoryData.percentage}%`}
-              style={{
-                background: `linear-gradient(135deg, ${topCategoryVisual.soft1} 0%, ${topCategoryVisual.soft2} 38%, #ffffff 92%)`,
-                borderColor: topCategoryVisual.border,
-                filter: 'saturate(0.85) brightness(1.02)'
-              }}
+
+          {/* כפתור הגדרות */}
+          <div className="header-btn-wrapper" ref={settingsRef}>
+            <button
+              className={`header-icon-btn ${showSettingsPopover ? 'open' : ''}`}
+              onClick={() => { setShowSettingsPopover(!showSettingsPopover); setShowFilterPopover(false); }}
+              aria-label="הגדרות"
+              aria-expanded={showSettingsPopover}
+              title="הגדרות"
             >
-              <div className="mc-header">
-                <span className="mc-label">קטגוריה מובילה</span>
-                <span
-                  className="mc-badge dynamic"
-                  aria-label={`אחוז מתוך ההוצאות ${topCategoryData.percentage}%`}
-                  style={{
-                    background: topCategoryVisual.badgeBg,
-                    color: '#1e293b'
-                  }}
-                >{topCategoryData.percentage}%</span>
+              <svg width="20" height="20" viewBox="0 0 20 20" style={{ fill: 'currentColor' }}>
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {/* Settings popover */}
+            {showSettingsPopover && (
+              <div className="header-popover settings-popover">
+                <div className="popover-title">הגדרות</div>
+
+                {/* מצב תאריך */}
+                <div className="popover-section">
+                  <div className="popover-section-title">מצב תאריך</div>
+                  <div className="date-mode-toggle-compact">
+                    <button
+                      type="button"
+                      className={dateMode === 'transaction' ? 'active' : ''}
+                      onClick={() => setDateMode('transaction')}
+                    >תאריך עסקה</button>
+                    <button
+                      type="button"
+                      className={dateMode === 'charge' ? 'active' : ''}
+                      onClick={() => setDateMode('charge')}
+                    >תאריך חיוב</button>
+                  </div>
+                </div>
+
+                {/* תיקיה */}
+                <div className="popover-section">
+                  <div className="popover-section-title">תיקיית נתונים</div>
+                  {selectedFolder && (
+                    <div className="folder-display" title={selectedFolder}>
+                      📁 {selectedFolder}
+                    </div>
+                  )}
+                  <button onClick={onPickDirectory} className="folder-change-btn">
+                    החלפת תיקיה
+                  </button>
+                  {/* Privacy hint */}
+                  <div className="privacy-hint-inline" style={{ marginTop: '8px' }}>
+                    הנתונים נשארים במחשב שלך
+                  </div>
+                </div>
+
+                {/* קישור להגדרות מתקדמות */}
+                {onOpenAdvancedSettings && (
+                  <div className="popover-section popover-section-link">
+                    <button
+                      className="advanced-settings-link"
+                      onClick={() => {
+                        setShowSettingsPopover(false);
+                        onOpenAdvancedSettings();
+                      }}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 20 20" style={{ fill: 'currentColor' }}>
+                        <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                      </svg>
+                      <span>הגדרות מתקדמות</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="arrow-icon">
+                        <polyline points="15 18 9 12 15 6" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="mc-value" title={topCategoryData.name}>
-                <span className="mc-icon" aria-hidden="true" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))', marginInlineStart: 4 }}>
-                  {topCategoryVisual.icon}
-                </span>
-                {topCategoryData.name}
-              </div>
-              <div className="mc-sub">מתוך כלל ההוצאות</div>
-            </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* התראה על נתונים חסרים */}
+      <MissingDataAlert
+        availableMonths={sortedMonths}
+        onAddFiles={onPickDirectory}
+        folderName={selectedFolder || undefined}
+      />
+
+      {/* מדדים מאוחדים (Pattern A) */}
+      <div className="metrics-cards" role="group" aria-label="מדדי מצב">
+        <div className={`metric-card net ${summary.net < 0 ? 'neg' : 'pos'}`} aria-label={`נטו ${summary.net.toLocaleString()} ₪`}>
+          <div className="mc-header">
+            <span className="mc-label">סך הכל נטו</span>
+            {view === 'monthly' && percent !== null && diff !== null && (
+              <span className={`mc-badge ${percent >= 0 ? 'pos' : 'neg'}`} aria-label={`שינוי נטו מהחודש הקודם ${Math.abs(percent).toFixed(1)}%`}>
+                {Math.abs(percent).toFixed(1)}%{percent >= 0 ? '+' : '-'}
+              </span>
+            )}
+          </div>
+          <div className="mc-value" title={`נטו בחודש`}>₪{summary.net.toLocaleString()}</div>
+          <div className="mc-sub">לעומת החודש הקודם</div>
+          {view === 'monthly' && diff !== null && percent !== null && (
+            <span className="visually-hidden" aria-live="polite">נטו השתנה ב {Math.abs(diff).toLocaleString()} ₪ ({Math.abs(percent).toFixed(1)}%)</span>
           )}
         </div>
-
+        <div className="metric-card expense" aria-label={`סה"כ הוצאות ${summary.expense.toLocaleString()} ₪`}>
+          <div className="mc-header">
+            <span className="mc-label">הוצאות</span>
+            {expensePrevChange && (
+              <span className={`mc-badge ${expensePrevChange.percent >= 0 ? 'pos' : 'neg'}`} aria-label={`שינוי בהוצאות לעומת חודש קודם ${Math.abs(expensePrevChange.percent).toFixed(1)}%`}>
+                {Math.abs(expensePrevChange.percent).toFixed(1)}%{expensePrevChange.percent >= 0 ? '+' : '-'}
+              </span>
+            )}
+          </div>
+          <div className="mc-value" title={`הוצאות בחודש`}>₪{summary.expense.toLocaleString()}</div>
+          <div className="mc-sub">סה"כ עסקאות מחויבות</div>
+        </div>
+        <div className="metric-card income" aria-label={`סה"כ הכנסות ${summary.income.toLocaleString()} ₪`}>
+          <div className="mc-header">
+            <span className="mc-label">הכנסות</span>
+          </div>
+          <div className="mc-value" title={`הכנסות בחודש`}>₪{summary.income.toLocaleString()}</div>
+          <div className="mc-sub">כולל כל ההכנסות</div>
+        </div>
+        <div className="metric-card tx-count" aria-label={`מספר עסקאות ${filteredTransactions.length}`}>
+          <div className="mc-header">
+            <span className="mc-label">מספר עסקאות</span>
+          </div>
+          <div className="mc-value" title={`סה"כ עסקאות בחודש`}>{filteredTransactions.length}</div>
+          <div className="mc-sub">פעילות החודש</div>
+        </div>
+        {topCategoryData && topCategoryVisual && (
+          <div
+            className="metric-card top-cat dynamic"
+            aria-label={`קטגוריה מובילה ${topCategoryData.name} אחוז ${topCategoryData.percentage}%`}
+            style={{
+              background: `linear-gradient(135deg, ${topCategoryVisual.soft1} 0%, ${topCategoryVisual.soft2} 38%, #ffffff 92%)`,
+              borderColor: topCategoryVisual.border,
+              filter: 'saturate(0.85) brightness(1.02)'
+            }}
+          >
+            <div className="mc-header">
+              <span className="mc-label">קטגוריה מובילה</span>
+              <span
+                className="mc-badge dynamic"
+                aria-label={`אחוז מתוך ההוצאות ${topCategoryData.percentage}%`}
+                style={{
+                  background: topCategoryVisual.badgeBg,
+                  color: '#1e293b'
+                }}
+              >{topCategoryData.percentage}%</span>
+            </div>
+            <div className="mc-value" title={topCategoryData.name}>
+              <span className="mc-icon" aria-hidden="true" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))', marginInlineStart: 4 }}>
+                {topCategoryVisual.icon}
+              </span>
+              {topCategoryData.name}
+            </div>
+            <div className="mc-sub">מתוך כלל ההוצאות</div>
+          </div>
+        )}
       </div>
 
       {/* התצוגה החדשה של ניווט חודש/שנה משולב מחליפה את הבלוק הישן */}
@@ -490,75 +833,176 @@ const MainView: React.FC<MainViewProps> = ({
       <div className="main-content">
         {view === 'monthly' ? (
           <>
-            {/* גרף עמודות עם כפתור מזעור */}
-            {/* <div className="chart-section-wrapper">
-              <div className="chart-header">
-                <h3>גרף עמודות חודשיות</h3>
-                <button
-                  className="minimize-btn"
-                  onClick={() => setShowBarChart(!showBarChart)}
-                  title={showBarChart ? 'מזער גרף' : 'הרחב גרף'}
-                >
-                  {showBarChart ? '�' : '📈'}
-                </button>
-              </div>
-              {showBarChart && (
-                <div className="chart-section bar-chart">
-                  <MonthBarChart
-                    monthTotals={monthTotals}
+            {/* Layout היברידי: גרף מעל/בצד (לפי גודל מסך) */}
+            <div className="content-with-sidebar">
+              {/* גרף Donut - מעל במסך קטן, בצד/Rail במסך גדול */}
+              <aside className="chart-sidebar" data-tour="category-chart">
+                <CategoryDonutChart
+                  categories={categoriesByDirection}
+                  categoriesList={categoriesList}
+                  onCategoryClick={setSelectedCategory}
+                  selectedCategory={selectedCategory}
+                  defaultCollapsed={false}
+                  minPercentage={3}
+                  title={displayMode === 'income' ? 'התפלגות הכנסות' : 'התפלגות הוצאות'}
+                  displayMode={displayMode}
+                  maxVisibleCategories={6}
+                />
+                
+                {/* מיני גרף עמודות - 6 חודשים אחרונים */}
+                {sortedMonths.length > 1 && (
+                  <MiniMonthsChart
+                    monthTotals={Object.fromEntries(
+                      sortedMonths.map(m => {
+                        // סנן עסקאות לפי חודש
+                        const monthDetails = analysis.details.filter(d => {
+                          // דלג על עסקאות שצריך להתעלם מהן
+                          if (d.neutral) return false;
+                          if (d.source === 'bank' && d.transactionType === 'credit_charge') {
+                            if ((d.relatedTransactionIds?.length || 0) > 0) return false;
+                          }
+                          // סנן לפי חודש
+                          const raw = (dateMode === 'charge' && d.chargeDate) ? d.chargeDate : d.date;
+                          const parts = raw.split(/[/-]/);
+                          if (parts.length < 3) return false;
+                          const mm = parts[1].padStart(2, '0');
+                          const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                          return `${mm}/${yyyy}` === m;
+                        });
+                        
+                        let total = 0;
+                        if (displayMode === 'income') {
+                          // רק הכנסות אמיתיות
+                          total = monthDetails
+                            .filter(d => d.transactionNature === 'income')
+                            .reduce((sum, d) => sum + Math.abs(d.amount), 0);
+                        } else {
+                          // הוצאות נטו (כולל החזרים שמקטינים)
+                          total = monthDetails
+                            .filter(d => d.transactionNature !== 'income')
+                            .reduce((sum, d) => {
+                              const signed = d.direction === 'expense' ? Math.abs(d.amount) : -Math.abs(d.amount);
+                              return sum + signed;
+                            }, 0);
+                          // לא עושים Math.abs - שומרים ערך שלילי לעודף החזרים
+                        }
+                        return [m, total];
+                      })
+                    )}
                     selectedMonth={selectedMonth}
-                    months={months}
+                    sortedMonths={sortedMonths}
+                    onMonthSelect={setSelectedMonth}
+                    monthsToShow={6}
+                    displayMode={displayMode === 'all' ? 'expense' : displayMode}
                   />
-                </div>
-              )}
-            </div> */}
+                )}
+              </aside>
 
-            {/* גרף עוגה עם כפתור מזעור */}
-            {/* <div className="chart-section-wrapper">
-              <div className="chart-header">
-                <h3>גרף עוגה לפי קטגוריות</h3>
-                <button
-                  className="minimize-btn"
-                  onClick={() => setShowPieChart(!showPieChart)}
-                  title={showPieChart ? 'מזער גרף' : 'הרחב גרף'}
-                >
-                  {showPieChart ? '🍰' : '📊'}
-                </button>
+              {/* טבלת עסקאות */}
+              <div className="table-section main-table" data-tour="transactions-table">
+                <TransactionsTable
+                  details={filteredTransactions}
+                  allDetails={analysis.details}
+                  onEditCategory={handleOpenEditCategory}
+                  onBulkEditCategory={handleBulkEditCategory}
+                  categoriesList={categoriesList}
+                  creditChargeCycles={analysis.creditChargeCycles || []}
+                  setView={setView}
+                  cardNames={cardNames}
+                  displayMode={displayMode}
+                  onTrackFeature={onTrackFeature}
+                  incomeSourceRules={incomeSourceRules}
+                  onMarkAsIncomeSource={onMarkAsIncomeSource}
+                  onMarkAsNotIncomeSource={onMarkAsNotIncomeSource}
+                  onMarkTransactionAsIncomeSource={onMarkTransactionAsIncomeSource}
+                  dateMode={dateMode}
+                />
               </div>
-              {showPieChart && (
-                <div className="chart-section pie-chart">
-                  <CategoryPieChart
-                    categories={categories}
-                  />
-                </div>
-              )}
-            </div> */}
-
-            {/* טבלת עסקאות */}
-            <div className="table-section">
-              <TransactionsTable
-                details={filteredTransactions}
-                onEditCategory={handleOpenEditCategory}
-                categoriesList={categoriesList}
-                creditChargeCycles={analysis.creditChargeCycles || []}
-                setView={setView}
-              />
             </div>
           </>
         ) : (
           <div className="yearly-view">
-            {/* גרף עמודות שנתי הוסר זמנית */}
+            {/* חלק עליון: גרפים מעל הטבלה - עמודות בימין, דונאט בשמאל */}
+            <div className="yearly-charts-section">
+              {/* גרף עמודות 12 חודשים - הכוכב של תצוגה שנתית (בימין ב-RTL) */}
+              <YearlyMonthsChart
+                monthTotals={Object.fromEntries(
+                  sortedMonths.map(m => {
+                    // סנן עסקאות לפי חודש
+                    const monthDetails = analysis.details.filter(d => {
+                      if (d.neutral) return false;
+                      if (d.source === 'bank' && d.transactionType === 'credit_charge') {
+                        if ((d.relatedTransactionIds?.length || 0) > 0) return false;
+                      }
+                      const raw = (dateMode === 'charge' && d.chargeDate) ? d.chargeDate : d.date;
+                      const parts = raw.split(/[/-]/);
+                      if (parts.length < 3) return false;
+                      const mm = parts[1].padStart(2, '0');
+                      const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                      return `${mm}/${yyyy}` === m;
+                    });
+                    
+                    let total = 0;
+                    if (displayMode === 'income') {
+                      // רק הכנסות אמיתיות
+                      total = monthDetails
+                        .filter(d => d.transactionNature === 'income')
+                        .reduce((sum, d) => sum + Math.abs(d.amount), 0);
+                    } else {
+                      // הוצאות נטו (כולל החזרים שמקטינים)
+                      total = monthDetails
+                        .filter(d => d.transactionNature !== 'income')
+                        .reduce((sum, d) => {
+                          const signed = d.direction === 'expense' ? Math.abs(d.amount) : -Math.abs(d.amount);
+                          return sum + signed;
+                        }, 0);
+                      // לא עושים Math.abs - שומרים ערך שלילי לעודף החזרים
+                    }
+                    return [m, total];
+                  })
+                )}
+                selectedYear={selectedYear}
+                sortedMonths={sortedMonths}
+                onMonthSelect={setSelectedMonth}
+                setView={setView}
+                displayMode={displayMode === 'all' ? 'expense' : displayMode}
+              />
+              
+              {/* גרף Donut - בצד שמאל (סוף ב-RTL) */}
+              <aside className="yearly-donut-sidebar">
+                <div className="yearly-donut-wrapper">
+                  <CategoryDonutChart
+                    categories={categoriesByDirection}
+                    categoriesList={categoriesList}
+                    onCategoryClick={setSelectedCategory}
+                    selectedCategory={selectedCategory}
+                    defaultCollapsed={false}
+                    minPercentage={2}
+                    title={displayMode === 'income' ? 'התפלגות הכנסות' : 'התפלגות הוצאות'}
+                    displayMode={displayMode}
+                  />
+                </div>
+              </aside>
+            </div>
 
-            {/* טבלת עסקאות גם בתצוגה שנתית */}
-            <div className="table-section">
+            {/* חלק תחתון: טבלה ברוחב מלא */}
+            <div className="yearly-table-section">
               <TransactionsTable
                 details={filteredTransactions}
+                allDetails={analysis.details}
                 onEditCategory={handleOpenEditCategory}
                 categoriesList={categoriesList}
                 isYearlyView={true}
                 creditChargeCycles={analysis.creditChargeCycles || []}
                 onMonthSelect={setSelectedMonth}
                 setView={setView}
+                cardNames={cardNames}
+                onTrackFeature={onTrackFeature}
+                incomeSourceRules={incomeSourceRules}
+                onMarkAsIncomeSource={onMarkAsIncomeSource}
+                onMarkAsNotIncomeSource={onMarkAsNotIncomeSource}
+                onMarkTransactionAsIncomeSource={onMarkTransactionAsIncomeSource}
+                dateMode={dateMode}
               />
             </div>
           </div>

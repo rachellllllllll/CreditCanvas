@@ -10,17 +10,85 @@
   z-index: 9999;
 }
 
+/* Progress Indicator */
+.progress-indicator {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 8px;
+}
+
+.progress-step-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 9;
+}
+
+.progress-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.progress-step {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: #e5e7eb;
+  color: #9ca3af;
+  transition: all 0.3s ease;
+}
+
+.progress-step.active {
+  background: linear-gradient(135deg, #5eb5f5, #a78bfa);
+  color: white;
+  box-shadow: 0 2px 8px rgba(94, 181, 245, 0.4);
+}
+
+.progress-step.completed {
+  background: #10b981;
+  color: white;
+}
+
+.progress-step:not(.active):hover {
+  transform: scale(1.1);
+  opacity: 0.9;
+}
+
+.progress-line {
+  width: 90px;
+  margin: 0px -15px;
+  height: 3px;
+  background: #e5e7eb;
+  transition: all 0.3s ease;
+  margin-top: 14px; /* מרכז את הקו ביחס לעיגול */
+}
+
+.progress-line.completed {
+  background: #10b981;
+}
+
 .new-cats-dialog {
   min-width: 650px;
   max-width: 900px;
+  min-height: 500px;
   max-height: 85vh;
+  width: 750px;
   display: flex;
   flex-direction: column;
   background: #ffffff;
   border-radius: 18px;
   box-shadow: 0 16px 48px rgba(17, 24, 39, 0.18);
   padding: 24px;
-  gap: 18px;
+  gap: 10px;
 }
 
 .new-cats-title {
@@ -38,6 +106,7 @@
 .new-cats-table-outer-wrapper {
   flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   background: linear-gradient(135deg, #f6fbff 0%, #f8f5ff 100%);
@@ -103,7 +172,7 @@
 
 .new-cats-table-select {
   position: relative;
-  text-align: center;
+  text-align: right;
   padding: 14px 16px;
   min-width: 390px;
   flex: 1;
@@ -163,7 +232,7 @@
 .new-cats-table-details td:last-child { border-radius: 0 8px 8px 0; border-right: none; }
 .new-cats-table-details tr:hover td { background: #f3f7ff; }
 
-.new-cats-table-edit-btn { margin-right: 8px; font-size: 13px; color: #36A2EB; background: none; border: none; cursor: pointer; }
+.new-cats-table-edit-btn { margin-right: 8px; font-size: 13px; color: #6366f1; background: none; border: none; cursor: pointer; }
 
 .new-cats-btns-row {
   display: flex;
@@ -229,14 +298,16 @@
 .new-cats-dialog {
   min-width: 650px;
   max-width: 900px;
+  min-height: 500px;
   max-height: 85vh;
+  width: 750px;
   display: flex;
   flex-direction: column;
   background: #fff;
   border-radius: 20px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   padding: 28px;
-  gap: 20px;
+  gap: 10px;
 }
 
 .new-cats-overlay {
@@ -268,6 +339,109 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
+/* תג קטן לאזהרת מעט עסקאות */
+.chip {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+.chip-warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+/* כפתור איחוד מיזוג יחיד */
+.merge-suggestion {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+.merge-suggestion.merchant-based {
+  background: linear-gradient(135deg, #fef3c7, #fde68a20);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px dashed #f59e0b;
+}
+.merge-suggestion.merchant-based .merge-label {
+  color: #b45309;
+}
+.merge-label {
+  color: #666;
+  font-weight: 500;
+}
+.merge-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid #3b82f6;
+  background: linear-gradient(135deg, #dbeafe, #eff6ff);
+  color: #1e40af;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.merge-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #bfdbfe, #dbeafe);
+  border-color: #1e40af;
+  box-shadow: 0 2px 4px rgba(30, 64, 175, 0.15);
+}
+.merge-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  background: #f0f0f0;
+  border-color: #ccc;
+  color: #999;
+}
+
+/* השוואת עסקאות בקבוצה (עמודות זו לצד זו) */
+.group-compare {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.group-compare-col {
+  flex: 1 1 0;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 8px;
+}
+.group-compare-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.group-compare-count {
+  color: #6b7280;
+  font-weight: 400;
+}
+.group-compare-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+ .group-compare-list li {
+   display: grid;
+   grid-template-columns: 80px 1fr auto;
+   gap: 6px;
+   padding: 4px 0;
+   border-bottom: 1px dashed #f0f0f0;
+ }
+ .group-compare-list li .date { color: #6b7280; font-size: 0.85rem; }
+ .group-compare-list li .desc { color: #374151; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .group-compare-list li .amt { color: #111827; font-weight: 600; }
+
+ /* מעטפת לסלקטור + כפתור יצירה מוצעת */
+ .selector-and-suggest {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+ }
 .new-cats-table {
   min-width: 600px;
   width: 100%;
@@ -335,7 +509,7 @@
 }
 .new-cats-table-select {
   position: relative;
-  text-align: center;
+  text-align: right;
   padding: 14px 16px;
   min-width: 390px;
   flex: 1;
@@ -545,4 +719,338 @@
   background: #f1f5f9;
   border-radius: 6px;
   font-style: italic;
+}
+
+/* ===== מסך סיכום - כניסה ראשונה ===== */
+.new-cats-summary {
+  /* inherit size from .new-cats-dialog */
+  overflow-y: auto;
+  text-align: center;
+}
+
+.new-cats-subtitle {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin-bottom: 16px;
+}
+
+.summary-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  text-align: right;
+}
+
+.summary-step {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.summary-step.completed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.summary-step.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.step-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-title {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.step-details {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.step-details li {
+  margin-bottom: 4px;
+}
+
+.step-desc {
+  font-size: 0.85rem;
+  color: #92400e;
+  margin: 0;
+}
+
+/* ===== באנר איחודים אוטומטיים ===== */
+.auto-merge-banner {
+  background: linear-gradient(135deg, #eff6ff, #f0f9ff);
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  text-align: right;
+}
+
+.auto-merge-banner.compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+}
+
+.banner-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.banner-icon {
+  font-size: 1.2rem;
+}
+
+.banner-title {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.merge-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.merge-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.merge-sources {
+  color: #64748b;
+}
+
+.merge-arrow {
+  color: #3b82f6;
+  font-weight: bold;
+}
+
+.merge-target {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.undo-merge-btn {
+  margin-right: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.undo-merge-btn:hover {
+  opacity: 1;
+}
+
+.merge-more {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+.show-merges-btn {
+  margin-right: auto;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.show-merges-btn:hover {
+  background: #2563eb;
+}
+
+/* ===== כפתורי סיכום ===== */
+.summary-actions {
+  display: flex;
+  flex-direction: row-reverse; /* RTL - כפתור ראשי משמאל */
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.summary-tip {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ===== מסך קונפליקטים ===== */
+.new-cats-conflicts {
+  /* inherit size from .new-cats-dialog */
+}
+
+.conflicts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.conflict-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: right;
+}
+
+.conflict-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.conflict-merchant {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #1f2937;
+}
+
+.conflict-count {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.conflict-desc {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0 0 12px 0;
+}
+
+.conflict-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.conflict-option-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.conflict-option-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.conflict-option-btn .option-count {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.conflict-option-btn.keep-btn {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.conflict-option-btn.keep-btn:hover {
+  background: #e2e8f0;
+}
+
+.conflicts-more {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* ===== ניווט בדיאלוג ===== */
+.dialog-nav {
+  margin-bottom: 8px;
+}
+
+.nav-back-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.nav-back-btn:hover {
+  background: #eff6ff;
+}
+
+/* ===== תג סוג איחוד ===== */
+.merge-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.merge-item .merge-type-badge {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.merge-item.similar .merge-type-badge {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.merge-item.similar {
+  border-color: #fde68a;
+  background: #fffbeb;
 }

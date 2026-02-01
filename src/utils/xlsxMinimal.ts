@@ -25,6 +25,16 @@ export interface Workbook {
   sheets: Sheet[];
 }
 
+const XLSX_NAMESPACE = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+function getElementsByTag(node: Document | Element, tag: string): Element[] {
+  const matches = Array.from(node.getElementsByTagName(tag));
+  if (matches.length > 0) {
+    return matches;
+  }
+  return Array.from(node.getElementsByTagNameNS(XLSX_NAMESPACE, tag));
+}
+
 /**
  * ממיר מספר עמודה (0-based) לאות (A, B, C, ..., Z, AA, AB, ...)
  */
@@ -86,12 +96,12 @@ async function parseSharedStrings(zip: JSZip): Promise<string[]> {
   const doc = parser.parseFromString(xml, 'text/xml');
 
   const strings: string[] = [];
-  const siElements = doc.getElementsByTagName('si');
+  const siElements = getElementsByTag(doc, 'si');
 
   for (let i = 0; i < siElements.length; i++) {
     const si = siElements[i];
     // חיפוש טקסט בתוך <t> או <r><t>
-    const tElements = si.getElementsByTagName('t');
+    const tElements = getElementsByTag(si, 't');
     let text = '';
     for (let j = 0; j < tElements.length; j++) {
       text += tElements[j].textContent || '';
@@ -120,14 +130,14 @@ async function parseSheet(
   const doc = parser.parseFromString(xml, 'text/xml');
 
   const rows: Row[] = [];
-  const rowElements = doc.getElementsByTagName('row');
+  const rowElements = getElementsByTag(doc, 'row');
 
   for (let i = 0; i < rowElements.length; i++) {
     const rowElement = rowElements[i];
     const rowIndex = parseInt(rowElement.getAttribute('r') || '0', 10);
     const row: Row = {};
 
-    const cells = rowElement.getElementsByTagName('c');
+    const cells = getElementsByTag(rowElement, 'c');
     for (let j = 0; j < cells.length; j++) {
       const cell = cells[j];
       const cellRef = cell.getAttribute('r') || ''; // e.g., "A1", "B2"
@@ -135,7 +145,7 @@ async function parseSheet(
       const cellStyle = cell.getAttribute('s'); // style index (for dates)
 
       // חילוץ הערך
-      const vElement = cell.getElementsByTagName('v')[0];
+      const vElement = getElementsByTag(cell, 'v')[0];
       if (!vElement) {
         continue;
       }
@@ -187,6 +197,36 @@ async function parseSheet(
 }
 
 /**
+ * קורא את ה-relationships מקובץ workbook.xml.rels
+ */
+async function parseWorkbookRelationships(zip: JSZip): Promise<Map<string, string>> {
+  const relsFile = zip.file('xl/_rels/workbook.xml.rels');
+  const relationships = new Map<string, string>();
+  
+  if (!relsFile) {
+    return relationships;
+  }
+
+  const xml = await relsFile.async('text');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+
+  const relElements = doc.getElementsByTagName('Relationship');
+  for (let i = 0; i < relElements.length; i++) {
+    const rel = relElements[i];
+    const id = rel.getAttribute('Id') || '';
+    const target = rel.getAttribute('Target') || '';
+    if (id && target) {
+      // הנתיב יכול להיות יחסי (worksheets/sheet1.xml) או מלא
+      const fullPath = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
+      relationships.set(id, fullPath);
+    }
+  }
+
+  return relationships;
+}
+
+/**
  * קורא את רשימת השמות של הגיליונות
  */
 async function parseWorkbookSheetNames(zip: JSZip): Promise<{ name: string; path: string }[]> {
@@ -195,22 +235,59 @@ async function parseWorkbookSheetNames(zip: JSZip): Promise<{ name: string; path
     return [];
   }
 
+  // קריאת ה-relationships כדי לקבל את הנתיבים האמיתיים
+  const relationships = await parseWorkbookRelationships(zip);
+
   const xml = await workbookFile.async('text');
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
   const sheets: { name: string; path: string }[] = [];
-  const sheetElements = doc.getElementsByTagName('sheet');
+  const sheetElements = getElementsByTag(doc, 'sheet');
 
   for (let i = 0; i < sheetElements.length; i++) {
     const sheet = sheetElements[i];
     const name = sheet.getAttribute('name') || `Sheet${i + 1}`;
-    const sheetId = sheet.getAttribute('sheetId') || `${i + 1}`;
-    const rId = sheet.getAttribute('r:id') || '';
+    
+    // נסה לקבל את ה-relationship ID (יכול להיות r:id או שרק id)
+    const rId = sheet.getAttribute('r:id') || 
+                sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') ||
+                '';
 
-    // ברוב המקרים, הגיליון נמצא ב-xl/worksheets/sheet{N}.xml
-    const path = `xl/worksheets/sheet${sheetId}.xml`;
-    sheets.push({ name, path });
+    let path = '';
+    
+    if (rId && relationships.has(rId)) {
+      // יש לנו את הנתיב האמיתי מה-relationships
+      path = relationships.get(rId)!;
+    } else {
+      // fallback: נסה למצוא קובץ גיליון לפי אינדקס
+      const possiblePaths = [
+        `xl/worksheets/sheet${i + 1}.xml`,
+        `xl/worksheets/sheet${sheet.getAttribute('sheetId') || i + 1}.xml`,
+      ];
+      
+      for (const possiblePath of possiblePaths) {
+        if (zip.file(possiblePath)) {
+          path = possiblePath;
+          break;
+        }
+      }
+      
+      // אם עדיין לא מצאנו, חפש כל קובץ sheet
+      if (!path) {
+        const worksheetsFolder = zip.folder('xl/worksheets');
+        if (worksheetsFolder) {
+          const files = Object.keys(zip.files).filter(f => f.startsWith('xl/worksheets/sheet') && f.endsWith('.xml'));
+          if (files[i]) {
+            path = files[i];
+          }
+        }
+      }
+    }
+
+    if (path) {
+      sheets.push({ name, path });
+    }
   }
 
   return sheets;

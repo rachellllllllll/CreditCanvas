@@ -1,7 +1,9 @@
 export interface CreditDetail {
   id: string;
   date: string;
-  amount: number; // נשמר תמיד כערך מוחלט (חיובי)
+  amount: number; // סכום חיוב - נשמר תמיד כערך מוחלט (חיובי)
+  transactionAmount?: number; // סכום עסקה מקורי (לפני פיצול תשלומים, במט"ח וכו')
+  transactionCurrency?: string; // מטבע עסקה מקורי (אם שונה מש"ח)
   description: string;
   category?: string;
   chargeDate?: string; // תאריך חיוב (optional, for credit card transactions)
@@ -16,12 +18,16 @@ export interface CreditDetail {
   transactionType?: 'regular' | 'credit_charge' | 'credit_charge_combined' | 'debit' | 'cash' | 'fee';
   matchReason?: string; // סיבת התאמה (pattern+amount / amount / combined_N)
   matchedComboSize?: number; // במקרה של חיוב בנק מאוחד (כמה מחזורים)
+  matchedCardLast4?: string; // כרטיס שהותאם (בחיוב בנק שזוהה)
   neutral?: boolean;
   relatedTransactionIds?: string[];
   matchedCycleKeys?: string[]; // במקרה של חיוב בנק המכסה כמה מחזורי כרטיס
   totalChargeAmount?: number;
   userAdjustedDirection?: boolean;
   userAdjustmentNote?: string;
+  // --- שדות מקורות הכנסה ---
+  transactionNature?: 'income' | 'expense' | 'expense_reversal';
+  incomeSourceId?: string; // מזהה כלל מקור ההכנסה שהתאים
 }
 
 export interface CreditChargeCycleSummary {
@@ -53,9 +59,42 @@ export interface CategoryRule {
   createdAt: string; // ISO timestamp
   source?: 'user' | 'migration' | 'system';
   conditions: {
+    transactionId?: string;     // התאמה לעסקה בודדת לפי מזהה
     descriptionEquals?: string; // התאמה מדויקת לתיאור
     descriptionRegex?: string;  // חלופה: התאמה לפי ביטוי רגולרי (i)
     minAmount?: number;         // סכום מינימלי להחלה
     maxAmount?: number;         // סכום מקסימלי (אופציונלי)
+  };
+}
+
+// סוג טבע העסקה: הכנסה, הוצאה, או ביטול הוצאה (זיכוי)
+export type TransactionNature = 'income' | 'expense' | 'expense_reversal';
+
+// כלל לזיהוי מקור הכנסה
+export interface IncomeSourceRule {
+  id: string;
+  sourceType: 'business' | 'category' | 'transaction'; // transaction = עסקה בודדת
+  description: string; // שם בית העסק או הקטגוריה
+  transactionId?: string; // מזהה עסקה (כאשר sourceType === 'transaction')
+  matchType: 'equals' | 'contains' | 'regex';
+  isIncomeSource: boolean; // true = מקור הכנסה, false = לא מקור הכנסה (סימון שלילי)
+  incomeType?: string; // סוג ההכנסה (משכורת, החזר, וכו')
+  autoDetected: boolean;
+  confirmedByUser: boolean;
+  createdAt: string;
+  monthsDetected?: number; // כמה חודשים זוהו (לזיהוי אוטומטי)
+}
+
+// מקור הכנסה פוטנציאלי שממתין לאישור משתמש
+export interface PendingIncomeSource {
+  description: string;
+  totalAmount: number;
+  monthsWithIncome: number;
+  transactionCount: number;
+  hasMatchingExpenses: boolean;
+  matchInfo?: {
+    sameVendorMatches: number;
+    globalMatches: number;
+    totalMonths: number;
   };
 }

@@ -63,7 +63,7 @@ const DEFAULT_WINDOW_CONFIG: WindowConfig = { daysBeforeCharge: 1, daysAfterChar
 const BASE_FALLBACK_PATTERN_STRINGS: string[] = [];
 
 // ensurePatternsFile: טוען או יוצר (אם חסר) קובץ JSON עם רשימת תבניות זיהוי חיובי אשראי
-async function ensurePatternsFile(dirHandle: any): Promise<CreditChargePattern[]> {
+async function ensurePatternsFile(dirHandle: FileSystemDirectoryHandle): Promise<CreditChargePattern[]> {
   if (!dirHandle) return BASE_FALLBACK_PATTERN_STRINGS.map(v => ({ value: v, type: 'contains', active: true }));
   try {
     const fh = await dirHandle.getFileHandle(PATTERNS_JSON_FILENAME);
@@ -114,7 +114,7 @@ function compilePatternToRegex(p: CreditChargePattern): RegExp | null {
 export async function markBankCreditChargesExactWithPatterns(
   details: CreditDetail[],
   cycles: CreditChargeCycleSummary[],
-  dirHandle: any,
+  dirHandle: FileSystemDirectoryHandle,
   opts: MatchOptions = {}
 ): Promise<MarkResult> {
   const {
@@ -175,7 +175,8 @@ export async function markBankCreditChargesExactWithPatterns(
         transactionType: 'credit_charge',
         neutral: true,
         relatedTransactionIds: matched.transactionIds,
-        matchReason: patternMatched ? 'pattern+amount' : 'amount'
+        matchReason: patternMatched ? 'pattern+amount' : 'amount',
+        matchedCardLast4: matched.cardLast4 // הכרטיס שהותאם
       };
     }
     return d;
@@ -313,7 +314,7 @@ export function markBankCombinedCreditCharges(
 // Orchestrator: מבצע את כל השלבים של זיהוי חיובי אשראי (patterns + exact + שילובים 2/3/4) ומחזיר פרטי ניתוח
 export async function processCreditChargeMatching(
   allDetails: CreditDetail[],
-  dirHandle: any,
+  dirHandle: FileSystemDirectoryHandle,
   opts: MatchOptions = {}
 ): Promise<{ details: CreditDetail[]; creditChargeCycles: CreditChargeCycleSummary[] }> {
   const cycles = computeCreditChargeCycles(allDetails);

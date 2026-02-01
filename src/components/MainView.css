@@ -1,12 +1,10 @@
-.main-view {
-  padding-top: calc(var(--header-height, 140px) + 16px); /* מרווח מתחת לכותרת הקבועה */
-}
+/* הסרת padding-top כי header-top כבר לא fixed */
 /* --- Metrics Cards Layout (Screenshot style) --- */
 .metrics-cards {
   display: flex;
   gap: 28px;
   width: 100%;
-  padding: 18px 4px;
+  padding: 14px 4px;
   box-sizing: border-box;
   direction: rtl; /* יישור תוכן כללי לימין עבור עברית */
 }
@@ -76,16 +74,122 @@
 }
 /* MainView Enhanced Styles */
 .main-view {
-  padding: 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  min-height: 100vh;
   font-family: system-ui, -apple-system, sans-serif;
   direction: rtl;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Header */
-.main-view-header {
-  margin-bottom: 20px;
+.main-content {
+  flex: 1;
+}
+
+/* ===== HYBRID LAYOUT: טבלה + גרף בצד ===== */
+.content-with-sidebar {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.content-with-sidebar .main-table {
+  flex: 1;
+  min-width: 0;
+}
+
+.chart-sidebar {
+  position: relative;
+  background: transparent;
+}
+
+/* במסכים גדולים - Layout של צד-לצד */
+@media (min-width: 1200px) {
+  .content-with-sidebar {
+    flex-direction: row; /* גרף בצד שמאל, טבלה בימין */
+    align-items: flex-start;
+  }
+
+  /* במסך גדול: טבלה תופיע ראשונה (ימין), גרף שני (שמאל) */
+  .content-with-sidebar .main-table {
+    order: 1; /* ימין */
+    flex: 1;
+  }
+
+  .chart-sidebar {
+    order: 2; /* שמאל */
+    width: 340px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 140px; /* מתחת ל-header */
+    /* הסרת max-height ו-overflow - הלגנדה מוגבלת ע"י maxVisibleCategories */
+  }
+
+  /* wrapper פנימי - ללא גלילה, הלגנדה מוגבלת */
+  .chart-sidebar .category-donut-chart {
+    /* ללא max-height - הלגנדה מוגבלת ע"י כפתור "הצג עוד" */
+  }
+}
+
+/* מסכים גדולים יותר - גרף רחב יותר */
+@media (min-width: 1400px) {
+  .chart-sidebar {
+    width: 380px;
+  }
+}
+
+/* ===== התאמות לגרף במצב sidebar ===== */
+@media (min-width: 1200px) {
+  .chart-sidebar .category-donut-chart {
+    max-width: none;
+    border-radius: 12px;
+  }
+
+  .chart-sidebar .donut-header {
+    cursor: default; /* לא מקופל במצב sidebar */
+  }
+
+  .chart-sidebar .collapse-arrow {
+    display: none; /* הסתר חץ קיפול */
+  }
+
+  .chart-sidebar .donut-content.visible {
+    max-height: none;
+  }
+
+  /* Layout אנכי בתוך ה-sidebar */
+  .chart-sidebar .donut-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .chart-sidebar .donut-chart-container {
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+  }
+
+  .chart-sidebar .donut-legend {
+    width: 100%;
+  }
+
+  /* הסתר את בר ההתקדמות בסיידבר - אין מקום */
+  .chart-sidebar .legend-bar-container {
+    display: none;
+  }
+
+  .chart-sidebar .legend-item {
+    padding: 6px 10px;
+  }
+
+  .chart-sidebar .legend-value {
+    min-width: 65px;
+    font-size: 0.8rem;
+  }
+
+  .chart-sidebar .legend-percent {
+    min-width: 32px;
+  }
 }
 
 .header-top {
@@ -94,20 +198,16 @@
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  padding: 20px;
+  padding: 16px 20px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  position: fixed; /* כותרת תמיד נראית גם בגלילה */
+  position: sticky; /* כותרת נשארת גלויה בגלילה אבל בתוך main-view */
   top: 0;
-  left: 0;
-  right: 0;
   z-index: 200; /* מעל טבלה / תוכן */
   transition: padding .25s ease, box-shadow .25s ease, background .25s ease;
   backdrop-filter: saturate(1.2) blur(2px);
-  width: 100%;
-  box-sizing: border-box;
-  padding-inline: 20px; /* התאמה לרוחב מעטפת */
+  margin-bottom: 16px; /* מרווח מתחת לכותרת */
 }
 
 /* מצב מכווץ לאחר גלילה */
@@ -117,21 +217,309 @@
   border-radius: 12px;
 }
 
-/* אלמנט מרווח תחת הכותרת הקבועה */
-.header-spacer {
-  height: var(--header-height, 140px); /* גובה דינמי בהתאם למדידה */
-  width: 100%;
+/* ===== NEW HEADER LAYOUT ===== */
+.header-top-new {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
 }
 
-/* התאמת מרווח עליון למעטפת הראשית כדי למנוע חפיפה עם ה-fixed */
-.main-view {
-  padding-top: var(--header-height, 120px); /* מרווח נוסף מעל התוכן בפועל */
+.header-right-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
+
+.header-center-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-left-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Icon buttons for filter/settings */
+.header-btn-wrapper {
+  position: relative;
+}
+
+.header-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.header-icon-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #f5f3ff;
+  transform: translateY(-1px);
+}
+
+.header-icon-btn.open {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #eef2ff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.header-icon-btn.has-filter {
+  border-color: #6366f1;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.header-icon-btn.has-filter:hover,
+.header-icon-btn.has-filter.open {
+  /* background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); */
+  box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+}
+
+/* Filter badge */
+.filter-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #fff;
+  color: #6366f1;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  border: 2px solid #6366f1;
+}
+
+/* Header popovers */
+.header-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
+  z-index: 500;
+  min-width: 280px;
+  animation: popoverFadeIn 0.2s ease;
+  overflow: hidden;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.popover-title {
+  padding: 16px 20px 14px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popover-title::before {
+  content: "";
+  width: 4px;
+  height: 16px;
+  background: linear-gradient(180deg, #6366f1, #8b5cf6);
+  border-radius: 2px;
+}
+
+.popover-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.popover-section:last-child {
+  border-bottom: none;
+}
+
+.popover-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Filter popover - wrap SourceFilter */
+.filter-popover {
+  min-width: 340px;
+  padding: 12px 16px 16px;
+}
+
+.filter-popover .source-filter-wrapper {
+  position: static;
+}
+
+.filter-popover .source-filter-btn {
+  display: none;
+}
+
+.filter-popover .source-filter-popover {
+  position: static;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  animation: none;
+}
+
+/* Date mode toggle compact */
+.date-mode-toggle-compact {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.date-mode-toggle-compact button {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-mode-toggle-compact button.active {
+  background: #fff;
+  color: #6366f1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.date-mode-toggle-compact button:hover:not(.active) {
+  color: #1e293b;
+  background: rgba(255,255,255,0.5);
+}
+
+/* Folder display in settings */
+.folder-display {
+  font-size: 13px;
+  color: #475569;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-display::before {
+  /* content: "📁"; */
+  font-size: 14px;
+}
+
+.folder-change-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.folder-change-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #f5f3ff;
+  transform: translateY(-1px);
+}
+
+/* Advanced settings link */
+.popover-section-link {
+  padding: 12px 16px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.advanced-settings-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.advanced-settings-link:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #f5f3ff;
+  transform: translateX(-3px);
+}
+
+.advanced-settings-link svg {
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+
+.advanced-settings-link:hover svg {
+  color: #6366f1;
+}
+
+.advanced-settings-link .arrow-icon {
+  margin-right: auto;
+}
+
+/* ===== END NEW HEADER LAYOUT ===== */
 
 .header-top h1 {
   margin: 0;
   font-size: 2.2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -141,10 +529,10 @@
 /* View Toggle - moved to header */
 .view-toggle {
   display: flex;
-  background-color: #f8f9fa;
+  background-color: #f1f5f9;
   border-radius: 12px;
   padding: 4px;
-  border: 1px solid #e9ecef;
+  border: 1px solid #e2e8f0;
   flex-shrink: 0;
 }
 
@@ -152,24 +540,24 @@
   padding: 10px 18px;
   border: none;
   background: transparent;
-  color: #6c757d;
+  color: #64748b;
   border-radius: 8px;
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 13px;
   transition: all 0.2s ease;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .view-toggle button.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #6366f1;
   color: white;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .view-toggle button:hover:not(.active) {
-  background-color: #e9ecef;
-  color: #495057;
+  background-color: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
 }
 
 .header-controls {
@@ -552,7 +940,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   font-weight: 600;
 }
@@ -622,19 +1010,213 @@
 
 /* Table Section */
 .table-section {
-  margin-top: 2rem;
   border: 1px solid #e0e0e0;
   border-radius: 12px;
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  /* overflow: hidden; */
 }
 
-/* Yearly View */
+/* Yearly View - Charts above, full-width table below */
 .yearly-view {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 20px;
+}
+
+/* Yearly charts section - horizontal layout for bar + donut */
+.yearly-charts-section {
+  display: flex;
+  gap: 20px;
+  align-items: stretch; /* שני הגרפים באותו גובה */
+}
+
+/* Bar chart takes most of the width */
+.yearly-charts-section > .yearly-months-chart {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== Yearly Donut Sidebar ===== */
+.yearly-donut-sidebar {
+  position: relative;
+  width: 320px;
+  flex-shrink: 0;
+}
+
+/* Donut chart wrapper - fixed height */
+.yearly-donut-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Style the donut in yearly view */
+.yearly-donut-wrapper .category-donut-chart {
+  background: linear-gradient(135deg, #fafbff 0%, #ffffff 100%);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e8ecf4;
+  margin-bottom: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.yearly-donut-wrapper .donut-header-wrapper {
+  background: linear-gradient(135deg, #f8faff 0%, #f0f4ff 100%);
+  border-radius: 16px 16px 0 0;
+  flex-shrink: 0;
+}
+
+.yearly-donut-wrapper .donut-header {
+  padding: 10px 14px;
+}
+
+.yearly-donut-wrapper .donut-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.yearly-donut-wrapper .donut-content.visible {
+  padding: 12px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Layout קומפקטי לדונאט בתצוגה שנתית */
+.yearly-donut-wrapper .donut-layout {
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.yearly-donut-wrapper .donut-chart-container {
+  width: 150px;
+  height: 150px;
+  margin: 0 auto;
+  flex-shrink: 0;
+}
+
+.yearly-donut-wrapper .donut-center-value {
+  font-size: 1rem;
+}
+
+.yearly-donut-wrapper .donut-center-label {
+  font-size: 0.7rem;
+}
+
+/* לגנדה עם גלילה + אינדיקטור fade */
+.yearly-donut-wrapper .donut-legend {
+  flex: 1;
+  width: 100%; /* חשוב! מבטיח רוחב מלא */
+  overflow-y: auto;
+  overflow-x: hidden; /* מונע סקרול אופקי מיותר */
+  position: relative;
+  padding-bottom: 8px; /* מרווח בטחון מתחת לפריט האחרון */
+  /* Scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.yearly-donut-wrapper .donut-legend::-webkit-scrollbar {
+  width: 4px;
+}
+
+.yearly-donut-wrapper .donut-legend::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.yearly-donut-wrapper .donut-legend::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.yearly-donut-wrapper .donut-legend::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* פריטי לגנדה בתצוגה שנתית - גדלים קריאים */
+.yearly-donut-wrapper .legend-item {
+  padding: 6px 10px;
+  gap: 8px;
+  /* מבטל border שגורם לסקרול ב-hover */
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.yearly-donut-wrapper .legend-item:hover,
+.yearly-donut-wrapper .legend-item.hovered {
+  background: #e2e8f0;
+}
+
+.yearly-donut-wrapper .legend-icon {
+  font-size: 1.1rem;
+}
+
+.yearly-donut-wrapper .legend-name {
+  font-size: 0.88rem;
+}
+
+.yearly-donut-wrapper .legend-percent {
+  font-size: 0.82rem;
+  min-width: 32px;
+}
+
+/* הסתר פרטים מיותרים בתצוגה שנתית */
+.yearly-donut-wrapper .legend-bar-container,
+.yearly-donut-wrapper .legend-value {
+  display: none;
+}
+
+/* הסתר כפתור "הצג עוד" בתצוגה שנתית - יש גלילה במקום */
+.yearly-donut-wrapper .legend-expand-btn {
+  display: none;
+}
+
+/* Full-width table section */
+.yearly-table-section {
+  width: 100%;
+}
+
+.yearly-table-section .transactions-table-wrapper,
+.yearly-table-section .table-container {
+  width: 100%;
+}
+
+/* Responsive - stack on smaller screens */
+@media (max-width: 1200px) {
+  .yearly-charts-section {
+    flex-direction: column;
+  }
+  
+  .yearly-donut-sidebar {
+    width: 100%;
+  }
+  
+  .yearly-donut-sidebar .yearly-donut-wrapper {
+    flex: none;
+    max-width: 100%;
+    width: 100%;
+  }
+  
+  .yearly-donut-wrapper .category-donut-chart {
+    max-width: 500px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .yearly-charts-section {
+    gap: 16px;
+  }
 }
 
 /* Display Mode segmented control */

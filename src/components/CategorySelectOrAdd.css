@@ -3,22 +3,28 @@
 .CategorySelectOrAdd {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   position: relative;
-  width: 260px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
 }
 
 .CategorySelectOrAdd-input-wrapper {
-  flex: 1;
+  /* flex: 1 1 120px; */
+  min-width: 0;
   position: relative;
 }
 
 .CategorySelectOrAdd-input {
-  width: 170px;
+  width: 100%;
+  min-width: 80px;
   padding: 7px;
   border-radius: 4px;
   border: 1px solid #ccc;
   font-size: 16px;
+  box-sizing: border-box;
 }
 
 .CategorySelectOrAdd-dropdown {
@@ -43,7 +49,7 @@
   background: #fff;
   border: 1px solid #cfd8dc;
   border-radius: 10px;
-  z-index: 5000;
+  z-index: 10000;
   /* max-height נקבע inline כדי להתאים לגובה הזמין במסך */
   overflow-y: auto;
   box-shadow: 0 12px 32px -8px rgba(0,0,0,0.25);
@@ -64,40 +70,44 @@
 }
 
 .CategorySelectOrAdd-dropdown-option.selected {
-  background: #e3f2fd;
+  background: #eef2ff;
 }
 
 .CategorySelectOrAdd-icon-btn {
   border: none;
   background: none;
   border-radius: 6px;
-  padding: 4px 10px;
-  color: #36A2EB;
+  padding: 4px 6px;
+  color: #6366f1;
   font-weight: 700;
-  font-size: 22px;
+  font-size: 20px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .CategorySelectOrAdd-color-input {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   background: inherit;
   box-shadow: 0 0 0 2px #ddd;
+  flex-shrink: 0;
 }
 
 .CategorySelectOrAdd-add-btn {
   border: none;
-  background: #4CAF50;
+  background: #10b981;
   border-radius: 6px;
-  padding: 6px 14px;
+  padding: 5px 10px;
   color: #fff;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   margin-inline-start: 2px;
   cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Chip preview styles */
@@ -126,6 +136,15 @@
   opacity: 1;
   border-style: solid;
   box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+
+/* Disabled/non-interactive variant for suggested target chip */
+.CategorySelectOrAdd-chip.disabled {
+  opacity: 0.8;
+  cursor: default;
+  pointer-events: none;
+  box-shadow: none;
+  border-style: dashed;
 }
 
 .CategorySelectOrAdd-icon-picker-overlay {
@@ -205,17 +224,17 @@
 }
 
 .CategorySelectOrAdd-icon-picker-icon.selected {
-  border: 2.5px solid #36A2EB;
-  background: #e3f2fd;
+  border: 2.5px solid #6366f1;
+  background: #eef2ff;
 }
 
 .CategorySelectOrAdd-icon-picker-cancel {
   margin-top: 18px;
   padding: 7px 18px;
   border-radius: 4px;
-  border: 1.5px solid #7ecbff;
+  border: 1.5px solid #6366f1;
   background: #fff;
-  color: #36A2EB;
+  color: #6366f1;
   font-weight: 700;
   cursor: pointer;
 }
