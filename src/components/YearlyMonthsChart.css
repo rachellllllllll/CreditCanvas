@@ -1,0 +1,352 @@
+/* YearlyMonthsChart - 12-month bar chart for yearly view */
+
+.yearly-months-chart {
+  background: linear-gradient(135deg, #fafbff 0%, #ffffff 100%);
+  border-radius: 20px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e8ecf4;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.yearly-months-chart::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.ymc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.ymc-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ymc-title::before {
+  content: '📊';
+  font-size: 1.2rem;
+}
+
+.ymc-total {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  padding: 8px 16px;
+  border-radius: 24px;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.ymc-chart {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 1;
+  min-height: 180px;
+  padding: 0 8px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Grid lines behind bars */
+.ymc-chart::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 30px;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0px,
+    transparent 35px,
+    #f1f5f9 35px,
+    #f1f5f9 36px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ymc-bar-wrapper {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.ymc-bar-wrapper.has-data:hover {
+  transform: scale(1.1) translateY(-2px);
+}
+
+.ymc-bar-wrapper.has-data:hover .ymc-bar {
+  box-shadow: 0 8px 20px var(--bar-shadow-color, rgba(99, 102, 241, 0.35));
+}
+
+.ymc-bar-wrapper.no-data {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.ymc-bar-wrapper:focus {
+  outline: none;
+}
+
+.ymc-bar-wrapper.has-data:focus-visible .ymc-bar {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+}
+
+.ymc-bar-container {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.ymc-bar {
+  width: 100%;
+  max-width: 44px;
+  min-height: 4px;
+  border-radius: 6px 6px 2px 2px;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  background: var(--bar-gradient);
+  position: relative;
+}
+
+/* Shine effect on bar */
+.ymc-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.3) 0%, transparent 100%);
+  border-radius: 6px 6px 0 0;
+  pointer-events: none;
+}
+
+.ymc-amount {
+  position: absolute;
+  top: -28px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: all 0.2s ease;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.ymc-bar-wrapper:hover .ymc-amount,
+.ymc-bar-wrapper:focus .ymc-amount {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ymc-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  white-space: nowrap;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.ymc-bar-wrapper.has-data:hover .ymc-label {
+  color: var(--bar-hover-color);
+  transform: scale(1.05);
+}
+
+.ymc-hint {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ymc-hint::before {
+  content: '👆';
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .yearly-months-chart {
+    padding: 20px;
+  }
+  
+  .ymc-chart {
+    height: 150px;
+    gap: 4px;
+  }
+  
+  .ymc-bar-container {
+    height: 110px;
+  }
+  
+  .ymc-bar {
+    max-width: 36px;
+  }
+  
+  .ymc-label {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .yearly-months-chart {
+    padding: 16px 12px;
+    border-radius: 16px;
+  }
+  
+  .ymc-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .ymc-title {
+    font-size: 0.95rem;
+  }
+  
+  .ymc-title::before {
+    font-size: 1rem;
+  }
+  
+  .ymc-total {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+  }
+  
+  .ymc-chart {
+    height: 120px;
+    gap: 2px;
+    padding: 0 4px;
+  }
+  
+  .ymc-chart::before {
+    display: none;
+  }
+  
+  .ymc-bar-container {
+    height: 85px;
+  }
+  
+  .ymc-bar {
+    max-width: 28px;
+    border-radius: 4px 4px 1px 1px;
+  }
+  
+  .ymc-label {
+    font-size: 0.6rem;
+    font-weight: 500;
+  }
+  
+  .ymc-amount {
+    display: none;
+  }
+  
+  .ymc-hint {
+    margin-top: 12px;
+    font-size: 0.75rem;
+  }
+}
+
+/* Income mode colors */
+.yearly-months-chart[data-mode="income"] .ymc-total {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .yearly-months-chart {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-color: #334155;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  
+  .yearly-months-chart::before {
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+  }
+  
+  .ymc-title {
+    color: #f1f5f9;
+  }
+  
+  .ymc-total {
+    background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%);
+    color: #a5b4fc;
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+  
+  .ymc-chart::before {
+    background: repeating-linear-gradient(
+      180deg,
+      transparent 0px,
+      transparent 35px,
+      rgba(148, 163, 184, 0.1) 35px,
+      rgba(148, 163, 184, 0.1) 36px
+    );
+  }
+  
+  .ymc-label {
+    color: #94a3b8;
+  }
+  
+  .ymc-hint {
+    color: #64748b;
+  }
+  
+  .ymc-amount {
+    background: #1e293b;
+    color: #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+}

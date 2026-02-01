@@ -1,0 +1,183 @@
+/* Missing Data Alert - התראה על נתונים חסרים */
+
+.missing-data-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  margin: 8px 0;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+  animation: missing-data-slide-in 0.3s ease-out;
+}
+
+/* מצב "נתונים ישנים" - צבע כחול-אפור */
+.missing-data-alert.old-data {
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  border-color: #6366f1;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.missing-data-alert.old-data .missing-data-text {
+  color: #3730a3;
+}
+
+.missing-data-alert.old-data .missing-data-btn-primary {
+  background: #6366f1;
+}
+
+.missing-data-alert.old-data .missing-data-btn-primary:hover {
+  background: #4f46e5;
+}
+
+.missing-data-alert.old-data .missing-data-btn-dismiss {
+  color: #3730a3;
+}
+
+.missing-data-alert.old-data .missing-data-btn-dismiss:hover {
+  background: rgba(55, 48, 163, 0.1);
+}
+
+@keyframes missing-data-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.missing-data-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.missing-data-icon {
+  font-size: 1.25rem;
+}
+
+.missing-data-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #92400e;
+}
+
+.missing-data-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.missing-data-btn {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.missing-data-btn-primary {
+  padding: 6px 14px;
+  background: #f59e0b;
+  color: white;
+}
+
+.missing-data-btn-primary:hover {
+  background: #d97706;
+  transform: translateY(-1px);
+}
+
+.missing-data-btn-dismiss {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: #92400e;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.missing-data-btn-dismiss:hover {
+  background: rgba(146, 64, 14, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .missing-data-alert {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .missing-data-content {
+    justify-content: center;
+  }
+  
+  .missing-data-actions {
+    justify-content: center;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .missing-data-alert {
+    background: linear-gradient(135deg, #451a03 0%, #78350f 100%);
+    border-color: #b45309;
+  }
+  
+  .missing-data-text {
+    color: #fde68a;
+  }
+  
+  .missing-data-btn-primary {
+    background: #b45309;
+  }
+  
+  .missing-data-btn-primary:hover {
+    background: #d97706;
+  }
+  
+  .missing-data-btn-dismiss {
+    color: #fde68a;
+  }
+  
+  .missing-data-btn-dismiss:hover {
+    background: rgba(253, 230, 138, 0.1);
+  }
+  
+  /* Dark mode for old data alert */
+  .missing-data-alert.old-data {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+    border-color: #6366f1;
+  }
+  
+  .missing-data-alert.old-data .missing-data-text {
+    color: #c7d2fe;
+  }
+  
+  .missing-data-alert.old-data .missing-data-btn-primary {
+    background: #4f46e5;
+  }
+  
+  .missing-data-alert.old-data .missing-data-btn-primary:hover {
+    background: #6366f1;
+  }
+  
+  .missing-data-alert.old-data .missing-data-btn-dismiss {
+    color: #c7d2fe;
+  }
+  
+  .missing-data-alert.old-data .missing-data-btn-dismiss:hover {
+    background: rgba(199, 210, 254, 0.1);
+  }
+}

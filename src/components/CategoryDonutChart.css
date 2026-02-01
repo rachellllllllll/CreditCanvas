@@ -1,0 +1,654 @@
+/* CategoryDonutChart.css - עיצוב גרף Donut להתפלגות קטגוריות */
+
+.category-donut-chart {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+  max-width: 900px; /* מונע התפרסות יתר במסכים רחבים */
+}
+
+.category-donut-chart:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* עטיפת הכותרת עם Toggle */
+.donut-header-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding-left: 12px;
+}
+
+/* כפתורי Toggle הוצאות/הכנסות */
+.chart-view-toggle {
+  display: flex;
+  gap: 4px;
+  background: #e2e8f0;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.chart-view-toggle .toggle-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.chart-view-toggle .toggle-btn:hover {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.chart-view-toggle .toggle-btn.active {
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* כותרת הגרף (ללא פעולת סגירה) */
+.donut-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  padding: 14px 18px;
+  background: transparent;
+  border: none;
+  cursor: default;
+  transition: background 0.2s ease;
+  text-align: right;
+}
+
+.donut-header:hover {
+  /* ללא אפקט hover - לא ניתן ללחוץ */
+}
+
+.donut-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.donut-icon {
+  font-size: 1.3rem;
+}
+
+.donut-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.donut-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.donut-preview {
+  font-size: 0.85rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.preview-item {
+  font-weight: 500;
+}
+
+.preview-more {
+  color: #94a3b8;
+}
+
+.collapse-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+  color: #64748b;
+}
+
+.collapse-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* תוכן הגרף */
+.donut-content {
+  overflow: hidden;
+  transition: max-height 0.35s ease, opacity 0.25s ease, padding 0.35s ease;
+}
+
+.donut-content.hidden {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 18px;
+}
+
+.donut-content.visible {
+  max-height: 600px;
+  opacity: 1;
+  padding: 18px;
+  padding-top: 8px;
+}
+
+/* Layout: גרף משמאל, לגנדה מימין */
+.donut-layout {
+  display: flex;
+  flex-direction: row-reverse; /* RTL: גרף בצד שמאל */
+  align-items: flex-start;
+  gap: 24px;
+}
+
+/* Container לגרף */
+.donut-chart-container {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  flex-shrink: 0;
+}
+
+/* טקסט במרכז הדונאט */
+.donut-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.donut-center-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.donut-center-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+/* לגנדה */
+.donut-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: right;
+  width: 100%;
+}
+
+.legend-item:hover,
+.legend-item.hovered {
+  background: #f1f5f9;
+  border-color: var(--legend-color, #e2e8f0);
+}
+
+.legend-item.selected {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: var(--legend-color, #3b82f6);
+  box-shadow: 0 0 0 1px var(--legend-color, #3b82f6);
+}
+
+.legend-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.legend-bar-container {
+  width: 100px;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.legend-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.legend-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 70px;
+  text-align: left;
+  direction: ltr;
+}
+
+.legend-percent {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #64748b;
+  min-width: 36px;
+  text-align: left;
+  direction: ltr;
+}
+
+/* הודעת סינון פעיל */
+.filter-active-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 8px;
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: #92400e;
+}
+
+.filter-active-notice strong {
+  color: #78350f;
+}
+
+.clear-filter-btn {
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #92400e;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.clear-filter-btn:hover {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+/* כפתור הצג עוד / הצג פחות בלגנדה */
+.legend-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 4px;
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.legend-expand-btn:hover {
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  border-color: #94a3b8;
+  color: #334155;
+}
+
+.legend-expand-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+.legend-expand-btn .expand-icon {
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+}
+
+.legend-expand-btn:hover .expand-icon {
+  transform: translateY(2px);
+}
+
+.legend-expand-btn[aria-expanded="true"]:hover .expand-icon {
+  transform: translateY(-2px);
+}
+
+/* Responsive: מסכים קטנים */
+@media (max-width: 768px) {
+  .donut-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .donut-chart-container {
+    width: 160px;
+    height: 160px;
+  }
+
+  .donut-legend {
+    width: 100%;
+  }
+
+  .legend-bar-container {
+    display: none;
+  }
+
+  .donut-preview {
+    display: none;
+  }
+}
+
+/* Responsive: מסכים גדולים (דסקטופ) */
+@media (min-width: 1200px) {
+  .donut-chart-container {
+    width: 260px;
+    height: 260px;
+  }
+
+  .donut-center-value {
+    font-size: 1.4rem;
+  }
+
+  .legend-item {
+    padding: 10px 14px;
+    gap: 12px;
+  }
+
+  .legend-bar-container {
+    width: 140px;
+  }
+
+  .legend-name {
+    font-size: 0.95rem;
+  }
+
+  .legend-value {
+    font-size: 0.9rem;
+    min-width: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .donut-header {
+    padding: 12px 14px;
+  }
+
+  .donut-content.visible {
+    padding: 14px;
+  }
+
+  .donut-chart-container {
+    width: 140px;
+    height: 140px;
+  }
+
+  .legend-item {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .legend-value {
+    min-width: 60px;
+    font-size: 0.8rem;
+  }
+
+  .legend-percent {
+    min-width: 30px;
+    font-size: 0.75rem;
+  }
+}
+
+/* אנימציות */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.donut-content.visible .donut-layout {
+  animation: fadeInScale 0.3s ease;
+}
+
+/* ===== COMPACT MODE - תצוגה שנתית ===== */
+.category-donut-chart.compact-mode .donut-layout {
+  flex-direction: column; /* גרף למעלה, legend למטה */
+  align-items: center;
+  gap: 16px;
+}
+
+.category-donut-chart.compact-mode .donut-chart-container {
+  width: 160px;
+  height: 160px;
+}
+
+.category-donut-chart.compact-mode .donut-center-label {
+  font-size: 0.65rem;
+}
+
+.category-donut-chart.compact-mode .donut-center-value {
+  font-size: 1rem;
+}
+
+.category-donut-chart.compact-mode .donut-legend {
+  width: 100%;
+  gap: 4px;
+}
+
+.category-donut-chart.compact-mode .legend-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  gap: 8px;
+}
+
+/* Color dot for compact mode */
+.legend-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: none;
+}
+
+.category-donut-chart.compact-mode .legend-color-dot {
+  display: block;
+}
+
+.category-donut-chart.compact-mode .legend-icon {
+  font-size: 1rem;
+}
+
+.category-donut-chart.compact-mode .legend-name {
+  font-size: 0.8rem;
+  flex: 1;
+}
+
+.category-donut-chart.compact-mode .legend-percent {
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 32px;
+  color: #475569;
+}
+
+/* הסתר bar container במצב קומפקטי */
+.category-donut-chart.compact-mode .legend-bar-container {
+  display: none;
+}
+
+/* הסתר value במצב קומפקטי */
+.category-donut-chart.compact-mode .legend-value {
+  display: none;
+}
+
+/* תוכן מצומצם יותר */
+.category-donut-chart.compact-mode .donut-content.visible {
+  padding: 14px;
+  padding-top: 6px;
+}
+
+/* Dark mode support (אם יש) */
+@media (prefers-color-scheme: dark) {
+  .category-donut-chart {
+    background: #1e293b;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .donut-header {
+    background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+  }
+
+  .donut-header:hover {
+    background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  }
+
+  .donut-title {
+    color: #f1f5f9;
+  }
+
+  .donut-preview {
+    color: #94a3b8;
+  }
+
+  .donut-center-label {
+    color: #94a3b8;
+  }
+
+  .donut-center-value {
+    color: #f1f5f9;
+  }
+
+  .legend-item {
+    background: #334155;
+  }
+
+  .legend-item:hover,
+  .legend-item.hovered {
+    background: #475569;
+  }
+
+  .legend-item.selected {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%);
+  }
+
+  .legend-name {
+    color: #e2e8f0;
+  }
+
+  .legend-bar-container {
+    background: #475569;
+  }
+
+  .legend-value {
+    color: #f1f5f9;
+  }
+
+  .legend-percent {
+    color: #94a3b8;
+  }
+
+  .filter-active-notice {
+    background: linear-gradient(135deg, #451a03 0%, #78350f 100%);
+    color: #fde68a;
+  }
+
+  .filter-active-notice strong {
+    color: #fef3c7;
+  }
+
+  .clear-filter-btn {
+    background: #292524;
+    border-color: #78350f;
+    color: #fde68a;
+  }
+
+  .clear-filter-btn:hover {
+    background: #451a03;
+  }
+}
+
+/* ===========================================
+   סגנונות לקטגוריות עם עודף החזרים (שליליות)
+   =========================================== */
+
+/* טקסט ירוק לקטגוריות עם עודף החזרים */
+.refund-text {
+  color: #10b981 !important;
+}
+
+/* סגנון מיוחד לפריט לגנדה של החזרים */
+.legend-item.is-refund {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+}
+
+.legend-item.is-refund:hover,
+.legend-item.is-refund.hovered {
+  background: #dcfce7;
+  border-color: #10b981;
+}
+
+.legend-item.is-refund.selected {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  border-color: #10b981;
+  box-shadow: 0 0 0 1px #10b981;
+}
+
+/* נקודת צבע עם גבול ירוק */
+.legend-item.is-refund .legend-color-dot {
+  box-sizing: border-box;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .refund-text {
+    color: #34d399 !important;
+  }
+
+  .legend-item.is-refund {
+    background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+  }
+
+  .legend-item.is-refund:hover,
+  .legend-item.is-refund.hovered {
+    background: #065f46;
+    border-color: #10b981;
+  }
+
+  .legend-item.is-refund.selected {
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+    border-color: #10b981;
+  }
+}
