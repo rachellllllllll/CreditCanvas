@@ -142,21 +142,32 @@ function hasMatchingExpenseInMonth(
 /**
  * בונה אינדקס של סכומי הוצאות לפי חודש וסכום
  * מאפשר חיפוש יעיל O(1) במקום O(n) לכל בדיקה
+ * 
+ * האינדקס שומר סכומים מרובים לכל הוצאה כדי לאפשר התאמה עם טולרנס
  */
 function buildExpenseIndex(vendors: Map<string, VendorAnalysis>): Map<string, Set<string>> {
-  // מפתח: "monthYear|amount" (מעוגל ל-1 ש"ח), ערך: סט של תיאורי בתי עסק
+  // מפתח: "monthYear|amount" (מעוגל ל-0.5 ש"ח), ערך: סט של תיאורי בתי עסק
   const index = new Map<string, Set<string>>();
+  
+  const addToIndex = (monthYear: string, amount: number, desc: string) => {
+    // שומר את הסכום המעוגל ל-0.5 ש"ח
+    const roundedAmount = Math.round(amount * 2) / 2;
+    const key = `${monthYear}|${roundedAmount}`;
+    
+    if (!index.has(key)) {
+      index.set(key, new Set());
+    }
+    index.get(key)!.add(desc);
+  };
   
   for (const [desc, vendor] of vendors) {
     for (const [monthYear, amount] of vendor.expenseByMonth) {
-      // מעגל ל-1 ש"ח כדי לאפשר טולרנס
-      const roundedAmount = Math.round(amount);
-      const key = `${monthYear}|${roundedAmount}`;
-      
-      if (!index.has(key)) {
-        index.set(key, new Set());
+      // שמור את הסכום המקורי
+      addToIndex(monthYear, amount, desc);
+      // שמור גם סכומים קרובים לטולרנס (עד 3 ש"ח)
+      for (let delta = -6; delta <= 6; delta++) {
+        addToIndex(monthYear, amount + delta * 0.5, desc);
       }
-      index.get(key)!.add(desc);
     }
   }
   
@@ -166,6 +177,7 @@ function buildExpenseIndex(vendors: Map<string, VendorAnalysis>): Map<string, Se
 /**
  * בודק אם יש יציאה מקבילה באותו חודש - בכל בית עסק (לא רק באותו vendor)
  * זה מזהה מצבים כמו: חיוב "תרומה" 55₪ + זיכוי "החזר חיוב טכני" 55₪
+ * או: חיוב "דמי כרטיס" 17.9₪ + זיכוי "MAX" 17.9₪
  * 
  * משתמש באינדקס לחיפוש יעיל O(1) במקום O(n)
  */
@@ -173,23 +185,18 @@ function hasMatchingExpenseGlobally(
   expenseIndex: Map<string, Set<string>>,
   currentVendorDesc: string,
   monthYear: string,
-  incomeAmount: number,
-  tolerance: number = 1 // סטייה של עד 1 ש"ח
+  incomeAmount: number
 ): boolean {
-  // בדוק סכומים מעוגלים בטווח של +-tolerance
-  const roundedAmount = Math.round(incomeAmount);
+  // מעגל ל-0.5 ש"ח כמו באינדקס
+  const roundedAmount = Math.round(incomeAmount * 2) / 2;
+  const key = `${monthYear}|${roundedAmount}`;
+  const vendors = expenseIndex.get(key);
   
-  // בדוק את הסכום המדויק ו-+-1 כדי לכסות טולרנס
-  for (let delta = -Math.ceil(tolerance); delta <= Math.ceil(tolerance); delta++) {
-    const key = `${monthYear}|${roundedAmount + delta}`;
-    const vendors = expenseIndex.get(key);
-    
-    if (vendors) {
-      // בדוק אם יש בית עסק אחר עם הוצאה בסכום הזה
-      for (const desc of vendors) {
-        if (desc !== currentVendorDesc) {
-          return true;
-        }
+  if (vendors) {
+    // בדוק אם יש בית עסק אחר עם הוצאה בסכום הזה
+    for (const desc of vendors) {
+      if (desc !== currentVendorDesc) {
+        return true;
       }
     }
   }
@@ -246,10 +253,12 @@ export function detectAutoIncomeSources(
     const totalMonths = vendor.incomeByMonth.size;
     const sameVendorRatio = sameVendorMatches / totalMonths;
     const globalRatio = globalMatches / totalMonths;
+    // יחס משולב: כל התאמה (מקומית או גלובלית) נספרת
+    const combinedRatio = (sameVendorMatches + globalMatches) / totalMonths;
     
-    // באותו בית עסק: אם 50%+ מהחודשים יש התאמה - זה לא הכנסה
-    // בבית עסק אחר: אם 70%+ מהחודשים יש התאמה - זה לא הכנסה (סף גבוה יותר כי פחות סביר)
-    const hasMatchingExpenses = sameVendorRatio >= 0.5 || globalRatio >= 0.7;
+    // אם יש התאמה ב-40%+ מהחודשים (סה"כ) - זה כנראה לא הכנסה אמיתית
+    // זה מזהה מקרים כמו: MAX +17.9 מול דמי כרטיס -17.9
+    const hasMatchingExpenses = sameVendorRatio >= 0.5 || globalRatio >= 0.4 || combinedRatio >= 0.4;
     
     if (hasMatchingExpenses) continue;
 
