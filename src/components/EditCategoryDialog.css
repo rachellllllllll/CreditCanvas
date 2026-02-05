@@ -10,8 +10,8 @@
 .edit-dialog-box {
   animation: scaleIn 0.25s ease-out;
   position: relative;
-  /* מניעת קפיצות בשינוי גובה */
-  transition: height 0.2s ease-out;
+  /* מניעת קפיצות בשינוי גובה + מעבר חלק ל-box-shadow */
+  transition: height 0.2s ease-out, box-shadow 0.4s ease-out;
   min-height: 280px;
 }
 
@@ -29,6 +29,39 @@
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* אפקט עדין בלחיצה על הרקע - רק box-shadow, בלי אנימציה */
+.edit-dialog-box.shake {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* שורת כלל אוטומטי עדינה */
+.edit-dialog-auto-rule-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  background: #f8fafc;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.edit-dialog-auto-rule-line:hover {
+  background: #f1f5f9;
+}
+
+.edit-dialog-checkbox-small {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.edit-dialog-auto-rule-text-subtle {
+  font-size: 12px;
+  color: #64748b;
 }
 
 /* כפתור X לסגירה */
@@ -69,6 +102,49 @@
 .edit-dialog-apply-all-section {
   margin-bottom: 12px;
   padding: 8px 0;
+}
+
+/* סינון סכום פשוט - שדות תמיד נראים */
+.edit-dialog-amount-filter-simple {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.edit-dialog-amount-label {
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.edit-dialog-amount-input-simple {
+  width: 80px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+  direction: rtl;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.edit-dialog-amount-input-simple:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.edit-dialog-amount-input-simple::placeholder {
+  color: #9ca3af;
+}
+
+.edit-dialog-amount-separator {
+  color: #cbd5e1;
+  font-size: 14px;
 }
 
 /* אנימציה חלקה לאלמנטים מתקפלים - מצב בסיס */
@@ -171,6 +247,28 @@
 .edit-dialog-candidates-table th:first-child {
   padding-left: 10px;
   padding-right: 10px;
+}
+
+/* סקשן בחירת קטגוריה - מודגש */
+.edit-dialog-category-section {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 2px solid #0ea5e9;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+  position: relative;
+}
+
+.edit-dialog-category-label-main {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 10px;
+}
+
+.edit-dialog-category-section .edit-dialog-help-message {
+  margin-top: 8px;
 }
 
 .edit-dialog-category-input-wrapper {
@@ -499,4 +597,130 @@
 
 .edit-dialog-search-banner strong {
   color: #1d4ed8;
+}
+
+/* באנר חיפוש גלובלי עם פילטרים */
+.edit-dialog-global-search-banner {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #0ea5e9;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.edit-dialog-global-search-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.edit-dialog-global-search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.edit-dialog-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: white;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #0369a1;
+}
+
+.edit-dialog-filter-chip-date {
+  background: #fef3c7;
+  border-color: #fbbf24;
+  color: #92400e;
+}
+
+.edit-dialog-filter-icon {
+  font-size: 12px;
+}
+
+/* תצוגה מקדימה של הכלל */
+.edit-dialog-rule-preview {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.edit-dialog-rule-preview-title {
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.edit-dialog-rule-preview-content {
+  color: #64748b;
+}
+
+.edit-dialog-rule-item {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-dialog-rule-result {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+  font-weight: 500;
+  color: #16a34a;
+}
+
+.edit-dialog-date-rule-option {
+  margin-top: 10px;
+  padding: 10px;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+}
+
+.edit-dialog-checkbox-label-small {
+  font-size: 13px;
+}
+
+.edit-dialog-date-warning {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+/* נגישות - מחלקה להסתרה ויזואלית */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* שיפור מיקוד מקלדת */
+.edit-dialog-checkbox:focus-visible,
+.edit-dialog-amount-input:focus-visible,
+.edit-dialog-close-btn:focus-visible,
+.edit-dialog-cancel-btn:focus-visible,
+.edit-dialog-save-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }

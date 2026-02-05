@@ -5,7 +5,8 @@ import CategoryDonutChart from './CategoryDonutChart';
 import MiniMonthsChart from './MiniMonthsChart';
 import YearlyMonthsChart from './YearlyMonthsChart';
 import MissingDataAlert from './MissingDataAlert';
-import type { CreditDetail, AnalysisResult } from '../types';
+import { GlobalSearchModal, type SearchFiltersForRule } from './GlobalSearch';
+import type { CreditDetail, AnalysisResult, CategoryRule } from '../types';
 import type { CategoryDef } from './CategoryManager';
 import './MainView.css';
 import SourceFilter from './filters/SourceFilter';
@@ -36,9 +37,10 @@ interface MainViewProps {
   // חדשים: מצב תאריך (עסקה / חיוב)
   dateMode: 'transaction' | 'charge';
   setDateMode: (m: 'transaction' | 'charge') => void;
-  // חדשים: תיקיה נבחרת + פעולה להחלפה
+  // חדשים: תיקיה נבחרת + פעולות
   selectedFolder: string | null;
   onPickDirectory: () => void;
+  onRefreshDirectory: () => void;
   dirHandle?: FileSystemDirectoryHandle;
   // פתיחת הגדרות מתקדמות
   onOpenAdvancedSettings?: () => void;
@@ -50,6 +52,30 @@ interface MainViewProps {
   onMarkAsNotIncomeSource?: (description: string, sourceType: 'business' | 'category') => void;
   // חדש: סימון עסקה בודדת כהכנסה/הוצאה
   onMarkTransactionAsIncomeSource?: (transactionId: string, isIncome: boolean) => void;
+  // חדש: ניווט לעסקה ספציפית (מחיפוש גלובלי)
+  onNavigateToTransaction?: (tx: CreditDetail, monthKey: string) => void;
+  // חדש: עסקה מודגשת (להדגשה בטבלה אחרי ניווט)
+  highlightedTransactionId?: string | null;
+  // חדש: שינוי קטגוריה מרוכז מחיפוש גלובלי (inline)
+  onApplyBulkCategoryChange?: (
+    transactions: CreditDetail[],
+    newCategory: string,
+    filtersForRule: SearchFiltersForRule,
+    createRule: boolean,
+    includeDatesInRule: boolean
+  ) => void;
+  // הוספת קטגוריה חדשה
+  onAddCategory?: (cat: CategoryDef) => void;
+  // עריכת כלל קיים
+  onUpdateRule?: (
+    ruleId: string,
+    filtersForRule: SearchFiltersForRule,
+    newCategory: string,
+    includeDatesInRule: boolean
+  ) => void;
+  // כלל לעריכה (נפתח מחוץ ל-MainView, למשל מ-SettingsMenu)
+  externalRuleToEdit?: CategoryRule | null;
+  onClearExternalRuleToEdit?: () => void;
 }
 
 const MainView: React.FC<MainViewProps> = ({
@@ -58,18 +84,72 @@ const MainView: React.FC<MainViewProps> = ({
   view, setView, yearlySummary,
   handleOpenEditCategory, handleBulkEditCategory, categoriesList, selectedYear, setSelectedYear,
   displayMode, setDisplayMode,
-  dateMode, setDateMode, analysis, selectedFolder, onPickDirectory, dirHandle,
+  dateMode, setDateMode, analysis, selectedFolder, onPickDirectory, onRefreshDirectory, dirHandle,
   onOpenAdvancedSettings,
   onTrackFeature,
   incomeSourceRules,
   onMarkAsIncomeSource,
   onMarkAsNotIncomeSource,
-  onMarkTransactionAsIncomeSource
+  onMarkTransactionAsIncomeSource,
+  onNavigateToTransaction,
+  highlightedTransactionId,
+  onApplyBulkCategoryChange,
+  onAddCategory,
+  onUpdateRule,
+  externalRuleToEdit,
+  onClearExternalRuleToEdit
 }) => {
   // State לניהול סינון קטגוריה (מגרף הדונאט)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  
+  // State לחיפוש גלובלי
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [globalSearchInitialText, setGlobalSearchInitialText] = useState('');
+  const [ruleToEdit, setRuleToEdit] = useState<CategoryRule | null>(null);
   const [searchTerm] = useState('');
   const [amountFilter] = useState('all');
+  
+  // פונקציה לפתיחת חיפוש גלובלי עם טקסט התחלתי
+  const handleOpenGlobalSearch = useCallback((initialText?: string) => {
+    setGlobalSearchInitialText(initialText || '');
+    setRuleToEdit(null);
+    setIsGlobalSearchOpen(true);
+    onTrackFeature?.('global_search_from_context_menu');
+  }, [onTrackFeature]);
+  
+  // פונקציה לפתיחת עריכת כלל
+  const handleEditRule = useCallback((rule: CategoryRule) => {
+    setRuleToEdit(rule);
+    setGlobalSearchInitialText('');
+    setIsGlobalSearchOpen(true);
+    onTrackFeature?.('edit_rule_from_mapping');
+  }, [onTrackFeature]);
+  
+  // אפקט לפתיחת עריכת כלל מחוץ ל-MainView (למשל מ-SettingsMenu)
+  useEffect(() => {
+    if (externalRuleToEdit) {
+      setRuleToEdit(externalRuleToEdit);
+      setGlobalSearchInitialText('');
+      setIsGlobalSearchOpen(true);
+      onClearExternalRuleToEdit?.();
+    }
+  }, [externalRuleToEdit, onClearExternalRuleToEdit]);
+  
+  // קיצור מקלדת Ctrl+K לפתיחת חיפוש גלובלי
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K או Cmd+K (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setRuleToEdit(null);
+        setGlobalSearchInitialText('');
+        setIsGlobalSearchOpen(true);
+        onTrackFeature?.('global_search_keyboard_shortcut');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onTrackFeature]);
   
   // פונקציה למעקב פיצ'רים עם tracking לתצוגה חודשית/שנתית
   const setViewWithTracking = useCallback((newView: 'monthly' | 'yearly') => {
@@ -297,12 +377,6 @@ const MainView: React.FC<MainViewProps> = ({
         return sum + signed;
       }, 0);
     
-    // לוגים לדיבוג
-    console.group('📊 Summary Calculation');
-    console.log('displayMode:', displayMode);
-    console.log('filteredTransactions count:', filteredTransactions.length);
-    console.log('Table sum (this should match table footer):', tableSum);
-    
     // מה להציג בתמציות לפי מצב התצוגה:
     let income = 0;
     let expense = 0;
@@ -314,13 +388,11 @@ const MainView: React.FC<MainViewProps> = ({
       expense = Math.abs(tableSum);
       income = 0;
       net = tableSum; // שלילי - הוצאות
-      console.log('Mode: expense -> expense:', expense, 'income: 0');
     } else if (displayMode === 'income') {
       // במצב הכנסות: הסיכום של הטבלה הוא סה"כ ההכנסות
       income = tableSum; // חיובי
       expense = 0;
       net = tableSum;
-      console.log('Mode: income -> income:', income, 'expense: 0');
     } else {
       // במצב "הכל": עקביות עם מצבי הסינון
       // הכנסות = רק הכנסות אמיתיות (transactionNature === 'income')
@@ -356,11 +428,7 @@ const MainView: React.FC<MainViewProps> = ({
         expense = -expenseNet; // שלילי כדי להראות שזה עודף החזרים
         net = income + expenseNet; // מוסיפים את העודף להכנסות
       }
-      
-      console.log('Mode: all -> realIncome:', income, 'expenseNet:', expenseNet, 'expense display:', expense, 'net:', net);
     }
-    
-    console.groupEnd();
     
     return { income, expense, net };
   }, [filteredTransactions, displayMode]);
@@ -621,8 +689,28 @@ const MainView: React.FC<MainViewProps> = ({
           </div>
         </div>
 
-        {/* צד שמאל: כפתורי פילטר והגדרות */}
+        {/* צד שמאל: כפתורי חיפוש, פילטר והגדרות */}
         <div className="header-left-group">
+          {/* כפתור חיפוש גלובלי */}
+          <div className="header-btn-wrapper">
+            <button
+              className={`header-icon-btn ${isGlobalSearchOpen ? 'open' : ''}`}
+              onClick={() => { 
+                setIsGlobalSearchOpen(true); 
+                setShowFilterPopover(false); 
+                setShowSettingsPopover(false);
+                onTrackFeature?.('global_search_open');
+              }}
+              aria-label="חיפוש מתקדם"
+              title="חיפוש מתקדם בכל העסקאות (Ctrl+K)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+            </button>
+          </div>
+
           {/* כפתור פילטר */}
           <div className="header-btn-wrapper" ref={filterRef}>
             <button
@@ -746,7 +834,8 @@ const MainView: React.FC<MainViewProps> = ({
       {/* התראה על נתונים חסרים */}
       <MissingDataAlert
         availableMonths={sortedMonths}
-        onAddFiles={onPickDirectory}
+        onRefresh={onRefreshDirectory}
+        onPickFolder={onPickDirectory}
         folderName={selectedFolder || undefined}
       />
 
@@ -916,6 +1005,8 @@ const MainView: React.FC<MainViewProps> = ({
                   onMarkAsNotIncomeSource={onMarkAsNotIncomeSource}
                   onMarkTransactionAsIncomeSource={onMarkTransactionAsIncomeSource}
                   dateMode={dateMode}
+                  highlightedTransactionId={highlightedTransactionId}
+                  onOpenGlobalSearch={handleOpenGlobalSearch}
                 />
               </div>
             </div>
@@ -1003,11 +1094,45 @@ const MainView: React.FC<MainViewProps> = ({
                 onMarkAsNotIncomeSource={onMarkAsNotIncomeSource}
                 onMarkTransactionAsIncomeSource={onMarkTransactionAsIncomeSource}
                 dateMode={dateMode}
+                onOpenGlobalSearch={handleOpenGlobalSearch}
               />
             </div>
           </div>
         )}
       </div>
+
+      {/* מודל חיפוש גלובלי */}
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => {
+          setIsGlobalSearchOpen(false);
+          setGlobalSearchInitialText('');
+          setRuleToEdit(null);
+        }}
+        allTransactions={analysis.details}
+        categoriesList={categoriesList}
+        initialSearchText={globalSearchInitialText}
+        ruleToEdit={ruleToEdit}
+        onNavigateToTransaction={(tx, monthKey) => {
+          if (onNavigateToTransaction) {
+            onNavigateToTransaction(tx, monthKey);
+          } else {
+            // Fallback: פשוט נווט לחודש
+            setSelectedMonth(monthKey);
+            setView('monthly');
+          }
+          onTrackFeature?.('global_search_navigate');
+        }}
+        onApplyBulkCategoryChange={onApplyBulkCategoryChange ? (transactions, newCategory, filters, createRule, includeDates) => {
+          onApplyBulkCategoryChange(transactions, newCategory, filters, createRule, includeDates);
+          onTrackFeature?.('global_search_bulk_category_change');
+        } : undefined}
+        onUpdateRule={onUpdateRule ? (ruleId, filters, newCategory, includeDates) => {
+          onUpdateRule(ruleId, filters, newCategory, includeDates);
+          onTrackFeature?.('update_rule_from_global_search');
+        } : undefined}
+        onAddCategory={onAddCategory}
+      />
     </div>
   );
 };

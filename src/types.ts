@@ -57,6 +57,7 @@ export interface CategoryRule {
   category: string; // הקטגוריה להחלה
   active: boolean; // האם הכלל פעיל
   createdAt: string; // ISO timestamp
+  updatedAt?: string; // ISO timestamp of last update
   source?: 'user' | 'migration' | 'system';
   conditions: {
     transactionId?: string;     // התאמה לעסקה בודדת לפי מזהה
@@ -64,6 +65,11 @@ export interface CategoryRule {
     descriptionRegex?: string;  // חלופה: התאמה לפי ביטוי רגולרי (i)
     minAmount?: number;         // סכום מינימלי להחלה
     maxAmount?: number;         // סכום מקסימלי (אופציונלי)
+    // תנאים חדשים מחיפוש גלובלי:
+    source?: 'credit' | 'bank'; // מקור: אשראי או בנק
+    direction?: 'income' | 'expense'; // כיוון: הכנסה או הוצאה
+    dateFrom?: string;          // תאריך התחלה (YYYY-MM-DD)
+    dateTo?: string;            // תאריך סיום (YYYY-MM-DD)
   };
 }
 

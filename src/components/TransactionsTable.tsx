@@ -32,6 +32,10 @@ interface TransactionsTableProps {
   onTrackFeature?: (feature: string) => void;
   // מצב תאריך (עסקה / חיוב) - לתצוגה שנתית
   dateMode?: 'transaction' | 'charge';
+  // חדש: עסקה מודגשת (לאחר ניווט מחיפוש גלובלי)
+  highlightedTransactionId?: string | null;
+  // חדש: פתיחת חיפוש גלובלי עם טקסט מוגדר מראש
+  onOpenGlobalSearch?: (initialText?: string) => void;
 }
 
 const formatDate = (dateStr: string) => {
@@ -84,7 +88,6 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
   details,
   allDetails,
   onEditCategory,
-  onBulkEditCategory,
   categoriesList,
   setView,
   incomeSourceRules = [],
@@ -97,11 +100,16 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
   onTrackFeature,
   onMonthSelect,
   dateMode = 'transaction',
+  highlightedTransactionId,
+  onOpenGlobalSearch,
   ...props
 }) => {
   // Constants
   const CATEGORY_COLUMN_WIDTH = 220;
   const BUSINESS_COLUMN_WIDTH = 320;
+
+  // Ref לגלילה לעסקה מודגשת
+  const highlightedRowRef = React.useRef<HTMLTableRowElement>(null);
 
   // Helper: קבל שם תצוגה לכרטיס (שם ידידותי אם קיים, אחרת 4 ספרות)
   const getCardDisplayName = React.useCallback((cardLast4: string | undefined): string | null => {
@@ -240,6 +248,32 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
       ) : part
     );
   }, [searchTerm]);
+
+  // גלילה לעסקה מודגשת + פתיחת הקבוצה שלה
+  React.useEffect(() => {
+    if (!highlightedTransactionId) return;
+    
+    // מצא את העסקה
+    const tx = details.find(d => d.id === highlightedTransactionId);
+    if (!tx) return;
+    
+    // פתח את הקבוצה שלה (קטגוריה או בית עסק)
+    const groupKey = groupBy === 'business' 
+      ? (tx.description || 'ללא שם')
+      : displayCategoryFor(tx);
+    
+    setOpenGroups(prev => ({ ...prev, [groupKey]: true }));
+    
+    // גלול לעסקה אחרי שה-DOM מתעדכן
+    setTimeout(() => {
+      if (highlightedRowRef.current) {
+        highlightedRowRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }
+    }, 100);
+  }, [highlightedTransactionId, details, groupBy, displayCategoryFor]);
 
   // קיבוץ לפי קטגוריה (תצוגה): משתמש ב-displayCategoryFor
   // משתמש ב-searchFilteredDetails כשיש חיפוש פעיל
@@ -505,6 +539,28 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
   const [contextMenu, setContextMenu] = React.useState<ContextMenuData | null>(null);
   const contextMenuRef = React.useRef<HTMLDivElement>(null);
 
+  // Toast notification state for undo
+  type ToastData = {
+    message: string;
+    undoAction?: () => void;
+    timeout: number;
+  };
+  const [toast, setToast] = React.useState<ToastData | null>(null);
+  const toastTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Show toast with optional undo
+  const showToast = React.useCallback((message: string, undoAction?: () => void, duration = 5000) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, undoAction, timeout: duration });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), duration);
+  }, []);
+
+  // Dismiss toast
+  const dismissToast = React.useCallback(() => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast(null);
+  }, []);
+
   // Adjust context menu position after render to ensure it stays within viewport
   React.useLayoutEffect(() => {
     if (!contextMenu || !contextMenuRef.current) return;
@@ -707,13 +763,18 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
           <>
             <hr className="TransactionsTable-context-menu-divider" />
             
-            {/* חיפוש עסקאות דומות */}
+            {/* חיפוש עסקאות דומות - פותח חיפוש גלובלי */}
             <button
               className="TransactionsTable-context-menu-btn"
               onClick={() => {
                 setContextMenu(null);
-                // מציב את שם בית העסק בשדה החיפוש
-                setSearchTerm(transaction.description || '');
+                if (onOpenGlobalSearch) {
+                  // פותח חיפוש גלובלי עם שם בית העסק
+                  onOpenGlobalSearch(transaction.description || '');
+                } else {
+                  // Fallback: מציב בשדה החיפוש המקומי
+                  setSearchTerm(transaction.description || '');
+                }
               }}
             >
               🔍 חפש עסקאות דומות
@@ -738,108 +799,155 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
           </>
         )}
 
-        {/* פקודות העברה הכנסה/הוצאה */}
+        {/* פקודות העברה הכנסה/הוצאה - עם קיבוץ ויזואלי */}
         {showIncomeExpenseToggle && (
           <>
             <hr className="TransactionsTable-context-menu-divider" />
             
+            {/* כותרת קבוצה */}
+            <div className="TransactionsTable-context-menu-group-title">
+              {displayMode === 'expense' ? '💰 העבר להכנסות' : '💸 העבר להוצאות'}
+            </div>
+            
             {displayMode === 'expense' ? (
               <>
-                {/* העברה לקטגוריה */}
-                {isCategory && categoryName && (
+                {/* העברת עסקה בודדת - תמיד ראשון */}
+                {transaction && onMarkTransactionAsIncomeSource && (
                   <button
-                    className="TransactionsTable-context-menu-btn"
+                    className="TransactionsTable-context-menu-btn TransactionsTable-context-menu-btn-grouped"
                     onClick={() => {
                       setContextMenu(null);
-                      if (onMarkAsIncomeSource) {
-                        onMarkAsIncomeSource(categoryName, 'category');
-                      }
+                      const txDesc = transaction.description || 'עסקה';
+                      const txAmount = Math.abs(transaction.amount);
+                      onMarkTransactionAsIncomeSource(transaction.id, true);
+                      showToast(
+                        `עסקה "${truncateText(txDesc, 20)}" (₪${txAmount.toLocaleString()}) הועברה להכנסות`,
+                        () => onMarkTransactionAsIncomeSource(transaction.id, false)
+                      );
                     }}
                   >
-                    💰 העבר קטגוריה "{categoryName}" להכנסות
+                    <span className="TransactionsTable-context-menu-btn-icon">👤</span>
+                    <span className="TransactionsTable-context-menu-btn-text">
+                      עסקה זו בלבד
+                      <span className="TransactionsTable-context-menu-btn-meta">₪{Math.abs(transaction.amount).toLocaleString()}</span>
+                    </span>
                   </button>
                 )}
 
-                {/* העברת בית עסק (לא בשורת קטגוריה) */}
-                {!isCategory && businessName && (
+                {/* העברת בית עסק */}
+                {businessName && businessTransactionCount > 0 && (
                   <button
-                    className="TransactionsTable-context-menu-btn"
+                    className="TransactionsTable-context-menu-btn TransactionsTable-context-menu-btn-grouped"
                     onClick={() => {
                       setContextMenu(null);
                       if (onMarkAsIncomeSource) {
                         onMarkAsIncomeSource(businessName, 'business');
+                        showToast(
+                          `כל העסקאות של "${truncateText(businessName, 20)}" (${businessTransactionCount}) הועברו להכנסות`,
+                          () => onMarkAsNotIncomeSource?.(businessName, 'business')
+                        );
                       }
                     }}
-                    title={businessName.length > 25 ? `העבר "${businessName}" להכנסות` : undefined}
+                    title={businessName.length > 25 ? `העבר כל "${businessName}" להכנסות` : undefined}
                   >
-                    💰 העבר "{truncateText(businessName)}" להכנסות
-                    {businessTransactionCount > 1 && (
-                      <span style={{ opacity: 0.7, fontSize: 12 }}> ({businessTransactionCount} עסקאות)</span>
-                    )}
+                    <span className="TransactionsTable-context-menu-btn-icon">🏪</span>
+                    <span className="TransactionsTable-context-menu-btn-text">
+                      כל "{truncateText(businessName, 18)}"
+                      <span className="TransactionsTable-context-menu-btn-meta">{businessTransactionCount} עסקאות</span>
+                    </span>
                   </button>
                 )}
 
-                {/* העברת עסקה בודדת */}
-                {transaction && onMarkTransactionAsIncomeSource && (
+                {/* העברת קטגוריה - מוצג גם לעסקאות */}
+                {categoryName && (
                   <button
-                    className="TransactionsTable-context-menu-btn"
+                    className="TransactionsTable-context-menu-btn TransactionsTable-context-menu-btn-grouped"
                     onClick={() => {
                       setContextMenu(null);
-                      onMarkTransactionAsIncomeSource(transaction.id, true);
+                      if (onMarkAsIncomeSource) {
+                        onMarkAsIncomeSource(categoryName, 'category');
+                        showToast(
+                          `קטגוריה "${categoryName}" הועברה להכנסות`,
+                          () => onMarkAsNotIncomeSource?.(categoryName, 'category')
+                        );
+                      }
                     }}
                   >
-                    💰 העבר עסקה זו בלבד
-                    <span style={{ opacity: 0.7, fontSize: 12 }}> (₪{Math.abs(transaction.amount).toLocaleString()})</span>
+                    <span className="TransactionsTable-context-menu-btn-icon">📁</span>
+                    <span className="TransactionsTable-context-menu-btn-text">
+                      כל קטגוריה "{truncateText(categoryName, 15)}"
+                    </span>
                   </button>
                 )}
               </>
             ) : (
               <>
-                {/* העברה מקטגוריה */}
-                {isCategory && categoryName && (
+                {/* העברת עסקה בודדת */}
+                {transaction && onMarkTransactionAsIncomeSource && (
                   <button
-                    className="TransactionsTable-context-menu-btn"
+                    className="TransactionsTable-context-menu-btn TransactionsTable-context-menu-btn-grouped"
                     onClick={() => {
                       setContextMenu(null);
-                      if (onMarkAsNotIncomeSource) {
-                        onMarkAsNotIncomeSource(categoryName, 'category');
-                      }
+                      const txDesc = transaction.description || 'עסקה';
+                      const txAmount = Math.abs(transaction.amount);
+                      onMarkTransactionAsIncomeSource(transaction.id, false);
+                      showToast(
+                        `עסקה "${truncateText(txDesc, 20)}" (₪${txAmount.toLocaleString()}) הועברה להוצאות`,
+                        () => onMarkTransactionAsIncomeSource(transaction.id, true)
+                      );
                     }}
                   >
-                    💸 העבר קטגוריה "{categoryName}" להוצאות
+                    <span className="TransactionsTable-context-menu-btn-icon">👤</span>
+                    <span className="TransactionsTable-context-menu-btn-text">
+                      עסקה זו בלבד
+                      <span className="TransactionsTable-context-menu-btn-meta">₪{Math.abs(transaction.amount).toLocaleString()}</span>
+                    </span>
                   </button>
                 )}
 
-                {/* העברת בית עסק (לא בשורת קטגוריה) */}
-                {!isCategory && businessName && (
+                {/* העברת בית עסק */}
+                {businessName && businessTransactionCount > 0 && (
                   <button
-                    className="TransactionsTable-context-menu-btn"
+                    className="TransactionsTable-context-menu-btn TransactionsTable-context-menu-btn-grouped"
                     onClick={() => {
                       setContextMenu(null);
                       if (onMarkAsNotIncomeSource) {
                         onMarkAsNotIncomeSource(businessName, 'business');
+                        showToast(
+                          `כל העסקאות של "${truncateText(businessName, 20)}" (${businessTransactionCount}) הועברו להוצאות`,
+                          () => onMarkAsIncomeSource?.(businessName, 'business')
+                        );
                       }
                     }}
-                    title={businessName.length > 25 ? `העבר "${businessName}" להוצאות` : undefined}
+                    title={businessName.length > 25 ? `העבר כל "${businessName}" להוצאות` : undefined}
                   >
-                    💸 העבר "{truncateText(businessName)}" להוצאות
-                    {businessTransactionCount > 1 && (
-                      <span style={{ opacity: 0.7, fontSize: 12 }}> ({businessTransactionCount} עסקאות)</span>
-                    )}
+                    <span className="TransactionsTable-context-menu-btn-icon">🏪</span>
+                    <span className="TransactionsTable-context-menu-btn-text">
+                      כל "{truncateText(businessName, 18)}"
+                      <span className="TransactionsTable-context-menu-btn-meta">{businessTransactionCount} עסקאות</span>
+                    </span>
                   </button>
                 )}
 
-                {/* העברת עסקה בודדת */}
-                {transaction && onMarkTransactionAsIncomeSource && (
+                {/* העברת קטגוריה - מוצג גם לעסקאות */}
+                {categoryName && (
                   <button
-                    className="TransactionsTable-context-menu-btn"
+                    className="TransactionsTable-context-menu-btn TransactionsTable-context-menu-btn-grouped"
                     onClick={() => {
                       setContextMenu(null);
-                      onMarkTransactionAsIncomeSource(transaction.id, false);
+                      if (onMarkAsNotIncomeSource) {
+                        onMarkAsNotIncomeSource(categoryName, 'category');
+                        showToast(
+                          `קטגוריה "${categoryName}" הועברה להוצאות`,
+                          () => onMarkAsIncomeSource?.(categoryName, 'category')
+                        );
+                      }
                     }}
                   >
-                    💸 העבר עסקה זו בלבד
-                    <span style={{ opacity: 0.7, fontSize: 12 }}> (₪{Math.abs(transaction.amount).toLocaleString()})</span>
+                    <span className="TransactionsTable-context-menu-btn-icon">📁</span>
+                    <span className="TransactionsTable-context-menu-btn-text">
+                      כל קטגוריה "{truncateText(categoryName, 15)}"
+                    </span>
                   </button>
                 )}
               </>
@@ -858,7 +966,9 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
     onMarkAsIncomeSource,
     onMarkAsNotIncomeSource,
     onMarkTransactionAsIncomeSource,
-    setSearchTerm
+    onOpenGlobalSearch,
+    setSearchTerm,
+    showToast
   ]);
 
   // Reusable component for expand/collapse buttons
@@ -1041,23 +1151,6 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
             )}
           </div>
 
-          {/* Bulk category button - only when search has results (not in yearly view) */}
-          {!isYearlyView && searchTerm && searchFilteredDetails.length > 0 && (onBulkEditCategory || onEditCategory) && (
-            <button 
-              className="TransactionsTable-bulk-category-btn"
-              onClick={() => {
-                if (onBulkEditCategory) {
-                  onBulkEditCategory(searchFilteredDetails, searchTerm);
-                } else if (onEditCategory) {
-                  onEditCategory(searchFilteredDetails[0]);
-                }
-              }}
-              title={`שנה קטגוריה ל-${searchFilteredDetails.length} עסקאות`}
-            >
-              🏷️ שנה קטגוריה ({searchFilteredDetails.length})
-            </button>
-          )}
-
         </div>
 
         {/* Title on the right */}
@@ -1065,16 +1158,41 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
       </div>
 
       {/* Search results banner */}
-      {searchTerm && searchSummary && (
-        <div className="TransactionsTable-search-results-banner">
-          <span className="TransactionsTable-search-results-count">
-            נמצאו <strong>{searchSummary.count}</strong> עסקאות התואמות "{searchTerm}"
-          </span>
-          <span className="TransactionsTable-search-results-total">
-            סה"כ: <strong>{searchSummary.total.toLocaleString()}</strong> ₪
-          </span>
-        </div>
-      )}
+      {searchTerm && searchSummary && (() => {
+        // חשב גם סיכום לכל המערכת
+        const sourceForAll = allDetails || details;
+        const term = searchTerm.toLowerCase();
+        const allMatchingTransactions = sourceForAll.filter(d => 
+          d.description?.toLowerCase().includes(term)
+        );
+        const allMatchCount = allMatchingTransactions.length;
+        const allMatchTotal = allMatchingTransactions.reduce((sum, d) => {
+          if (shouldSkipInCalculation(d)) return sum;
+          return sum + signedAmount(d);
+        }, 0);
+        const hasMoreInSystem = allMatchCount > searchSummary.count;
+        
+        return (
+          <div className="TransactionsTable-search-results-banner">
+            <span className="TransactionsTable-search-results-count">
+              נמצאו <strong>{searchSummary.count}</strong> עסקאות בחודש זה התואמות "{searchTerm}"
+              {hasMoreInSystem && (
+                <span className="TransactionsTable-search-all-count">
+                  &nbsp;(מתוך <strong>{allMatchCount}</strong> בכל התקופות)
+                </span>
+              )}
+            </span>
+            <span className="TransactionsTable-search-results-total">
+              סה"כ בחודש: <strong>{searchSummary.total.toLocaleString()}</strong> ₪
+              {hasMoreInSystem && (
+                <span className="TransactionsTable-search-all-total">
+                  &nbsp;| בכל התקופות: <strong>{allMatchTotal.toLocaleString()}</strong> ₪
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Empty state - when no data */}
       {displayDetails.length === 0 && !searchTerm && (
@@ -1355,10 +1473,13 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                     <td></td>
                     <td className="TransactionsTable-group-total">{categoryTotals[cat].toLocaleString()}</td>
                   </tr>
-                  {openGroups[cat] && grouped[cat].sort((a, b) => parseDate(b.date) - parseDate(a.date)).map((d, idx) => (
+                  {openGroups[cat] && grouped[cat].sort((a, b) => parseDate(b.date) - parseDate(a.date)).map((d, idx) => {
+                    const isHighlighted = d.id === highlightedTransactionId;
+                    return (
                     <tr
                       key={d.id}
-                      className={idx % 2 === 0 ? 'TransactionsTable-row-alt' : 'TransactionsTable-row'}
+                      ref={isHighlighted ? highlightedRowRef : undefined}
+                      className={`${idx % 2 === 0 ? 'TransactionsTable-row-alt' : 'TransactionsTable-row'}${isHighlighted ? ' TransactionsTable-row-highlighted' : ''}`}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setContextMenu({
@@ -1468,16 +1589,19 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </React.Fragment>
               )
             })
           ) : (
             sortedDetails.map((d, idx) => {
+              const isHighlighted = d.id === highlightedTransactionId;
               return (
                 <tr
                   key={d.id}
-                  className={idx % 2 === 0 ? 'TransactionsTable-row-alt' : 'TransactionsTable-row'}
+                  ref={isHighlighted ? highlightedRowRef : undefined}
+                  className={`${idx % 2 === 0 ? 'TransactionsTable-row-alt' : 'TransactionsTable-row'}${isHighlighted ? ' TransactionsTable-row-highlighted' : ''}`}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setContextMenu({
@@ -1670,12 +1794,14 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
         } else if (contextMenu.type === 'transaction') {
           const tx = contextMenu.transaction;
           const businessTxCount = sourceForCount.filter(d => d.description === tx.description).length;
+          const txCategory = displayCategoryFor(tx);
           
           menuConfig = {
             title: tx.description || 'עסקה',
             icon: '💳',
             transaction: tx,
             businessName: tx.description,
+            categoryName: txCategory, // הוסף קטגוריה לעסקה
             businessTransactionCount: businessTxCount
           };
         }
@@ -1693,6 +1819,33 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
           </div>
         );
       })()}
+
+      {/* Toast notification with undo */}
+      {toast && (
+        <div className="TransactionsTable-toast">
+          <span className="TransactionsTable-toast-message">{toast.message}</span>
+          <div className="TransactionsTable-toast-actions">
+            {toast.undoAction && (
+              <button 
+                className="TransactionsTable-toast-undo"
+                onClick={() => {
+                  toast.undoAction?.();
+                  dismissToast();
+                }}
+              >
+                ביטול
+              </button>
+            )}
+            <button 
+              className="TransactionsTable-toast-close"
+              onClick={dismissToast}
+              aria-label="סגור"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

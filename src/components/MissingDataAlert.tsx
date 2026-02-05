@@ -4,9 +4,11 @@ import './MissingDataAlert.css';
 interface MissingDataAlertProps {
   /** רשימת חודשים זמינים בפורמט 'MM/YYYY' או 'M/YYYY' */
   availableMonths: string[];
-  /** פונקציה לפתיחת בחירת תיקייה */
-  onAddFiles: () => void;
-  /** מזהה תיקייה (לשמירת dismiss ב-localStorage) */
+  /** פונקציה לרענון התיקייה הנוכחית */
+  onRefresh: () => void;
+  /** פונקציה לבחירת תיקייה אחרת */
+  onPickFolder: () => void;
+  /** שם התיקייה הנוכחית */
   folderName?: string;
 }
 
@@ -55,7 +57,8 @@ function monthsDiff(from: { month: number; year: number }, to: { month: number; 
  */
 const MissingDataAlert: React.FC<MissingDataAlertProps> = ({
   availableMonths,
-  onAddFiles,
+  onRefresh,
+  onPickFolder,
   folderName = 'default'
 }) => {
   const [isDismissed, setIsDismissed] = useState(false);
@@ -161,19 +164,34 @@ const MissingDataAlert: React.FC<MissingDataAlertProps> = ({
     <div className={`missing-data-alert ${isOldData ? 'old-data' : ''}`} role="alert">
       <div className="missing-data-content">
         <span className="missing-data-icon">{isOldData ? '📅' : '📂'}</span>
-        <span className="missing-data-text">
-          {isOldData 
-            ? `הנתונים האחרונים מ${alertInfo.monthName} ${alertInfo.year}`
-            : `חסרים נתונים מ${alertInfo.monthName} ${alertInfo.year}`
-          }
-        </span>
+        <div className="missing-data-text-wrapper">
+          <span className="missing-data-text">
+            {isOldData 
+              ? `הנתונים האחרונים מ${alertInfo.monthName} ${alertInfo.year}`
+              : `חסרים נתונים מ${alertInfo.monthName} ${alertInfo.year}`
+            }
+          </span>
+          {folderName && folderName !== 'default' && (
+            <span className="missing-data-hint">
+              הוסף קבצים לתיקייה "{folderName}" ולחץ רענן
+            </span>
+          )}
+        </div>
       </div>
       <div className="missing-data-actions">
         <button 
           className="missing-data-btn missing-data-btn-primary"
-          onClick={onAddFiles}
+          onClick={onRefresh}
+          title="רענן את התיקייה הנוכחית"
         >
-          {isOldData ? 'עדכן נתונים' : 'הוסף קבצים'}
+          🔄 רענן
+        </button>
+        <button 
+          className="missing-data-btn missing-data-btn-secondary"
+          onClick={onPickFolder}
+          title="בחר תיקייה אחרת"
+        >
+          📁 תיקייה אחרת
         </button>
         <button 
           className="missing-data-btn missing-data-btn-dismiss"

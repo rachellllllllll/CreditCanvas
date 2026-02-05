@@ -73,6 +73,128 @@
   margin: 4px 0;
 }
 
+/* Context menu group title for transfer actions */
+.TransactionsTable-context-menu-group-title {
+  padding: 8px 16px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Grouped buttons with hierarchy visualization */
+.TransactionsTable-context-menu-btn-grouped {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px 20px;
+  margin: 2px 8px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.TransactionsTable-context-menu-btn-grouped:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.TransactionsTable-context-menu-btn-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.TransactionsTable-context-menu-btn-text {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.TransactionsTable-context-menu-btn-meta {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Toast notification */
+.TransactionsTable-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #1f2937;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  animation: toastSlideUp 0.3s ease;
+  max-width: 90vw;
+}
+
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.TransactionsTable-toast-message {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.TransactionsTable-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.TransactionsTable-toast-undo {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.TransactionsTable-toast-undo:hover {
+  background: #2563eb;
+}
+
+.TransactionsTable-toast-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.TransactionsTable-toast-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* Yearly view specific styles */
 .TransactionsTable-yearly-table .TransactionsTable-group-toggle {
   cursor: pointer;
@@ -533,6 +655,28 @@ svg {
   background: #fafbfc;
 }
 
+/* הדגשת שורה מודגשת (אחרי ניווט מחיפוש גלובלי) */
+.TransactionsTable-row-highlighted {
+  animation: TransactionsTable-highlight-pulse 2s ease-out;
+}
+
+.TransactionsTable-row-highlighted .TransactionsTable-td {
+  background: #fef3c7 !important;
+  box-shadow: inset 0 0 0 2px #f59e0b;
+}
+
+@keyframes TransactionsTable-highlight-pulse {
+  0% {
+    background: #fef08a;
+  }
+  50% {
+    background: #fef3c7;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 .TransactionsTable-td:hover {
   background: #f8fafc;
 }
@@ -849,6 +993,8 @@ svg {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 10px 16px;
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   border: 1px solid #bfdbfe;
@@ -863,6 +1009,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .TransactionsTable-search-results-count strong {
@@ -871,11 +1018,34 @@ svg {
 
 .TransactionsTable-search-results-total {
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .TransactionsTable-search-results-total strong {
   color: #1d4ed8;
   font-size: 15px;
+}
+
+/* מידע על כל התקופות */
+.TransactionsTable-search-all-count,
+.TransactionsTable-search-all-total {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.TransactionsTable-search-all-count strong,
+.TransactionsTable-search-all-total strong {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+/* Badge לכפתור שנה קטגוריה */
+.TransactionsTable-bulk-category-badge {
+  color: #fbbf24;
+  font-weight: bold;
+  margin-right: 2px;
 }
 
 /* Search highlight */

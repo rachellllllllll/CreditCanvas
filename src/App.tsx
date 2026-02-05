@@ -5,7 +5,7 @@ import { parseBankStatementFromSheet } from './utils/bankParser';
 import type { CreditDetail, AnalysisResult } from './types';
 import { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
-import EditCategoryDialog, { type EditDialogState } from './components/EditCategoryDialog';
+import EditCategoryDialog, { type EditDialogState, type SearchFiltersForRule } from './components/EditCategoryDialog';
 import Footer from './components/Footer';
 import './App.css';
 import './index.css';
@@ -29,7 +29,7 @@ import {
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
 import { processCreditChargeMatching } from './utils/creditChargePatterns';
-import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, saveCategoryRules } from './utils/categoryRules';
+import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
 import {
@@ -166,7 +166,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     const chargeAmountRaw = rowObj['סכום חיוב'] || rowObj['סכוםחיוב'] || '';
     const transactionAmountRaw = rowObj['סכום עסקה'] || rowObj['סכוםעסקה'] || '';
     const transactionCurrency = rowObj['מטבע עסקה'] || rowObj['מטבעעסקה'] || '';
-   
+    
     // אם יש סכום חיוב - השתמש בו. אם אין אבל יש סכום עסקה - בדוק אם זו עסקת צבירה
     let amount = chargeAmountRaw;
     if (!chargeAmountRaw && transactionAmountRaw) {
@@ -183,7 +183,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     // --- extract charge date and card last 4 ---
     let chargeDate = rowObj['תאריך חיוב'] || chargeDateFromHeader || '';
     const cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || cardLast4FromHeader || '';
-   
+    
     // --- זיהוי עסקאות בחיוב מיידי (משיכת מזומן וכד') ---
     const transactionType = rowObj['סוג עסקה'] || rowObj['סוגעסקה'] || '';
     if (transactionType.includes('משיכת מזומן') || transactionType.includes('חיוב מיידי')) {
@@ -217,7 +217,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     // בדוק אם זה בעמודת תאריך ואם כן, המיר אם הערך הוא מספר serial של Excel
     const dateColumnIndex = normalizedHeaders.indexOf('תאריך עסקה');
     const isDateColumn = dateColumnIndex >= 0;
-   
+    
     if (isDateColumn && /^\d{1,5}$/.test(date)) {
       // רק בעמודת תאריך: קרא את המספר כ-Excel serial
       const serial = parseInt(date, 10);
@@ -253,7 +253,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
       const direction: 'income' | 'expense' = raw < 0 ? 'income' : 'expense';
       // if (refundLike) direction = 'income';
       const amountAbs = Math.abs(raw);
-     
+      
       // חשב סכום עסקה מקורי (אם שונה מסכום החיוב)
       let origTransactionAmount: number | undefined;
       if (transactionAmountRaw) {
@@ -263,7 +263,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
           origTransactionAmount = parsedTransAmount;
         }
       }
-     
+      
       details.push({
         id: `${fileName}-${i}-${raw}-${description}`,
         date,
@@ -318,7 +318,7 @@ const App: React.FC = () => {
   const [dateMode, setDateMode] = useState<'transaction' | 'charge'>(initialAppPrefs.dateMode ?? 'transaction');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
- 
+  
   // --- מצב טעינה עם שלבים ---
   type LoadingStep = {
     step: 'scanning' | 'reading' | 'processing' | 'categories' | 'finalizing' | 'done';
@@ -326,11 +326,11 @@ const App: React.FC = () => {
     progress?: { current: number; total: number };
   };
   const [loadingState, setLoadingState] = useState<LoadingStep | null>(null);
- 
+  
   // --- מצב הדרכת משתמש חדש (Tour) ---
   const TOUR_COMPLETED_KEY = 'onboardingTourCompleted';
   const [showTour, setShowTour] = useState(false);
- 
+  
   // בדוק אם המשתמש כבר סיים את הטור - מבוסס תיקייה
   // אם יש קבצי הגדרות (כמו categories.json) - זה משתמש קיים
   const checkShouldShowTour = useCallback(async (dir: FileSystemDirectoryHandle): Promise<boolean> => {
@@ -342,7 +342,7 @@ const App: React.FC = () => {
         if (folders.includes(dir.name)) return false;
       }
     } catch { /* continue */ }
-   
+    
     // 2. בדוק אם יש קבצי הגדרות בתיקייה (משתמש קיים)
     try {
       await dir.getFileHandle('categories.json');
@@ -352,7 +352,7 @@ const App: React.FC = () => {
       return true;
     }
   }, []);
- 
+  
   // selectedMonth unified to string format 'MM/YYYY'
   const formatMonthYear = (date: Date) => `${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
   const [selectedMonth, setSelectedMonth] = useState<string>(formatMonthYear(new Date()));
@@ -378,20 +378,23 @@ const App: React.FC = () => {
   // --- מצב מקורות הכנסה ---
   const [incomeSourceRules, setIncomeSourceRules] = useState<IncomeSourceRule[]>([]);
 
+  // --- מצב הדגשת עסקה (לאחר ניווט מחיפוש גלובלי) ---
+  const [highlightedTransactionId, setHighlightedTransactionId] = useState<string | null>(null);
+
   // --- מעקב זמן שהייה באפליקציה ---
   useEffect(() => {
     // עדכון lastActivity בכל פעולה משמעותית
     const handleActivity = () => updateLastActivity();
-   
+    
     // האזנה לאירועי פעילות
     document.addEventListener('click', handleActivity);
     document.addEventListener('keydown', handleActivity);
     document.addEventListener('scroll', handleActivity);
-   
+    
     // שמירת משך סשן כשסוגרים את הדף
     const handleBeforeUnload = () => saveSessionDurationForLater();
     window.addEventListener('beforeunload', handleBeforeUnload);
-   
+    
     return () => {
       document.removeEventListener('click', handleActivity);
       document.removeEventListener('keydown', handleActivity);
@@ -426,7 +429,7 @@ const App: React.FC = () => {
     }
     trackFeature('tour_completed');
   }, [trackFeature, dirHandle]);
- 
+  
   const handleTourSkip = useCallback(() => {
     setShowTour(false);
     // שמור את שם התיקייה גם בדילוג
@@ -445,11 +448,31 @@ const App: React.FC = () => {
 
   // CSV תמיכה הוסרה: עבודה עם Excel בלבד
 
+  // רענון התיקייה הנוכחית (קריאה מחדש של הקבצים)
+  const handleRefreshDirectory = useCallback(async () => {
+    if (!dirHandle) {
+      setError('אין תיקייה נבחרת לרענון');
+      return;
+    }
+    try {
+      await handlePickDirectory_Internal(dirHandle);
+    } catch (err) {
+      console.error('שגיאה ברענון תיקיה:', err);
+      setError('רענון התיקיה נכשל.');
+    }
+  }, [dirHandle]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // File System Access API: Pick directory and read Excel files
   const handlePickDirectory = async () => {
     try {
       // @ts-expect-error - showDirectoryPicker is not in all TS libs
       const dir = await window.showDirectoryPicker();
+      // נקה את סטטוס הקונפליקטים שנדחו - זו תיקייה חדשה
+      setDismissedConflictCount(null);
+      setInitialPromptShown(false); // אפס את הדגל כדי להציג את הדיאלוג בתיקייה חדשה
+      try {
+        localStorage.removeItem('dismissedConflictCount');
+      } catch { /* ignore */ }
       await handlePickDirectory_Internal(dir);
     } catch (err) {
       console.error('שגיאה בבחירת תיקיה:', err);
@@ -460,7 +483,7 @@ const App: React.FC = () => {
   // פונקציית עזר לאיסוף קבצי Excel רקורסיבית מכל תת-תיקיות
   // מחזירה רשימת אובייקטים עם FileSystemFileHandle ונתיב יחסי
   type ExcelFileEntry = { handle: FileSystemFileHandle; relativePath: string };
- 
+  
   async function collectExcelFilesRecursive(
     dirHandle: FileSystemDirectoryHandle,
     relativePath: string = '',
@@ -468,9 +491,9 @@ const App: React.FC = () => {
     maxDepth: number = 10
   ): Promise<ExcelFileEntry[]> {
     if (depth > maxDepth) return [];
-   
+    
     const files: ExcelFileEntry[] = [];
-   
+    
     // @ts-expect-error - values() exists on FileSystemDirectoryHandle but not in all TS libs
     for await (const entry of dirHandle.values()) {
       if (entry.kind === 'file') {
@@ -482,14 +505,14 @@ const App: React.FC = () => {
       } else if (entry.kind === 'directory') {
         // דלג על תיקיות נסתרות (מתחילות בנקודה)
         if (entry.name.startsWith('.')) continue;
-       
+        
         // סרוק תת-תיקייה רקורסיבית
         const subPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
         const subFiles = await collectExcelFilesRecursive(entry, subPath, depth + 1, maxDepth);
         files.push(...subFiles);
       }
     }
-   
+    
     return files;
   }
 
@@ -500,17 +523,14 @@ const App: React.FC = () => {
     setSelectedMonth(formatMonthYear(new Date()));
     setMonths([]);
     setSelectedFolder(null);
-    setCategoriesList([]);
-    setCategoryAliases({});
-    setCategoryRules([]);
+    // לא מאפסים קטגוריות/כללים כאן - הן ייטענו מהקובץ בהמשך
     setExcelFiles(new Map());
-    originalCategoriesRef.current.clear();
     // אפס לתצוגה חודשית כדי שה-Tour יעבוד נכון
     setView('monthly');
-   
+    
     // התחל להציג מצב טעינה
     setLoadingState({ step: 'scanning', message: '🔍 סורק תיקיות...' });
-   
+    
     try {
       setDirHandle(dir);
       setSelectedFolder(dir.name || '');
@@ -518,15 +538,15 @@ const App: React.FC = () => {
 
       // איסוף כל קבצי Excel מהתיקייה ומכל תת-תיקיות (עד עומק 10)
       const excelFileEntries = await collectExcelFilesRecursive(dir);
-     
+      
       if (excelFileEntries.length === 0) {
         setLoadingState(null);
         setError('לא נמצאו קבצי Excel (XLSX/XLS) בתיקיה או בתת-תיקיות. אנא בחר תיקיה מתאימה.');
         return;
       }
-     
-      setLoadingState({
-        step: 'reading',
+      
+      setLoadingState({ 
+        step: 'reading', 
         message: `📂 נמצאו ${excelFileEntries.length} קבצים, קורא...`,
         progress: { current: 0, total: excelFileEntries.length }
       });
@@ -535,28 +555,28 @@ const App: React.FC = () => {
       let fileIndex = 0;
       for (const { handle: fileHandle, relativePath } of excelFileEntries) {
         fileIndex++;
-        setLoadingState({
-          step: 'reading',
+        setLoadingState({ 
+          step: 'reading', 
           message: `📄 קורא: ${fileHandle.name}`,
           progress: { current: fileIndex, total: excelFileEntries.length }
         });
         try {
           const file = await fileHandle.getFile();
           const arrayBuffer = await file.arrayBuffer();
-         
+          
           // שמור את קובץ האקסל המקורי בזיכרון (עם נתיב יחסי)
           setExcelFiles((prev: Map<string, ArrayBuffer>) => new Map(prev).set(relativePath, arrayBuffer));
-         
+          
           // קרא את הקובץ עם Parser המינימלי
           const workbook = await readXLSX(arrayBuffer);
-         
+          
           // עבור על כל הגיליונות
           for (const sheet of workbook.sheets) {
             const sheetData = sheetToArray(sheet);
-           
+            
             // זיהוי סוג הגיליון (שימוש בשם הקובץ בלבד לשמירת סוג הגיליון)
             const type = await ensureSheetType(dir, fileHandle.name, sheet.name, sheetData);
-           
+            
             let details: CreditDetail[] = [];
             if (type === 'credit') {
               details = await parseCreditDetailsFromSheet(sheetData, relativePath);
@@ -576,28 +596,46 @@ const App: React.FC = () => {
         setError('לא נמצאו עסקאות בקבצי Excel. ודא שהקבצים מכילים נתוני אשראי או בנק בפורמט נתמך.');
         return;
       }
-     
-      setLoadingState({
-        step: 'processing',
+      
+      setLoadingState({ 
+        step: 'processing', 
         message: `⚙️ מעבד ${allDetails.length.toLocaleString()} עסקאות...`
       });
 
       allDetails = applyAliases(allDetails, await loadAliasesFromDir(dir, 'category'), await loadAliasesFromDir(dir, 'description'));
-      const categoryRules = await loadCategoryRules(dir);
-      allDetails = applyCategoryRules(allDetails, categoryRules);
+      const loadedCategoryRules = await loadCategoryRules(dir);
+      setCategoryRules(loadedCategoryRules); // שמור ב-state
+      allDetails = applyCategoryRules(allDetails, loadedCategoryRules);
       const directionOverrides = await loadDirectionOverridesFromDir(dir);
       allDetails = applyDirectionOverrides(allDetails, directionOverrides);
       const { details: finalDetails, creditChargeCycles: finalCycles } = await processCreditChargeMatching(allDetails, dir);
       allDetails = finalDetails;
 
-      setLoadingState({
-        step: 'categories',
+      setLoadingState({ 
+        step: 'categories', 
         message: '🏷️ מזהה קטגוריות ומקורות הכנסה...'
       });
-     
+      
+      // --- טעינת קטגוריות מהקובץ ---
+      const loadedCategories = await loadCategoriesFromDir(dir);
+      if (loadedCategories) {
+        setCategoriesList(loadedCategories);
+        // שמור את הקטגוריות המקוריות לבדיקת קטגוריות חדשות
+        originalCategoriesRef.current.clear();
+        loadedCategories.forEach(c => originalCategoriesRef.current.set(c.name, c.name));
+      } else {
+        originalCategoriesRef.current.clear();
+      }
+      
+      // טען את כללי alias
+      const loadedCategoryAliases = await loadAliasesFromDir(dir, 'category');
+      if (loadedCategoryAliases) {
+        setCategoryAliases(loadedCategoryAliases);
+      }
+      
       // --- טעינת וזיהוי מקורות הכנסה ---
       let loadedIncomeRules = await loadIncomeSourceRules(dir);
-     
+      
       // זיהוי אוטומטי של מקורות הכנסה חדשים (3+ חודשים ללא יציאות מקבילות)
       const newAutoRules = detectAutoIncomeSources(allDetails, loadedIncomeRules);
       if (newAutoRules.length > 0) {
@@ -605,7 +643,7 @@ const App: React.FC = () => {
         await saveIncomeSourceRules(dir, loadedIncomeRules);
       }
       setIncomeSourceRules(loadedIncomeRules);
-     
+      
       // החל כללי מקורות הכנסה על העסקאות
       allDetails = applyIncomeSourceRules(allDetails, loadedIncomeRules);
 
@@ -618,18 +656,18 @@ const App: React.FC = () => {
       }).pop();
       setSelectedMonth(latest || formatMonthYear(new Date()));
 
-      setLoadingState({
-        step: 'finalizing',
+      setLoadingState({ 
+        step: 'finalizing', 
         message: '✨ מסיים...'
       });
-     
+      
       const totalAmount = allDetails.reduce((sum, d) => sum + signedAmount(d), 0);
       const averageAmount = allDetails.length > 0 ? totalAmount / allDetails.length : 0;
       setAnalysis({ totalAmount, averageAmount, details: allDetails, creditChargeCycles: finalCycles });
-     
+      
       // סיום הטעינה
       setLoadingState(null);
-     
+      
       // הפעל את ה-Tour למשתמש חדש (אחרי delay קצר לתת לממשק להיטען)
       const shouldShowTour = await checkShouldShowTour(dir);
       if (shouldShowTour) {
@@ -641,10 +679,10 @@ const App: React.FC = () => {
       try {
         const { profile, isNewUser } = await getOrCreateUserProfile(dir);
         setUserProfile({ ...profile, _isNewUser: isNewUser } as UserProfile & { _isNewUser: boolean });
-       
+        
         // שלח session_start תמיד - לכל המשתמשים (גם מי שסירב)
         await trackSessionStart(profile, isNewUser);
-       
+        
         // שמור סטטיסטיקות לשליחה ברגע ההחלטה
         const uniqueCategories = new Set(allDetails.map(d => d.category).filter(Boolean));
         setAnalyticsStats({
@@ -653,7 +691,7 @@ const App: React.FC = () => {
           monthCount: uniqueMonths.length,
           categoryCount: uniqueCategories.size
         });
-       
+        
         // אם המשתמש עדיין לא ענה על שאלת ההסכמה - הצג באנר
         if (profile.analyticsConsent === null && !wasConsentAsked()) {
           setShowConsentBanner(true);
@@ -753,7 +791,7 @@ const App: React.FC = () => {
     : [];
 
   // פילטר: הסתר חיובי בנק של כרטיס אשראי רק אם יש להם פירוט (relatedTransactionIds) כדי למנוע כפל.
-  // סינון לפי displayMode:
+  // סינון לפי displayMode: 
   // - 'income' = עסקאות שסומנו כמקור הכנסה
   // - 'expense' = עסקאות הוצאה (כולל ביטולי הוצאה שמקטינים את ההוצאה)
   const filteredDetails = scopedDetails.filter(d => {
@@ -874,17 +912,71 @@ const App: React.FC = () => {
     });
   };
 
+  // --- שינוי קטגוריה מרוכז מחיפוש גלובלי (inline) ---
+  const handleApplyBulkCategoryChange = async (
+    transactions: CreditDetail[],
+    newCategory: string,
+    filters: SearchFiltersForRule,
+    createRule: boolean,
+    includeDatesInRule: boolean
+  ) => {
+    if (!analysis || transactions.length === 0 || !newCategory) return;
+    
+    const idsToUpdate = transactions.map(d => d.id);
+    
+    // עדכון העסקאות
+    const newDetails = analysis.details.map(d => {
+      if (idsToUpdate.includes(d.id)) {
+        return { ...d, category: newCategory };
+      }
+      return d;
+    });
+
+    // יצירת כלל (אם נבחר)
+    if (createRule && dirHandle) {
+      await addAdvancedRule(dirHandle, filters, newCategory, includeDatesInRule);
+      // רענון הכללים
+      const updatedRules = await loadCategoryRules(dirHandle);
+      setCategoryRules(updatedRules);
+    }
+
+    // עדכון ה-state
+    setAnalysis({ ...analysis, details: newDetails });
+  };
+
+  // --- עדכון כלל קיים מ-GlobalSearchModal ---
+  const handleUpdateRuleFromGlobalSearch = async (
+    ruleId: string,
+    filters: SearchFiltersForRule,
+    newCategory: string,
+    includeDatesInRule: boolean
+  ) => {
+    if (!dirHandle || !analysis) return;
+    
+    // עדכון הכלל בקובץ
+    await updateCategoryRule(dirHandle, ruleId, filters, newCategory, includeDatesInRule);
+    
+    // רענון הכללים
+    const updatedRules = await loadCategoryRules(dirHandle);
+    setCategoryRules(updatedRules);
+    
+    // יישום הכללים מחדש על כל העסקאות
+    const updatedDetails = applyCategoryRules(analysis.details, updatedRules);
+    setAnalysis({ ...analysis, details: updatedDetails });
+  };
+
   // --- פונקציה ליישום שינוי קטגוריה ---
   const handleApplyCategoryChange = async (editDialogParam?: typeof editDialog) => {
     const dialog = editDialogParam || editDialog;
     if (!dialog || !analysis) return;
-    const { candidates = [], newCategory = '', applyToAll = false, excludeIds = new Set(), transaction, amountFilter, searchTerm, createAutoRule } = dialog;
+    const { candidates = [], newCategory = '', applyToAll = false, excludeIds = new Set(), transaction, amountFilter, searchTerm, createAutoRule, globalSearchFilters, includeDatesInRule } = dialog;
     let idsToUpdate: string[];
-   
+    
     // אם נפתח מחיפוש, תמיד applyToAll=true בפועל
     const isFromSearch = !!searchTerm;
-    const effectiveApplyToAll = isFromSearch || applyToAll;
-   
+    const isFromGlobalSearch = !!globalSearchFilters;
+    const effectiveApplyToAll = isFromSearch || isFromGlobalSearch || applyToAll;
+    
     if (effectiveApplyToAll) {
       idsToUpdate = candidates.filter(d => !excludeIds.has?.(d.id)).map(d => d.id);
     } else {
@@ -899,11 +991,15 @@ const App: React.FC = () => {
 
     // שמירת כלל קטגוריה (רק אם createAutoRule מופעל)
     const shouldCreateRule = createAutoRule !== false; // ברירת מחדל: כן
-   
+    
     if (effectiveApplyToAll && newCategory && shouldCreateRule && dirHandle) {
       if (!excludeIds || excludeIds.size === 0) {
-        // אם נפתח מחיפוש - צור כלל regex שמכיל את מילת החיפוש
-        if (isFromSearch && searchTerm) {
+        // אם נפתח מחיפוש גלובלי - צור כלל עם כל הפילטרים
+        if (isFromGlobalSearch && globalSearchFilters) {
+          await addAdvancedRule(dirHandle, globalSearchFilters, newCategory, includeDatesInRule);
+        }
+        // אם נפתח מחיפוש רגיל - צור כלל regex שמכיל את מילת החיפוש
+        else if (isFromSearch && searchTerm) {
           await addDescriptionContainsRule(dirHandle, searchTerm, newCategory);
         } else if (transaction?.description) {
           // שינוי רגיל - כלל על תיאור מדויק
@@ -959,13 +1055,13 @@ const App: React.FC = () => {
     //     }
     //   }
     // }
-   
+    
     // רענון רשימת הכללים מהקובץ אחרי שמירה
     if (dirHandle) {
       const updatedRules = await loadCategoryRules(dirHandle);
       setCategoryRules(updatedRules);
     }
-   
+    
     setAnalysis({ ...analysis, details: newDetails });
     setEditDialog(null);
   };
@@ -999,6 +1095,9 @@ const App: React.FC = () => {
   const [_descriptionAliases, _setDescriptionAliases] = useState<Record<string, string>>({});
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  
+  // State לעריכת כלל מ-SettingsMenu
+  const [ruleToEditFromSettings, setRuleToEditFromSettings] = useState<CategoryRule | null>(null);
 
   // --- Category Rules (unified system) ---
   const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
@@ -1015,7 +1114,7 @@ const App: React.FC = () => {
   // Update a rule's category
   async function handleUpdateRule(ruleId: string, newCategory: string) {
     if (!dirHandle) return;
-    const updated = categoryRules.map(r =>
+    const updated = categoryRules.map(r => 
       r.id === ruleId ? { ...r, category: newCategory } : r
     );
     await saveCategoryRules(dirHandle, updated);
@@ -1032,6 +1131,20 @@ const App: React.FC = () => {
     const updated = categoryRules.filter(r => r.id !== ruleId);
     await saveCategoryRules(dirHandle, updated);
     setCategoryRules(updated);
+  }
+
+  // Toggle rule active/inactive (soft delete)
+  async function handleToggleRule(ruleId: string, active: boolean) {
+    if (!dirHandle) return;
+    const updated = categoryRules.map(r => 
+      r.id === ruleId ? { ...r, active, updatedAt: new Date().toISOString() } : r
+    );
+    await saveCategoryRules(dirHandle, updated);
+    setCategoryRules(updated);
+    // Reapply rules to analysis if activating
+    if (active && analysis) {
+      setAnalysis(a => a ? { ...a, details: applyCategoryRules(a.details, updated) } : a);
+    }
   }
 
   // Legacy support: keep descToCategory derived from rules for backwards compatibility
@@ -1069,7 +1182,7 @@ const App: React.FC = () => {
     'משרד': { icon: '📋', color: '#607d8b' },
     'מזל': { icon: '🎰', color: '#d4af37' },
   };
- 
+  
   // פונקציה לבדוק אם לקטגוריה יש דיפולט
   const getCategoryDefaults = (catName: string): { icon: string; color: string } | null => {
     const lowerName = catName.toLowerCase();
@@ -1080,23 +1193,107 @@ const App: React.FC = () => {
     }
     return null;
   };
- 
+  
+  // דגל לזיהוי שהקטגוריות נטענו לפחות פעם אחת
+  const [categoriesLoadedOnce, setCategoriesLoadedOnce] = useState(false);
+  
+  // דגל לזיהוי שדיאלוג הקטגוריות כבר הוצג בסשן הזה (למנוע הצגה חוזרת אחרי מחיקה/עריכה)
+  const [initialPromptShown, setInitialPromptShown] = useState(false);
+  
   React.useEffect(() => {
-    if (!analysis || categoriesLoading) return;
+    if (!categoriesLoading && dirHandle) {
+      setCategoriesLoadedOnce(true);
+    }
+  }, [categoriesLoading, dirHandle]);
+  
+  // פונקציה לזיהוי קונפליקטים (בתי עסק בקטגוריות שונות) - דומה ללוגיקה ב-NewCategoriesTablePrompt
+  const detectMerchantConflicts = React.useCallback((details: CreditDetail[], rules: CategoryRule[]): number => {
+    const extractMerchantName = (description: string): string => {
+      if (!description) return '';
+      const cleaned = description
+        .replace(/\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?/g, '')
+        .replace(/\d{4,}/g, '')
+        .replace(/[*#\-_]+/g, ' ')
+        .trim();
+      const words = cleaned.split(/\s+/).filter(w => w.length > 1);
+      return words.slice(0, 3).join(' ').toLowerCase();
+    };
+    
+    const isTransactionCoveredByRule = (tx: CreditDetail): boolean => {
+      for (const rule of rules) {
+        if (!rule.active) continue;
+        const c = rule.conditions;
+        if (c.descriptionEquals && tx.description === c.descriptionEquals) return true;
+        if (c.descriptionRegex) {
+          try {
+            const regex = new RegExp(c.descriptionRegex, 'i');
+            if (regex.test(tx.description)) return true;
+          } catch { /* regex invalid */ }
+        }
+      }
+      return false;
+    };
+    
+    const merchantToCategories = new Map<string, Set<string>>();
+    for (const tx of details) {
+      if (isTransactionCoveredByRule(tx)) continue;
+      const merchant = extractMerchantName(tx.description);
+      const category = tx.category || '';
+      if (!merchant || merchant.length <= 2 || !category) continue;
+      if (!merchantToCategories.has(merchant)) {
+        merchantToCategories.set(merchant, new Set());
+      }
+      merchantToCategories.get(merchant)!.add(category);
+    }
+    
+    let conflictCount = 0;
+    for (const [, categories] of merchantToCategories.entries()) {
+      if (categories.size > 1) conflictCount++;
+    }
+    return conflictCount;
+  }, []);
+
+  // מפתח לזיהוי האם המשתמש כבר דילג על דיאלוג הקונפליקטים
+  const [dismissedConflictCount, setDismissedConflictCount] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem('dismissedConflictCount');
+      return saved ? parseInt(saved, 10) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  React.useEffect(() => {
+    // חכה שהקטגוריות יטענו לפחות פעם אחת
+    if (!analysis || !categoriesLoadedOnce) return;
+    
+    // אם הדיאלוג כבר הוצג בסשן הזה - לא מציגים שוב (למנוע הצגה אחרי מחיקת קטגוריה)
+    if (initialPromptShown) return;
+    
     // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList וגם לא ב-categoryAliases (כבר מופו)
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
-    const missingCats = excelCats.filter(catName =>
-      !!catName &&
+    const missingCats = excelCats.filter(catName => 
+      !!catName && 
       !categoriesList.find(c => c.name === catName) &&
       !categoryAliases[catName] // לא להציג קטגוריות שכבר מופו
     ) as string[];
-   
-    if (missingCats.length === 0) return;
-   
+    
+    // בדוק גם קונפליקטים בין בתי עסק (גם אם אין קטגוריות חדשות)
+    const conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
+    
+    // אם אין קטגוריות חדשות ואין קונפליקטים - אין צורך בדיאלוג
+    if (missingCats.length === 0 && conflictCount === 0) return;
+    
+    // אם יש רק קונפליקטים (ללא קטגוריות חדשות) והמשתמש כבר דילג עליהם - אל תציג שוב
+    // (אלא אם מספר הקונפליקטים השתנה, מה שמעיד על שינוי בנתונים)
+    if (missingCats.length === 0 && conflictCount > 0 && dismissedConflictCount === conflictCount) {
+      return;
+    }
+    
     // הפרד בין קטגוריות עם דיפולט לאלו בלי
     const catsWithDefaults: string[] = [];
     const catsWithoutDefaults: string[] = [];
-   
+    
     for (const cat of missingCats) {
       if (getCategoryDefaults(cat)) {
         catsWithDefaults.push(cat);
@@ -1104,7 +1301,7 @@ const App: React.FC = () => {
         catsWithoutDefaults.push(cat);
       }
     }
-   
+    
     // אשר אוטומטית קטגוריות עם דיפולט
     if (catsWithDefaults.length > 0) {
       const autoApprovedMapping: Record<string, CategoryDef> = {};
@@ -1116,31 +1313,38 @@ const App: React.FC = () => {
           color: defaults.color,
         };
       }
-     
-      // הוסף לרשימת הקטגוריות
-      const merged = [...categoriesList];
-      Object.values(autoApprovedMapping).forEach(catDef => {
-        if (!merged.find(c => c.name === catDef.name)) {
-          merged.push(catDef);
+      
+      // הוסף לרשימת הקטגוריות - רק אם באמת יש מה להוסיף
+      const newCatsToAdd = Object.values(autoApprovedMapping).filter(
+        catDef => !categoriesList.find(c => c.name === catDef.name)
+      );
+      
+      if (newCatsToAdd.length > 0) {
+        const merged = [...categoriesList, ...newCatsToAdd];
+        setCategoriesList(merged);
+        if (dirHandle) {
+          saveCategoriesToDir(dirHandle, merged);
         }
-      });
-     
-      setCategoriesList(merged);
-      if (dirHandle) {
-        saveCategoriesToDir(dirHandle, merged);
+        console.log(`✅ נוספו אוטומטית ${newCatsToAdd.length} קטגוריות:`, newCatsToAdd.map(c => c.name).join(', '));
       }
-     
-      console.log(`✅ נוספו אוטומטית ${catsWithDefaults.length} קטגוריות:`, catsWithDefaults.join(', '));
     }
-   
-    // אם יש קטגוריות בלי דיפולט - הצג דיאלוג
-    if (catsWithoutDefaults.length > 0) {
+    
+    // הצג דיאלוג אם יש קטגוריות חדשות (עם או בלי דיפולט) או קונפליקטים
+    // העבר את כל הקטגוריות מהאקסל - הדיאלוג יציג רק את הרלוונטיות
+    const shouldShowDialog = catsWithoutDefaults.length > 0 || conflictCount > 0;
+    
+    if (shouldShowDialog) {
+      // סמן שהדיאלוג הוצג בסשן הזה
+      setInitialPromptShown(true);
+      
+      // אם יש קטגוריות חדשות - העבר אותן, אחרת העבר את כל הקטגוריות מהאקסל (לזיהוי קונפליקטים)
+      const namesToPass = catsWithoutDefaults.length > 0 ? catsWithoutDefaults : excelCats as string[];
       setNewCategoriesPrompt({
-        names: catsWithoutDefaults, // רק קטגוריות שדורשות התייחסות
+        names: namesToPass,
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
           const merged = [...categoriesList];
           const newAliases = { ...categoryAliases };
-         
+          
           Object.entries(mapping).forEach(([excelName, catDef]) => {
             // אם שם הקטגוריה שונה משם המקור - זה מיפוי/איחוד
             if (excelName !== catDef.name) {
@@ -1155,10 +1359,10 @@ const App: React.FC = () => {
               });
             }
           });
-         
+          
           setCategoriesList(merged);
           setCategoryAliases(newAliases);
-         
+          
           if (dirHandle) {
             await saveCategoriesToDir(dirHandle, merged);
             // שמור את המיפויים כדי שלא יציע שוב בפעם הבאה
@@ -1166,7 +1370,7 @@ const App: React.FC = () => {
               await saveAliasesToDir(dirHandle, newAliases, 'category');
             }
           }
-         
+          
           setAnalysis(a => a ? ({
             ...a,
             details: a.details.map(d => {
@@ -1181,7 +1385,7 @@ const App: React.FC = () => {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis, categoriesList, categoriesLoading, dirHandle]);
+  }, [analysis, categoriesList, categoriesLoadedOnce, dirHandle, categoryRules, categoryAliases, detectMerchantConflicts, dismissedConflictCount]);
 
   // טען קטגוריות מהתיקיה שנבחרה בכל פעם ש-dirHandle משתנה
   React.useEffect(() => {
@@ -1254,12 +1458,12 @@ const App: React.FC = () => {
         const existingRuleIndex = categoryRules.findIndex(
           r => r.conditions.descriptionEquals === customEvent.detail.description
         );
-       
+        
         let updatedRules: CategoryRule[];
         if (existingRuleIndex >= 0) {
           // עדכן חוק קיים
-          updatedRules = categoryRules.map((r, i) =>
-            i === existingRuleIndex
+          updatedRules = categoryRules.map((r, i) => 
+            i === existingRuleIndex 
               ? { ...r, category: customEvent.detail.category }
               : r
           );
@@ -1277,7 +1481,7 @@ const App: React.FC = () => {
           };
           updatedRules = [...categoryRules, newRule];
         }
-       
+        
         await saveCategoryRules(dirHandle, updatedRules);
         setCategoryRules(updatedRules);
       })();
@@ -1319,23 +1523,23 @@ const App: React.FC = () => {
   // סימון עסק או קטגוריה כהכנסה (מתוך טבלת העסקאות)
   const handleMarkAsIncomeSource = async (description: string, sourceType: 'business' | 'category' = 'business') => {
     if (!dirHandle) return;
-   
+    
     // בדוק אם כבר קיים כלל
-    const existingRule = incomeSourceRules.find(r =>
-      r.description === description &&
+    const existingRule = incomeSourceRules.find(r => 
+      r.description === description && 
       (r.sourceType === sourceType || (!r.sourceType && sourceType === 'business'))
     );
-   
+    
     if (existingRule && existingRule.isIncomeSource) {
       // כבר מסומן כהכנסה
       return;
     }
-   
+    
     // אם יש כלל קיים (שלילי), נמחק אותו קודם
     if (existingRule) {
       await removeIncomeSourceRule(dirHandle, existingRule.id);
     }
-   
+    
     // צור כלל חדש
     let newRule: IncomeSourceRule;
     if (sourceType === 'category') {
@@ -1343,10 +1547,10 @@ const App: React.FC = () => {
     } else {
       newRule = await addIncomeSourceRule(dirHandle, description);
     }
-   
+    
     const updatedRules = [...incomeSourceRules.filter(r => r.id !== existingRule?.id), newRule];
     setIncomeSourceRules(updatedRules);
-   
+    
     // החל מחדש על העסקאות
     if (analysis) {
       const updatedDetails = applyIncomeSourceRules(analysis.details, updatedRules);
@@ -1358,24 +1562,24 @@ const App: React.FC = () => {
   // זה יגרום לעסקה להיספר כהוצאה ולא כהכנסה או ביטול הוצאה
   const handleMarkAsNotIncomeSource = async (description: string, sourceType: 'business' | 'category' = 'business') => {
     if (!dirHandle) return;
-   
+    
     // מצא ומחק כלל קיים אם יש (כלל חיובי או שלילי)
-    const existingRule = incomeSourceRules.find(r =>
-      r.description === description &&
+    const existingRule = incomeSourceRules.find(r => 
+      r.description === description && 
       (r.sourceType === sourceType || (!r.sourceType && sourceType === 'business'))
     );
-   
+    
     if (existingRule) {
       await removeIncomeSourceRule(dirHandle, existingRule.id);
     }
-   
+    
     // צור כלל שלילי חדש - סימון שזה לא מקור הכנסה
     await markAsNotIncomeSource(dirHandle, description, sourceType);
-   
+    
     // טען מחדש את הכללים
     const updatedRules = await loadIncomeSourceRules(dirHandle);
     setIncomeSourceRules(updatedRules);
-   
+    
     // החל מחדש על העסקאות
     if (analysis) {
       const updatedDetails = applyIncomeSourceRules(analysis.details, updatedRules);
@@ -1386,20 +1590,20 @@ const App: React.FC = () => {
   // סימון עסקה בודדת כהכנסה או הוצאה (override ברמת עסקה)
   const handleMarkTransactionAsIncomeSource = async (transactionId: string, isIncome: boolean) => {
     if (!dirHandle || !analysis) return;
-   
+    
     // מצא את העסקה
     const tx = analysis.details.find(d => d.id === transactionId);
     if (!tx) return;
-   
+    
     // בדוק אם כבר יש כלל לעסקה זו
-    const existingRule = incomeSourceRules.find(r =>
+    const existingRule = incomeSourceRules.find(r => 
       r.sourceType === 'transaction' && r.transactionId === transactionId
     );
-   
+    
     if (existingRule) {
       await removeIncomeSourceRule(dirHandle, existingRule.id);
     }
-   
+    
     // צור כלל חדש לעסקה בודדת
     const newRule: IncomeSourceRule = {
       id: `tx-${transactionId}-${Date.now()}`,
@@ -1412,26 +1616,31 @@ const App: React.FC = () => {
       confirmedByUser: true,
       createdAt: new Date().toISOString()
     };
-   
+    
     // שמור את הכלל
     const updatedRules = [...incomeSourceRules.filter(r => r.id !== existingRule?.id), newRule];
     await saveIncomeSourceRules(dirHandle, updatedRules);
     setIncomeSourceRules(updatedRules);
-   
-    // עדכן את העסקה הספציפית
-    const updatedDetails = analysis.details.map(d => {
-      if (d.id === transactionId) {
-        return {
-          ...d,
-          direction: isIncome ? 'income' as const : 'expense' as const,
-          userAdjustedDirection: true,
-          incomeSourceId: newRule.id
-        };
-      }
-      return d;
-    });
+    
+    // החל מחדש את כל הכללים על העסקאות - כולל הכלל החדש
+    // זה יעדכן את transactionNature במקום direction
+    const updatedDetails = applyIncomeSourceRules(analysis.details, updatedRules);
     setAnalysis({ ...analysis, details: updatedDetails });
   };
+
+  // --- פונקציית ניווט לעסקה ספציפית (מחיפוש גלובלי) ---
+  const handleNavigateToTransaction = useCallback((tx: CreditDetail, monthKey: string) => {
+    // עבור לתצוגה חודשית
+    setView('monthly');
+    // עבור לחודש הרלוונטי
+    setSelectedMonth(monthKey);
+    // סמן את העסקה להדגשה
+    setHighlightedTransactionId(tx.id);
+    // הסר את ההדגשה אחרי כמה שניות
+    setTimeout(() => {
+      setHighlightedTransactionId(null);
+    }, 3000);
+  }, []);
 
   return (
     <div className="app-container">
@@ -1440,10 +1649,10 @@ const App: React.FC = () => {
         <div className="onboarding" role="dialog" aria-labelledby="onboardingTitle" aria-modal="true">
           <div className="onboarding-inner">
             <h1 id="onboardingTitle">ברוך הבא למערכת ניתוח חיובי אשראי</h1>
-           
+            
             {/* מצב טעינה - הצגת התקדמות */}
             {loadingState ? (
-              <div className="loading-state" style={{
+              <div className="loading-state" style={{ 
                 padding: '32px 24px',
                 textAlign: 'center',
                 animation: 'fadeIn 0.3s ease'
@@ -1457,9 +1666,9 @@ const App: React.FC = () => {
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite'
                 }} />
-                <p style={{
-                  fontSize: '1.25rem',
-                  fontWeight: 500,
+                <p style={{ 
+                  fontSize: '1.25rem', 
+                  fontWeight: 500, 
                   marginBottom: 8,
                   color: '#1f2937'
                 }}>
@@ -1484,10 +1693,10 @@ const App: React.FC = () => {
                         transition: 'width 0.3s ease'
                       }} />
                     </div>
-                    <p style={{
-                      fontSize: '0.875rem',
-                      color: '#6b7280',
-                      marginTop: 8
+                    <p style={{ 
+                      fontSize: '0.875rem', 
+                      color: '#6b7280', 
+                      marginTop: 8 
                     }}>
                       {loadingState.progress.current} / {loadingState.progress.total}
                     </p>
@@ -1576,6 +1785,7 @@ const App: React.FC = () => {
             setDateMode={setDateModeWithTracking}
             selectedFolder={selectedFolder}
             onPickDirectory={handlePickDirectory}
+            onRefreshDirectory={handleRefreshDirectory}
             dirHandle={dirHandle ?? undefined}
             onOpenAdvancedSettings={() => {
               setSettingsOpen(true);
@@ -1586,6 +1796,13 @@ const App: React.FC = () => {
             onMarkAsNotIncomeSource={handleMarkAsNotIncomeSource}
             onMarkTransactionAsIncomeSource={handleMarkTransactionAsIncomeSource}
             onTrackFeature={trackFeature}
+            onNavigateToTransaction={handleNavigateToTransaction}
+            highlightedTransactionId={highlightedTransactionId}
+            onApplyBulkCategoryChange={handleApplyBulkCategoryChange}
+            onUpdateRule={handleUpdateRuleFromGlobalSearch}
+            onAddCategory={upsertCategory}
+            externalRuleToEdit={ruleToEditFromSettings}
+            onClearExternalRuleToEdit={() => setRuleToEditFromSettings(null)}
           />
           {/* אייקון צ'אט בפינה */}
           <button
@@ -1625,8 +1842,21 @@ const App: React.FC = () => {
           names={newCategoriesPrompt.names}
           categoriesList={categoriesList}
           onConfirm={newCategoriesPrompt.onConfirm}
-          onCancel={() => setNewCategoriesPrompt(null)}
+          onCancel={() => {
+            // שמור את מספר הקונפליקטים הנוכחי כדי לא להציג שוב את אותם קונפליקטים
+            if (analysis) {
+              const conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
+              if (conflictCount > 0) {
+                setDismissedConflictCount(conflictCount);
+                try {
+                  localStorage.setItem('dismissedConflictCount', String(conflictCount));
+                } catch { /* ignore */ }
+              }
+            }
+            setNewCategoriesPrompt(null);
+          }}
           allDetails={analysis?.details || []}
+          categoryRules={categoryRules}
         />
       )}
       {settingsOpen && dirHandle && (
@@ -1647,6 +1877,11 @@ const App: React.FC = () => {
           transactionsByCategory={transactionsByCategory}
           categoryAliases={categoryAliases}
           onAliasesChange={handleCategoryAliasesChange}
+          onEditRule={(rule) => {
+            setRuleToEditFromSettings(rule);
+            setSettingsOpen(false);
+          }}
+          onToggleRule={handleToggleRule}
         />
       )}
       {/* Analytics Consent Banner */}

@@ -362,11 +362,19 @@ export function applyIncomeSourceRules(
   // בנה מפות של תיאורים וקטגוריות שהם מקורות הכנסה
   const incomeSourceBusinesses = new Map<string, IncomeSourceRule>();
   const incomeSourceCategories = new Map<string, IncomeSourceRule>();
+  // כללים לעסקאות בודדות - קדימות הכי גבוהה
+  const transactionRules = new Map<string, IncomeSourceRule>();
   // כללים שלילית - עסקים/קטגוריות שסומנו כ"לא הכנסה"
   const notIncomeSourceBusinesses = new Set<string>();
   const notIncomeSourceCategories = new Set<string>();
   
   for (const rule of rules) {
+    // כללים לעסקאות בודדות - יש להם קדימות הכי גבוהה
+    if (rule.sourceType === 'transaction' && rule.transactionId) {
+      transactionRules.set(rule.transactionId, rule);
+      continue;
+    }
+    
     if (rule.isIncomeSource) {
       if (rule.sourceType === 'category') {
         incomeSourceCategories.set(rule.description, rule);
@@ -390,6 +398,24 @@ export function applyIncomeSourceRules(
     let incomeSourceId: string | undefined;
     // direction נשאר כפי שהוא - מציין את כיוון הזרימה הפיננסית האמיתית
     // בחישובים נשתמש ב-direction כדי לדעת אם להוסיף או לקזז
+
+    // בדוק קודם כלל ברמת עסקה בודדת - קדימות הכי גבוהה
+    const transactionRule = transactionRules.get(d.id);
+    if (transactionRule) {
+      // יש כלל ספציפי לעסקה זו
+      if (transactionRule.isIncomeSource) {
+        nature = 'income';
+      } else {
+        // סומן כ"לא הכנסה" - התנהג כמו הוצאה
+        nature = d.direction === 'income' ? 'expense_reversal' : 'expense';
+      }
+      incomeSourceId = transactionRule.id;
+      return {
+        ...d,
+        transactionNature: nature,
+        incomeSourceId,
+      };
+    }
 
     // בדוק אם סומן כ"לא הכנסה" - אם כן, תמיד הוצאה/ביטול הוצאה
     const isMarkedAsNotIncome = notIncomeSourceBusinesses.has(d.description) ||

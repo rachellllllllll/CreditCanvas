@@ -107,8 +107,43 @@ export function applyCategoryRules(details: CreditDetail[], rules: CategoryRule[
       }
       // Amount constraints - השתמש בערך מוחלט כי סכומים יכולים להיות שליליים
       const absAmount = Math.abs(d.amount);
-      if (typeof c.minAmount === 'number' && absAmount < c.minAmount) continue;
-      if (typeof c.maxAmount === 'number' && absAmount > c.maxAmount) continue;
+      // תמיכה גם ב-string וגם ב-number (נתונים יכולים להישמר כ-string ב-JSON)
+      if (c.minAmount !== undefined && c.minAmount !== null) {
+        const minAmt = Number(c.minAmount);
+        if (!isNaN(minAmt) && absAmount < minAmt) continue;
+      }
+      if (c.maxAmount !== undefined && c.maxAmount !== null) {
+        const maxAmt = Number(c.maxAmount);
+        if (!isNaN(maxAmt) && absAmount > maxAmt) continue;
+      }
+      
+      // Source constraint (credit/bank)
+      if (c.source && d.source !== c.source) continue;
+      
+      // Direction constraint (income/expense)
+      if (c.direction && d.direction !== c.direction) continue;
+      
+      // Date constraints (YYYY-MM-DD format)
+      if (c.dateFrom || c.dateTo) {
+        // Parse transaction date (DD/MM/YYYY or DD/MM/YY)
+        const parts = d.date.split('/');
+        if (parts.length >= 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          let year = parseInt(parts[2], 10);
+          if (year < 100) year += 2000;
+          const txDate = new Date(year, month, day);
+          
+          if (c.dateFrom) {
+            const fromDate = new Date(c.dateFrom);
+            if (txDate < fromDate) continue;
+          }
+          if (c.dateTo) {
+            const toDate = new Date(c.dateTo);
+            if (txDate > toDate) continue;
+          }
+        }
+      }
 
       // If reached here – rule matches. Override category.
       if (rule.category) {
@@ -191,5 +226,119 @@ export async function addDescriptionContainsRule(dirHandle: FileSystemDirectoryH
     source: 'user'
   });
   rules.push(rule);
+  await saveCategoryRules(dirHandle, rules);
+}
+
+// פילטרים מחיפוש גלובלי
+interface SearchFiltersForRule {
+  text: string;
+  minAmount?: number;
+  maxAmount?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Helper to add advanced rule from global search filters
+export async function addAdvancedRule(
+  dirHandle: FileSystemDirectoryHandle,
+  filters: SearchFiltersForRule,
+  category: string,
+  includeDatesInRule?: boolean
+): Promise<void> {
+  if (!dirHandle || !category) return;
+  
+  const rules = await loadCategoryRules(dirHandle);
+  
+  // Build conditions object from filters
+  const conditions: CategoryRule['conditions'] = {};
+  
+  // Text filter -> descriptionRegex (contains)
+  if (filters.text) {
+    const escapedTerm = filters.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    conditions.descriptionRegex = escapedTerm;
+  }
+  
+  // Amount filter
+  if (typeof filters.minAmount === 'number' && Number.isFinite(filters.minAmount)) {
+    conditions.minAmount = filters.minAmount;
+  }
+  if (typeof filters.maxAmount === 'number' && Number.isFinite(filters.maxAmount)) {
+    conditions.maxAmount = filters.maxAmount;
+  }
+  
+  // Date filter (optional - only if user chose to include)
+  if (includeDatesInRule) {
+    if (filters.dateFrom) {
+      conditions.dateFrom = filters.dateFrom;
+    }
+    if (filters.dateTo) {
+      conditions.dateTo = filters.dateTo;
+    }
+  }
+  
+  // Don't add empty rule
+  if (Object.keys(conditions).length === 0) return;
+  
+  const rule = createRule({ 
+    category, 
+    conditions,
+    source: 'user'
+  });
+  rules.push(rule);
+  await saveCategoryRules(dirHandle, rules);
+}
+
+// Update an existing rule by ID
+export async function updateCategoryRule(
+  dirHandle: FileSystemDirectoryHandle,
+  ruleId: string,
+  filters: SearchFiltersForRule,
+  category: string,
+  includeDatesInRule?: boolean
+): Promise<void> {
+  if (!dirHandle || !ruleId || !category) return;
+  
+  const rules = await loadCategoryRules(dirHandle);
+  const ruleIndex = rules.findIndex(r => r.id === ruleId);
+  if (ruleIndex === -1) return;
+  
+  // Build new conditions object from filters
+  const conditions: CategoryRule['conditions'] = {};
+  
+  // Text filter -> descriptionRegex (contains)
+  if (filters.text) {
+    const escapedTerm = filters.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    conditions.descriptionRegex = escapedTerm;
+  }
+  
+  // Amount filter
+  if (typeof filters.minAmount === 'number' && Number.isFinite(filters.minAmount)) {
+    conditions.minAmount = filters.minAmount;
+  }
+  if (typeof filters.maxAmount === 'number' && Number.isFinite(filters.maxAmount)) {
+    conditions.maxAmount = filters.maxAmount;
+  }
+  
+  // Date filter (optional)
+  if (includeDatesInRule) {
+    if (filters.dateFrom) {
+      conditions.dateFrom = filters.dateFrom;
+    }
+    if (filters.dateTo) {
+      conditions.dateTo = filters.dateTo;
+    }
+  }
+  
+  // Don't save empty rule
+  if (Object.keys(conditions).length === 0) return;
+  
+  // Update the rule in place
+  rules[ruleIndex] = {
+    ...rules[ruleIndex],
+    category,
+    conditions,
+    updatedAt: new Date().toISOString(),
+  };
+  
   await saveCategoryRules(dirHandle, rules);
 }

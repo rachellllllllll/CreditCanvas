@@ -22,6 +22,10 @@ interface SettingsMenuProps {
   // Props needed for CategoryAliasesManager
   categoryAliases?: Record<string, string>;
   onAliasesChange?: (aliases: Record<string, string>) => void;
+  // חדש: עריכת כלל (פתיחת GlobalSearchModal במצב עריכה)
+  onEditRule?: (rule: CategoryRule) => void;
+  // חדש: הפעלה/השבתה של כלל (מחיקה רכה)
+  onToggleRule?: (ruleId: string, active: boolean) => void;
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ 
@@ -37,7 +41,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
   categoriesCount = {},
   transactionsByCategory = {},
   categoryAliases = {},
-  onAliasesChange
+  onAliasesChange,
+  onEditRule,
+  onToggleRule
 }) => {
   const [activePanel, setActivePanel] = useState<ActivePanel>('main');
   
@@ -188,6 +194,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
               onDeleteRule={onDeleteRule}
               onAddCategory={onAddCategory}
               embedded={true}
+              onEditRule={onEditRule}
+              onToggleRule={onToggleRule}
             />
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import CategorySelectOrAdd from './CategorySelectOrAdd';
 import type { CategoryDef } from './CategoryManager';
-import type { CreditDetail } from '../types';
+import type { CreditDetail, CategoryRule } from '../types';
 import './NewCategoriesTablePrompt.css';
 
 interface NewCategoriesTablePromptProps {
@@ -11,7 +11,8 @@ interface NewCategoriesTablePromptProps {
   onCancel: () => void;
   // הוסף פרופ חדש: כל העסקאות
   allDetails?: CreditDetail[];
-  // handleApplyCategoryChange: (...args: any[]) => void;
+  // כללי קטגוריות - לסינון קונפליקטים מכוונים
+  categoryRules?: CategoryRule[];
 }
 
 // קונפליקט של בית עסק בקטגוריות שונות
@@ -158,19 +159,26 @@ const findIdenticalCategories = (
     const existingCat = existingByLower.get(lowerKey);
     
     if (existingCat) {
-      // כל הווריאנטים החדשים יתמזגו לקטגוריה הקיימת
-      if (variants.length > 0) {
+      // סנן רק וריאנטים ששונים מהיעד (אין טעם לאחד קטגוריה עם עצמה)
+      const sourcesToMerge = variants.filter(v => v !== existingCat.name);
+      if (sourcesToMerge.length > 0) {
         autoMerges.push({
           type: 'identical',
-          sources: variants,
+          sources: sourcesToMerge,
           target: existingCat.name,
           targetDef: existingCat
         });
-        for (const v of variants) {
+        for (const v of sourcesToMerge) {
           mergeMapping[v] = existingCat.name;
           toRemove.add(v);
           alreadyMerged.add(v);
         }
+      }
+      // סמן את כל הווריאנטים כ"כבר טופלו" (כולל את היעד עצמו)
+      // וגם הסר אותם מהרשימה - אין צורך להגדיר קטגוריה שכבר קיימת
+      for (const v of variants) {
+        alreadyMerged.add(v);
+        toRemove.add(v); // הוסף גם ל-toRemove כדי שלא יוצג בטבלה
       }
     } else if (variants.length > 1) {
       // כמה קטגוריות חדשות עם אותו שם (case-insensitive) - אחד אותן
@@ -265,7 +273,36 @@ const findIdenticalCategories = (
   return { filteredNames, autoMerges, mergeMapping };
 };
 
-const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ names, categoriesList, onConfirm, onCancel, allDetails = [] }) => {
+// בדוק אם עסקה מכוסה על ידי כלל קטגוריה (המשתמש החליט על הסיווג)
+const isTransactionCoveredByRule = (tx: CreditDetail, rules: CategoryRule[]): boolean => {
+  for (const rule of rules) {
+    if (!rule.active) continue;
+    const c = rule.conditions;
+    
+    // בדוק התאמה לתיאור
+    if (c.descriptionEquals && tx.description === c.descriptionEquals) return true;
+    if (c.descriptionRegex) {
+      try {
+        const regex = new RegExp(c.descriptionRegex, 'i');
+        if (regex.test(tx.description)) return true;
+      } catch { /* regex invalid */ }
+    }
+    
+    // בדוק התאמה לסכום (אם יש)
+    if (c.minAmount !== undefined || c.maxAmount !== undefined) {
+      const amount = Math.abs(tx.amount);
+      const matchesAmount = 
+        (c.minAmount === undefined || amount >= c.minAmount) &&
+        (c.maxAmount === undefined || amount <= c.maxAmount);
+      if (matchesAmount && (c.descriptionEquals || c.descriptionRegex)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ names, categoriesList, onConfirm, onCancel, allDetails = [], categoryRules = [] }) => {
   // חשב ספירת עסקאות לכל קטגוריה (נדרש לפני findIdenticalCategories)
   const initialTransactionCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -291,6 +328,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   
   // מצב תצוגה: 'summary' | 'table' | 'conflicts'
   const [viewMode, setViewMode] = useState<'summary' | 'table' | 'conflicts'>('summary');
+  
+  // State לפתרון קונפליקטים (מוגדר כאן כדי שיהיה זמין ל-useEffect)
+  const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, string>>({});
   
   // חשב את רשימת השמות בפועל (אחרי ביטולי איחודים)
   const activeNames = React.useMemo(() => {
@@ -627,11 +667,16 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   }, [names, groupsByKey, categoryTransactionCounts]);
 
   // זיהוי קונפליקטים: בתי עסק שמופיעים בקטגוריות שונות
-  // סינון: אם כל הקטגוריות שייכות לאותה קבוצה (יתאחדו ממילא) - זה לא קונפליקט אמיתי
+  // סינון: 
+  // 1. אם כל הקטגוריות שייכות לאותה קבוצה (יתאחדו ממילא) - זה לא קונפליקט אמיתי
+  // 2. אם העסקה מכוסה על ידי כלל קטגוריה - המשתמש החליט על הסיווג
   const merchantConflicts = React.useMemo(() => {
     const merchantToCategories = new Map<string, Map<string, number>>(); // merchant -> category -> count
     
     for (const tx of allDetails) {
+      // דלג על עסקאות שיש להן כלל קטגוריה - המשתמש החליט על הסיווג
+      if (isTransactionCoveredByRule(tx, categoryRules)) continue;
+      
       const merchant = extractMerchantName(tx.description);
       const category = tx.category || '';
       if (!merchant || merchant.length <= 2 || !category) continue;
@@ -678,10 +723,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     // מיין לפי סה"כ עסקאות
     conflicts.sort((a, b) => b.totalTransactions - a.totalTransactions);
     return conflicts;
-  }, [allDetails]);
-
-  // State לפתרון קונפליקטים
-  const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, string>>({});
+  }, [allDetails, categoryRules]);
 
   // סטטיסטיקות לסיכום
   const summaryStats = React.useMemo(() => {
@@ -706,14 +748,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     setCancelledMerges(prev => new Set([...prev, merge.target]));
   };
 
-  // פונקציה לפתרון קונפליקט
-  const handleResolveConflict = (merchantName: string, targetCategory: string | null) => {
-    if (targetCategory === null) {
-      // "השאר כמו שזה"
-      setResolvedConflicts(prev => ({ ...prev, [merchantName]: '__keep__' }));
-    } else {
-      setResolvedConflicts(prev => ({ ...prev, [merchantName]: targetCategory }));
-    }
+  // פונקציה לפתרון קונפליקט - בחירת קטגוריה לבית העסק
+  const handleResolveConflict = (merchantName: string, targetCategory: string) => {
+    setResolvedConflicts(prev => ({ ...prev, [merchantName]: targetCategory }));
   };
 
   // מסך סיכום בכניסה ראשונה
@@ -853,9 +890,32 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   if (viewMode === 'conflicts' && merchantConflicts.length > 0) {
     const unresolvedConflicts = merchantConflicts.filter(c => !resolvedConflicts[c.merchantName]);
     
+    // אם כל הקונפליקטים נפתרו - הצג הודעה וכפתור המשך
     if (unresolvedConflicts.length === 0) {
-      // כל הקונפליקטים נפתרו, עבור לטבלה
-      setViewMode('table');
+      return (
+        <div className="new-cats-overlay">
+          <div className="new-cats-dialog new-cats-conflicts">
+            <h3 className="new-cats-title">✅ כל הקונפליקטים נפתרו!</h3>
+            <div className="summary-actions">
+              {activeNames.length > 0 ? (
+                <button 
+                  className="new-cats-confirm-btn"
+                  onClick={() => setViewMode('table')}
+                >
+                  המשך להגדרת {activeNames.length} קטגוריות
+                </button>
+              ) : (
+                <button 
+                  className="new-cats-confirm-btn"
+                  onClick={handleConfirm}
+                >
+                  סיום ✓
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
     }
     
     return (
@@ -921,12 +981,6 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                       </button>
                     );
                   })}
-                  <button
-                    className="conflict-option-btn keep-btn"
-                    onClick={() => handleResolveConflict(conflict.merchantName, null)}
-                  >
-                    השאר כמו שזה
-                  </button>
                 </div>
               </div>
             ))}
@@ -934,19 +988,46 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
           <div className="new-cats-btns-row">
             <button className="new-cats-cancel-btn" onClick={() => setViewMode('summary')}>חזור</button>
-            <button 
-              className="new-cats-confirm-btn"
-              onClick={() => setViewMode('table')}
-            >
-              המשך להגדרת קטגוריות ({activeNames.length})
-            </button>
+            {activeNames.length > 0 ? (
+              <button 
+                className="new-cats-confirm-btn"
+                onClick={() => setViewMode('table')}
+              >
+                המשך להגדרת קטגוריות ({activeNames.length})
+              </button>
+            ) : (
+              <button 
+                className="new-cats-confirm-btn"
+                onClick={handleConfirm}
+              >
+                סיום ✓
+              </button>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // מסך טבלה - הקוד המקורי
+  // מסך טבלה - הקוד המקורי (רק אם יש קטגוריות להגדרה)
+  // אם הגענו לכאן בטעות בלי קטגוריות - הצג כפתור סיום
+  if (activeNames.length === 0) {
+    return (
+      <div className="new-cats-overlay">
+        <div className="new-cats-dialog">
+          <h3 className="new-cats-title">✅ אין קטגוריות חדשות להגדרה</h3>
+          <div className="summary-actions">
+            <button 
+              className="new-cats-confirm-btn"
+              onClick={handleConfirm}
+            >
+              סיום ✓
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="new-cats-overlay">
       <div className="new-cats-dialog">
