@@ -24,6 +24,7 @@ import {
   trackFilesLoaded,
   trackCategoryAssigned,
   trackFeatureUsage,
+  trackFileError,
   markConsentAsked,
   updateLastActivity,
   saveSessionDurationForLater
@@ -503,6 +504,39 @@ const App: React.FC = () => {
     }
   };
 
+  // פונקציית עזר לקריאת קובץ עם retry
+  // מתמודדת עם InvalidStateError שקורה כשהקובץ השתנה
+  async function readFileWithRetry(
+    fileHandle: FileSystemFileHandle,
+    maxRetries: number = 3,
+    delayMs: number = 100
+  ): Promise<{ arrayBuffer: ArrayBuffer; retryCount: number }> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // קבל reference חדש לקובץ בכל ניסיון
+        const file = await fileHandle.getFile();
+        const arrayBuffer = await file.arrayBuffer();
+        return { arrayBuffer, retryCount: attempt };
+      } catch (err) {
+        lastError = err as Error;
+        
+        // אם זו שגיאת InvalidStateError, נסה שוב
+        if (lastError.name === 'InvalidStateError' && attempt < maxRetries - 1) {
+          // המתן עם exponential backoff
+          await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, attempt)));
+          continue;
+        }
+        
+        // שגיאה אחרת או נגמרו הניסיונות - זרוק
+        throw lastError;
+      }
+    }
+    
+    throw lastError;
+  }
+
   // פונקציית עזר לאיסוף קבצי Excel רקורסיבית מכל תת-תיקיות
   // מחזירה רשימת אובייקטים עם FileSystemFileHandle ונתיב יחסי
   type ExcelFileEntry = { handle: FileSystemFileHandle; relativePath: string };
@@ -583,9 +617,19 @@ const App: React.FC = () => {
           message: `📄 קורא: ${fileHandle.name}`,
           progress: { current: fileIndex, total: excelFileEntries.length }
         });
+        // הוצא את הסיומת מהקובץ
+        const fileExtension = fileHandle.name.substring(fileHandle.name.lastIndexOf('.')).toLowerCase();
+        let retryCount = 0;
+        
         try {
-          const file = await fileHandle.getFile();
-          const arrayBuffer = await file.arrayBuffer();
+          // קרא את הקובץ עם retry mechanism
+          const { arrayBuffer, retryCount: attempts } = await readFileWithRetry(fileHandle);
+          retryCount = attempts;
+          
+          // אם הצלחנו אחרי retry - רשום ללוג
+          if (retryCount > 0) {
+            console.info(`קובץ ${fileHandle.name} נקרא בהצלחה אחרי ${retryCount + 1} ניסיונות`);
+          }
           
           // שמור את קובץ האקסל המקורי בזיכרון (עם נתיב יחסי)
           setExcelFiles((prev: Map<string, ArrayBuffer>) => new Map(prev).set(relativePath, arrayBuffer));
@@ -600,6 +644,11 @@ const App: React.FC = () => {
             // זיהוי סוג הגיליון (שימוש בשם הקובץ בלבד לשמירת סוג הגיליון)
             const type = await ensureSheetType(dir, fileHandle.name, sheet.name, sheetData);
             
+            // דלג על גליונות ריקים
+            if (type === null) {
+              continue;
+            }
+            
             let details: CreditDetail[] = [];
             if (type === 'credit') {
               details = await parseCreditDetailsFromSheet(sheetData, relativePath);
@@ -609,7 +658,17 @@ const App: React.FC = () => {
             allDetails = allDetails.concat(details);
           }
         } catch (err) {
-          console.error(`שגיאה בקריאת קובץ ${relativePath}:`, err);
+          const error = err as Error;
+          console.error(`שגיאה בקריאת קובץ ${relativePath}:`, error);
+          
+          // שלח שגיאה אנונימית ל-Firebase
+          trackFileError(userProfile, {
+            errorType: error.name === 'InvalidStateError' ? 'file_access_error' : 'file_read_error',
+            errorMessage: error.message || 'Unknown error',
+            fileExtension,
+            retryCount
+          }).catch(() => {}); // שקט על שגיאות שליחה
+          
           // ממשיך לקובץ הבא
         }
       }
@@ -792,6 +851,11 @@ const App: React.FC = () => {
       'income': 'filter_income'
     };
     trackFeature(featureMap[mode]);
+  }, [trackFeature]);
+
+  const setViewWithTracking = useCallback((newView: 'monthly' | 'yearly') => {
+    setView(newView);
+    trackFeature(newView === 'yearly' ? 'view_yearly' : 'view_monthly');
   }, [trackFeature]);
 
   const setDateModeWithTracking = useCallback((mode: 'transaction' | 'charge') => {
@@ -1457,17 +1521,14 @@ const App: React.FC = () => {
               if (!sessionIdToUse) {
                 sessionIdToUse = crypto.randomUUID();
                 setAnalyticsSessionId(sessionIdToUse);
-                console.log('[Analytics DEBUG] Created new sessionId:', sessionIdToUse);
               }
               
               // וודא שיש profile - אם אין, טען מהתיקיה
               let profileToUse = userProfile;
               if (!profileToUse && dirHandle) {
-                console.log('[Analytics DEBUG] userProfile is null, loading from directory...');
                 const { profile: loadedProfile } = await getOrCreateUserProfile(dirHandle);
                 profileToUse = loadedProfile;
                 setUserProfile(loadedProfile);
-                console.log('[Analytics DEBUG] Loaded profile:', loadedProfile);
               }
               
               // בנה את רשימת המיפויים עם תיאורי עסקאות
@@ -1496,25 +1557,13 @@ const App: React.FC = () => {
                 };
               });
               
-              // DEBUG: הדפס את המיפויים לפני שליחה
-              console.log('[Analytics DEBUG] category_assigned mappings:', categoryMappings);
-              console.log('[Analytics DEBUG] Using profile:', profileToUse);
-              
               await trackCategoryAssigned(profileToUse, {
                 sessionId: sessionIdToUse,
                 mappings: categoryMappings
               });
-              console.log('[Analytics DEBUG] category_assigned sent successfully!');
-            } catch (analyticsError) {
-              console.debug('[Analytics] Error sending category mappings:', analyticsError);
+            } catch {
+              // Analytics error - silent fail
             }
-          } else {
-            // DEBUG: למה לא נשלח
-            console.log('[Analytics DEBUG] category_assigned NOT sent:', {
-              analyticsConsent: userProfile?.analyticsConsent,
-              termsAccepted,
-              analyticsSessionId
-            });
           }
           
           setNewCategoriesPrompt(null);
@@ -1813,7 +1862,7 @@ const App: React.FC = () => {
             filteredDetails={filteredDetails}
             filteredTotal={filteredTotal}
             view={view}
-            setView={setView}
+            setView={setViewWithTracking}
             monthTotals={monthTotals}
             yearlySummary={yearlySummary}
             handleOpenEditCategory={handleOpenEditCategory}

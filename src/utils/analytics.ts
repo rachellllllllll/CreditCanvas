@@ -239,24 +239,15 @@ export async function trackEvent(
   event: string,
   profile: UserProfile | null,
   metadata?: Record<string, unknown>,
-  skipConsentCheck: boolean = false
+  skipConsentCheck: boolean = true
 ): Promise<void> {
-  console.log('[Analytics] trackEvent called:', { event, profile, skipConsentCheck });
-  
   // בדיקות - אם לא עוברות, יוצאים בשקט
-  if (!ANALYTICS_CONFIG.enabled) {
-    console.log('[Analytics] Disabled - not tracking:', event);
+  if (!ANALYTICS_CONFIG.enabled || !profile) {
     return;
   }
   
-  if (!profile) {
-    console.log('[Analytics] No profile - not tracking:', event);
-    return;
-  }
-  
-  // בדיקת הסכמה - מדלגים רק לאירועי consent_decision
+  // בדיקת הסכמה - כברירת מחדל מדלגים (כי אישור תנאי שימוש מספיק)
   if (!skipConsentCheck && profile.analyticsConsent !== true) {
-    console.log('[Analytics] No consent - not tracking:', event);
     return;
   }
   
@@ -270,9 +261,7 @@ export async function trackEvent(
   // נסה לשלוח, אם נכשל - שמור לqueue
   try {
     await sendToFirebase(analyticsEvent);
-    console.log('[Analytics] Sent:', event);
   } catch {
-    console.log('[Analytics] Failed to send, queuing:', event);
     eventQueue.push(analyticsEvent);
   }
 }
@@ -282,27 +271,18 @@ export async function trackEvent(
  */
 async function sendToFirebase(event: AnalyticsEvent): Promise<void> {
   if (!ANALYTICS_CONFIG.enabled) {
-    console.log('[Analytics] DISABLED - not sending to Firebase');
     return;
   }
   
   const db = getFirestoreDb();
   if (!db) {
-    console.log('[Analytics] Firestore not available - db is null');
     return;
   }
   
-  try {
-    console.log('[Analytics] Sending to Firebase:', event.event, event);
-    const docRef = await addDoc(collection(db, 'analytics_events'), {
-      ...event,
-      createdAt: new Date().toISOString()
-    });
-    console.log('[Analytics] ✅ Successfully saved to Firebase with ID:', docRef.id);
-  } catch (err) {
-    console.error('[Analytics] ❌ Failed to send to Firestore:', err);
-    throw err; // רה-throw כדי שהqueue יתפוס
-  }
+  await addDoc(collection(db, 'analytics_events'), {
+    ...event,
+    createdAt: new Date().toISOString()
+  });
 }
 
 /**
@@ -454,9 +434,6 @@ export async function trackCategoryAssigned(
     mappings: CategoryMapping[];
   }
 ): Promise<void> {
-  console.log('[Analytics] trackCategoryAssigned called with profile:', profile);
-  console.log('[Analytics] trackCategoryAssigned data:', data);
-  // skipConsentCheck = true כי אם המשתמש הגיע לכאן, הוא כבר אישר תנאי שימוש
   await trackEvent('category_assigned', profile, data, true);
 }
 
@@ -468,6 +445,43 @@ export async function trackFeatureUsage(
   featureName: string
 ): Promise<void> {
   await trackEvent('feature_used', profile, { feature: featureName });
+}
+
+/**
+ * שגיאת קריאת קובץ - לשיפור תמיכה בפורמטים
+ * נשלח מידע אנונימי בלבד (ללא שם קובץ או נתיב)
+ */
+export interface FileErrorInfo {
+  errorType: 'file_read_error' | 'parse_error' | 'invalid_format' | 'file_access_error';
+  errorMessage: string;       // הודעת שגיאה מקוצרת
+  fileExtension: string;      // רק הסיומת (.xlsx, .xls)
+  retryCount?: number;        // כמה פעמים ניסינו
+  browserInfo?: string;       // דפדפן
+}
+
+export async function trackFileError(
+  profile: UserProfile | null,
+  errorInfo: FileErrorInfo
+): Promise<void> {
+  // אנונימיזציה של הודעת השגיאה - מסיר נתיבים ושמות קבצים
+  const sanitizedMessage = errorInfo.errorMessage
+    .replace(/[A-Za-z]:\\[^\s]*/g, '[PATH]')  // Windows paths
+    .replace(/\/[^\s]*/g, '[PATH]')            // Unix paths
+    .replace(/[\w.-]+\.xlsx?/gi, '[FILE]')     // Excel file names
+    .substring(0, 200);                         // הגבל אורך
+  
+  // מידע על הדפדפן (אנונימי)
+  const browserInfo = typeof navigator !== 'undefined' 
+    ? `${navigator.userAgent.match(/Chrome\/[\d.]+|Firefox\/[\d.]+|Safari\/[\d.]+|Edge\/[\d.]+/)?.[0] || 'Unknown'}`
+    : 'Unknown';
+  
+  await trackEvent('file_error', profile, {
+    errorType: errorInfo.errorType,
+    errorMessage: sanitizedMessage,
+    fileExtension: errorInfo.fileExtension.toLowerCase(),
+    retryCount: errorInfo.retryCount || 0,
+    browserInfo: errorInfo.browserInfo || browserInfo
+  }, true); // skipConsentCheck - תמיד שולחים שגיאות (אנונימי)
 }
 
 /**

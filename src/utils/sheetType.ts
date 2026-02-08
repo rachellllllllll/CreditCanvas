@@ -1,6 +1,6 @@
 // הסרנו את התלות ב-XLSX - עכשיו מקבלים מערך ישירות
 
-export type SheetType = 'bank' | 'credit' | 'unknown';
+export type SheetType = 'bank' | 'credit' | 'unknown' | 'empty';
 
 function normCell(s: unknown): string {
   return String(s ?? '')
@@ -10,6 +10,11 @@ function normCell(s: unknown): string {
 }
 
 export function detectSheetTypeFromSheet(sheetData: unknown[][]): SheetType {
+  // בדיקה לגליון ריק - פחות מ-2 שורות או ללא תוכן
+  if (!sheetData || sheetData.length < 2) {
+    return 'empty';
+  }
+  
   // sheetData הוא כבר מערך דו-ממדי
   const rows: unknown[][] = sheetData;
   const tokens = new Set<string>();
@@ -36,6 +41,11 @@ export function detectSheetTypeFromSheet(sheetData: unknown[][]): SheetType {
 
 // CSV detection: infer type from first ~15 rows of parsed cells
 export function detectSheetTypeFromCSV(rows: string[][]): SheetType {
+  // בדיקה לקובץ ריק - פחות מ-2 שורות
+  if (!rows || rows.length < 2) {
+    return 'empty';
+  }
+  
   const tokens = new Set<string>();
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const row = (rows[i] || []).map(normCell);
@@ -99,12 +109,18 @@ export async function ensureSheetType(
   fileName: string,
   sheetName: string,
   sheetData: unknown[][]
-): Promise<'bank' | 'credit'> {
+): Promise<'bank' | 'credit' | null> {
   const key = `${fileName}::${sheetName}`;
   const overrides = await loadSheetTypeOverridesFromDir(dirHandle);
   if (overrides[key]) return overrides[key];
 
   const detected = detectSheetTypeFromSheet(sheetData);
+  
+  // גליון ריק - דלג עליו
+  if (detected === 'empty') {
+    return null;
+  }
+  
   if (detected === 'unknown') {
     const chosen = await askUserSheetType(fileName, sheetName);
     if (!chosen) throw new Error('user-cancelled');
@@ -122,12 +138,18 @@ export async function ensureCsvType(
   dirHandle: FileSystemDirectoryHandle,
   fileName: string,
   rows: string[][]
-): Promise<'bank' | 'credit'> {
+): Promise<'bank' | 'credit' | null> {
   const key = `${fileName}`;
   const overrides = await loadSheetTypeOverridesFromDir(dirHandle);
   if (overrides[key]) return overrides[key];
 
   const detected = detectSheetTypeFromCSV(rows);
+  
+  // קובץ ריק - דלג עליו
+  if (detected === 'empty') {
+    return null;
+  }
+  
   if (detected === 'unknown') {
     const isBank = window.confirm(`לא זוהה סוג הקובץ עבור CSV:\n${fileName}\n\nהאם זה דף חשבון בנק? (אישור=בנק, ביטול=אשראי)`);
     const chosen = isBank ? 'bank' : 'credit';
