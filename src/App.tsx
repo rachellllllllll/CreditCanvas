@@ -1450,7 +1450,7 @@ const App: React.FC = () => {
           }) : a);
           
           // --- Analytics: שלח את המיפויים שהמשתמש בחר ---
-          if (userProfile?.analyticsConsent === true && analyticsSessionId) {
+          if ((userProfile?.analyticsConsent === true || termsAccepted) && analyticsSessionId) {
             try {
               // בנה את רשימת המיפויים עם תיאורי עסקאות
               const categoryMappings: CategoryMapping[] = Object.entries(mapping).map(([excelName, catDef]) => {
