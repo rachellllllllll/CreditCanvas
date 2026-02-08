@@ -241,20 +241,22 @@ export async function trackEvent(
   metadata?: Record<string, unknown>,
   skipConsentCheck: boolean = false
 ): Promise<void> {
+  console.log('[Analytics] trackEvent called:', { event, profile, skipConsentCheck });
+  
   // בדיקות - אם לא עוברות, יוצאים בשקט
   if (!ANALYTICS_CONFIG.enabled) {
-    console.debug('[Analytics] Disabled - not tracking:', event);
+    console.log('[Analytics] Disabled - not tracking:', event);
     return;
   }
   
   if (!profile) {
-    console.debug('[Analytics] No profile - not tracking:', event);
+    console.log('[Analytics] No profile - not tracking:', event);
     return;
   }
   
   // בדיקת הסכמה - מדלגים רק לאירועי consent_decision
   if (!skipConsentCheck && profile.analyticsConsent !== true) {
-    console.debug('[Analytics] No consent - not tracking:', event);
+    console.log('[Analytics] No consent - not tracking:', event);
     return;
   }
   
@@ -268,9 +270,9 @@ export async function trackEvent(
   // נסה לשלוח, אם נכשל - שמור לqueue
   try {
     await sendToFirebase(analyticsEvent);
-    console.debug('[Analytics] Sent:', event);
+    console.log('[Analytics] Sent:', event);
   } catch {
-    console.debug('[Analytics] Failed to send, queuing:', event);
+    console.log('[Analytics] Failed to send, queuing:', event);
     eventQueue.push(analyticsEvent);
   }
 }
@@ -452,6 +454,8 @@ export async function trackCategoryAssigned(
     mappings: CategoryMapping[];
   }
 ): Promise<void> {
+  console.log('[Analytics] trackCategoryAssigned called with profile:', profile);
+  console.log('[Analytics] trackCategoryAssigned data:', data);
   // skipConsentCheck = true כי אם המשתמש הגיע לכאן, הוא כבר אישר תנאי שימוש
   await trackEvent('category_assigned', profile, data, true);
 }
