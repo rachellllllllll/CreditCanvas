@@ -449,7 +449,7 @@ export async function trackCategoryAssigned(
     mappings: CategoryMapping[];
   }
 ): Promise<void> {
-  await trackEvent('category_assigned', profile, data);
+  await trackEvent('category_assigned', profile, data, true);
 }
 
 /**
