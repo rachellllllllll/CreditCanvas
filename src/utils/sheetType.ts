@@ -99,65 +99,146 @@ export async function saveSheetTypeOverridesToDir(dirHandle: FileSystemDirectory
   }
 }
 
-async function askUserSheetType(fileName: string, sheetName: string): Promise<'bank' | 'credit' | null> {
+// תוצאת זיהוי סוג גיליון - עובד עם overrides בזיכרון
+export type SheetTypeResult = {
+  type: 'bank' | 'credit' | null;
+  needsUserInput: boolean;
+  key: string;
+};
+
+/**
+ * זיהוי סוג גיליון - עובד עם overrides בזיכרון (ללא I/O)
+ * @param overrides - אובייקט ה-overrides שנטען פעם אחת
+ * @param fileName - שם הקובץ
+ * @param sheetName - שם הגיליון
+ * @param sheetData - נתוני הגיליון
+ * @returns תוצאת הזיהוי כולל האם צריך קלט מהמשתמש
+ */
+export function getSheetType(
+  overrides: SheetTypeOverrides,
+  fileName: string,
+  sheetName: string,
+  sheetData: unknown[][]
+): SheetTypeResult {
+  const key = `${fileName}::${sheetName}`;
+  
+  // אם יש override קיים - החזר אותו
+  if (overrides[key]) {
+    return { type: overrides[key], needsUserInput: false, key };
+  }
+
+  const detected = detectSheetTypeFromSheet(sheetData);
+  
+  // גליון ריק - דלג עליו
+  if (detected === 'empty') {
+    return { type: null, needsUserInput: false, key };
+  }
+  
+  // לא זוהה - צריך קלט מהמשתמש
+  if (detected === 'unknown') {
+    return { type: null, needsUserInput: true, key };
+  }
+  
+  // זוהה בהצלחה - עדכן את ה-overrides בזיכרון
+  overrides[key] = detected as 'bank' | 'credit';
+  return { type: detected as 'bank' | 'credit', needsUserInput: false, key };
+}
+
+/**
+ * שאל את המשתמש לסוג הגיליון
+ */
+export function askUserSheetType(fileName: string, sheetName: string): 'bank' | 'credit' {
   const isBank = window.confirm(`לא זוהה סוג הגיליון עבור:\n${fileName} / ${sheetName}\n\nהאם זה דף חשבון בנק? (אישור=בנק, ביטול=אשראי)`);
   return isBank ? 'bank' : 'credit';
 }
 
+/**
+ * @deprecated השתמש ב-getSheetType + loadSheetTypeOverridesFromDir + saveSheetTypeOverridesToDir
+ * נשאר לתאימות אחורה
+ */
 export async function ensureSheetType(
   dirHandle: FileSystemDirectoryHandle,
   fileName: string,
   sheetName: string,
   sheetData: unknown[][]
 ): Promise<'bank' | 'credit' | null> {
-  const key = `${fileName}::${sheetName}`;
   const overrides = await loadSheetTypeOverridesFromDir(dirHandle);
-  if (overrides[key]) return overrides[key];
-
-  const detected = detectSheetTypeFromSheet(sheetData);
+  const result = getSheetType(overrides, fileName, sheetName, sheetData);
   
-  // גליון ריק - דלג עליו
-  if (detected === 'empty') {
-    return null;
+  if (result.type === null && !result.needsUserInput) {
+    return null; // גליון ריק
   }
   
-  if (detected === 'unknown') {
-    const chosen = await askUserSheetType(fileName, sheetName);
-    if (!chosen) throw new Error('user-cancelled');
-    overrides[key] = chosen;
+  if (result.needsUserInput) {
+    const chosen = askUserSheetType(fileName, sheetName);
+    overrides[result.key] = chosen;
     await saveSheetTypeOverridesToDir(dirHandle, overrides);
     return chosen;
   }
-  overrides[key] = detected as 'bank' | 'credit';
+  
+  // שמור את ה-override החדש
   await saveSheetTypeOverridesToDir(dirHandle, overrides);
-  return detected as 'bank' | 'credit';
+  return result.type;
 }
 
-// CSV counterpart to ensureSheetType (no sheetName)
+/**
+ * זיהוי סוג קובץ CSV - עובד עם overrides בזיכרון (ללא I/O)
+ */
+export function getCsvType(
+  overrides: SheetTypeOverrides,
+  fileName: string,
+  rows: string[][]
+): SheetTypeResult {
+  const key = `${fileName}`;
+  
+  if (overrides[key]) {
+    return { type: overrides[key], needsUserInput: false, key };
+  }
+
+  const detected = detectSheetTypeFromCSV(rows);
+  
+  if (detected === 'empty') {
+    return { type: null, needsUserInput: false, key };
+  }
+  
+  if (detected === 'unknown') {
+    return { type: null, needsUserInput: true, key };
+  }
+  
+  overrides[key] = detected as 'bank' | 'credit';
+  return { type: detected as 'bank' | 'credit', needsUserInput: false, key };
+}
+
+/**
+ * שאל את המשתמש לסוג קובץ CSV
+ */
+export function askUserCsvType(fileName: string): 'bank' | 'credit' {
+  const isBank = window.confirm(`לא זוהה סוג הקובץ עבור CSV:\n${fileName}\n\nהאם זה דף חשבון בנק? (אישור=בנק, ביטול=אשראי)`);
+  return isBank ? 'bank' : 'credit';
+}
+
+/**
+ * @deprecated השתמש ב-getCsvType + loadSheetTypeOverridesFromDir + saveSheetTypeOverridesToDir
+ */
 export async function ensureCsvType(
   dirHandle: FileSystemDirectoryHandle,
   fileName: string,
   rows: string[][]
 ): Promise<'bank' | 'credit' | null> {
-  const key = `${fileName}`;
   const overrides = await loadSheetTypeOverridesFromDir(dirHandle);
-  if (overrides[key]) return overrides[key];
-
-  const detected = detectSheetTypeFromCSV(rows);
+  const result = getCsvType(overrides, fileName, rows);
   
-  // קובץ ריק - דלג עליו
-  if (detected === 'empty') {
+  if (result.type === null && !result.needsUserInput) {
     return null;
   }
   
-  if (detected === 'unknown') {
-    const isBank = window.confirm(`לא זוהה סוג הקובץ עבור CSV:\n${fileName}\n\nהאם זה דף חשבון בנק? (אישור=בנק, ביטול=אשראי)`);
-    const chosen = isBank ? 'bank' : 'credit';
-    overrides[key] = chosen;
+  if (result.needsUserInput) {
+    const chosen = askUserCsvType(fileName);
+    overrides[result.key] = chosen;
     await saveSheetTypeOverridesToDir(dirHandle, overrides);
     return chosen;
   }
-  overrides[key] = detected as 'bank' | 'credit';
+  
   await saveSheetTypeOverridesToDir(dirHandle, overrides);
-  return detected as 'bank' | 'credit';
+  return result.type;
 }

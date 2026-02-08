@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { readXLSX, sheetToArray } from './utils/xlsxMinimal';
-import { ensureSheetType } from './utils/sheetType';
+import { 
+  getSheetType, 
+  askUserSheetType, 
+  loadSheetTypeOverridesFromDir, 
+  saveSheetTypeOverridesToDir,
+  type SheetTypeOverrides 
+} from './utils/sheetType';
 import { parseBankStatementFromSheet } from './utils/bankParser';
 import type { CreditDetail, AnalysisResult } from './types';
 import { type CategoryDef } from './components/CategoryManager';
@@ -608,6 +614,10 @@ const App: React.FC = () => {
         progress: { current: 0, total: excelFileEntries.length }
       });
 
+      // טען את ה-overrides פעם אחת בהתחלה (במקום לקרוא לכל גיליון)
+      const sheetTypeOverrides: SheetTypeOverrides = await loadSheetTypeOverridesFromDir(dir);
+      let overridesChanged = false;
+
       // עבור על כל הקבצים שנמצאו
       let fileIndex = 0;
       for (const { handle: fileHandle, relativePath } of excelFileEntries) {
@@ -641,12 +651,27 @@ const App: React.FC = () => {
           for (const sheet of workbook.sheets) {
             const sheetData = sheetToArray(sheet);
             
-            // זיהוי סוג הגיליון (שימוש בשם הקובץ בלבד לשמירת סוג הגיליון)
-            const type = await ensureSheetType(dir, fileHandle.name, sheet.name, sheetData);
+            // זיהוי סוג הגיליון - עובד בזיכרון (ללא I/O)
+            const result = getSheetType(sheetTypeOverrides, fileHandle.name, sheet.name, sheetData);
+            
+            // אם צריך קלט מהמשתמש
+            if (result.needsUserInput) {
+              const chosen = askUserSheetType(fileHandle.name, sheet.name);
+              sheetTypeOverrides[result.key] = chosen;
+              overridesChanged = true;
+              result.type = chosen;
+            }
+            
+            const type = result.type;
             
             // דלג על גליונות ריקים
             if (type === null) {
               continue;
+            }
+            
+            // סמן שה-overrides השתנו (גם אם זיהינו אוטומטית)
+            if (!overridesChanged && sheetTypeOverrides[result.key]) {
+              overridesChanged = true;
             }
             
             let details: CreditDetail[] = [];
@@ -670,6 +695,15 @@ const App: React.FC = () => {
           }).catch(() => {}); // שקט על שגיאות שליחה
           
           // ממשיך לקובץ הבא
+        }
+      }
+
+      // שמור את ה-overrides פעם אחת בסוף (במקום לשמור לכל גיליון)
+      if (overridesChanged) {
+        try {
+          await saveSheetTypeOverridesToDir(dir, sheetTypeOverrides);
+        } catch (err) {
+          console.warn('לא ניתן לשמור sheet type overrides:', err);
         }
       }
 
