@@ -1460,6 +1460,16 @@ const App: React.FC = () => {
                 console.log('[Analytics DEBUG] Created new sessionId:', sessionIdToUse);
               }
               
+              // וודא שיש profile - אם אין, טען מהתיקיה
+              let profileToUse = userProfile;
+              if (!profileToUse && dirHandle) {
+                console.log('[Analytics DEBUG] userProfile is null, loading from directory...');
+                const { profile: loadedProfile } = await getOrCreateUserProfile(dirHandle);
+                profileToUse = loadedProfile;
+                setUserProfile(loadedProfile);
+                console.log('[Analytics DEBUG] Loaded profile:', loadedProfile);
+              }
+              
               // בנה את רשימת המיפויים עם תיאורי עסקאות
               const categoryMappings: CategoryMapping[] = Object.entries(mapping).map(([excelName, catDef]) => {
                 // מצא את העסקאות עם הקטגוריה הזו
@@ -1488,8 +1498,9 @@ const App: React.FC = () => {
               
               // DEBUG: הדפס את המיפויים לפני שליחה
               console.log('[Analytics DEBUG] category_assigned mappings:', categoryMappings);
+              console.log('[Analytics DEBUG] Using profile:', profileToUse);
               
-              await trackCategoryAssigned(userProfile, {
+              await trackCategoryAssigned(profileToUse, {
                 sessionId: sessionIdToUse,
                 mappings: categoryMappings
               });
