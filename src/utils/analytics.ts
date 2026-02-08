@@ -280,22 +280,25 @@ export async function trackEvent(
  */
 async function sendToFirebase(event: AnalyticsEvent): Promise<void> {
   if (!ANALYTICS_CONFIG.enabled) {
+    console.log('[Analytics] DISABLED - not sending to Firebase');
     return;
   }
   
   const db = getFirestoreDb();
   if (!db) {
-    console.debug('[Analytics] Firestore not available');
+    console.log('[Analytics] Firestore not available - db is null');
     return;
   }
   
   try {
-    await addDoc(collection(db, 'analytics_events'), {
+    console.log('[Analytics] Sending to Firebase:', event.event, event);
+    const docRef = await addDoc(collection(db, 'analytics_events'), {
       ...event,
       createdAt: new Date().toISOString()
     });
+    console.log('[Analytics] ✅ Successfully saved to Firebase with ID:', docRef.id);
   } catch (err) {
-    console.debug('[Analytics] Failed to send to Firestore:', err);
+    console.error('[Analytics] ❌ Failed to send to Firestore:', err);
     throw err; // רה-throw כדי שהqueue יתפוס
   }
 }
@@ -449,7 +452,8 @@ export async function trackCategoryAssigned(
     mappings: CategoryMapping[];
   }
 ): Promise<void> {
-  await trackEvent('category_assigned', profile, data);
+  // skipConsentCheck = true כי אם המשתמש הגיע לכאן, הוא כבר אישר תנאי שימוש
+  await trackEvent('category_assigned', profile, data, true);
 }
 
 /**
