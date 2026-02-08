@@ -398,8 +398,31 @@ export async function trackReturningUser(profile: UserProfile): Promise<void> {
   });
 }
 
+// ============================================
+// Unknown Categories Tracking
+// ============================================
+
 /**
- * טעינת קבצים
+ * מידע על קטגוריה לא מזוהה
+ */
+export interface UnknownCategoryInfo {
+  excelCategory: string;      // שם הקטגוריה מהאקסל
+  count: number;              // כמה עסקאות
+  descriptions: string[];     // TOP 10 תיאורי עסקאות נפוצים
+}
+
+/**
+ * מיפוי קטגוריה שהמשתמש בחר
+ */
+export interface CategoryMapping {
+  excelCategory: string;      // שם הקטגוריה מהאקסל
+  selectedCategory: string;   // הקטגוריה שהמשתמש בחר
+  count: number;              // כמה עסקאות
+  descriptions: string[];     // TOP 10 תיאורי עסקאות
+}
+
+/**
+ * טעינת קבצים - כולל מידע על קטגוריות לא מזוהות
  */
 export async function trackFilesLoaded(
   profile: UserProfile | null,
@@ -408,9 +431,25 @@ export async function trackFilesLoaded(
     transactionCount: number;
     monthCount: number;
     categoryCount: number;
+    sessionId?: string;
+    unknownCategories?: UnknownCategoryInfo[];
   }
 ): Promise<void> {
   await trackEvent('files_loaded', profile, data);
+}
+
+/**
+ * שליחת מיפויי קטגוריות שהמשתמש בחר
+ * נשלח כשהמשתמש מסיים את דיאלוג הקטגוריות
+ */
+export async function trackCategoryAssigned(
+  profile: UserProfile | null,
+  data: {
+    sessionId: string;
+    mappings: CategoryMapping[];
+  }
+): Promise<void> {
+  await trackEvent('category_assigned', profile, data);
 }
 
 /**

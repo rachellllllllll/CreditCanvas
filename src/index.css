@@ -37,6 +37,7 @@ body {
   text-align: center;
   display: flex;
   flex-direction: column;
+  width: 100%; /* הוספה: מבטיח שייקח את כל הרוחב הזמין */
 }
 
 h1, h2, h3, h4 {

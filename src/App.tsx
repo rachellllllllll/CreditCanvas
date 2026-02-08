@@ -12,17 +12,18 @@ import './index.css';
 import MainView from './components/MainView';
 import NewCategoriesTablePrompt from './components/NewCategoriesTablePrompt';
 import TransactionsChat from './components/TransactionsChat';
-import AnalyticsConsentBanner from './components/AnalyticsConsentBanner';
+import TermsModal from './components/TermsModal';
 import OnboardingTour from './components/OnboardingTour';
+import OnboardingScreen from './components/OnboardingScreen';
 import {
   type UserProfile,
+  type UnknownCategoryInfo,
+  type CategoryMapping,
   getOrCreateUserProfile,
-  updateAnalyticsConsent,
   trackSessionStart,
-  trackConsentDecision,
   trackFilesLoaded,
+  trackCategoryAssigned,
   trackFeatureUsage,
-  wasConsentAsked,
   markConsentAsked,
   updateLastActivity,
   saveSessionDurationForLater
@@ -330,6 +331,7 @@ const App: React.FC = () => {
   // --- מצב הדרכת משתמש חדש (Tour) ---
   const TOUR_COMPLETED_KEY = 'onboardingTourCompleted';
   const [showTour, setShowTour] = useState(false);
+  const [tourPending, setTourPending] = useState(false); // מסמן שיש Tour שממתין להיות מוצג (לפני או במהלך)
   
   // בדוק אם המשתמש כבר סיים את הטור - מבוסס תיקייה
   // אם יש קבצי הגדרות (כמו categories.json) - זה משתמש קיים
@@ -367,7 +369,8 @@ const App: React.FC = () => {
 
   // --- מצב אנליטיקס ---
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [analyticsSessionId, setAnalyticsSessionId] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [analyticsStats, setAnalyticsStats] = useState<{
     fileCount: number;
     transactionCount: number;
@@ -377,6 +380,22 @@ const App: React.FC = () => {
 
   // --- מצב מקורות הכנסה ---
   const [incomeSourceRules, setIncomeSourceRules] = useState<IncomeSourceRule[]>([]);
+
+  // --- מצב תנאי שימוש ---
+  const TERMS_ACCEPTED_KEY = 'termsAccepted';
+  const [termsAccepted, setTermsAccepted] = useState(() => {
+    return localStorage.getItem(TERMS_ACCEPTED_KEY) === 'true';
+  });
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
+  const handleTermsChange = (checked: boolean) => {
+    setTermsAccepted(checked);
+    if (checked) {
+      localStorage.setItem(TERMS_ACCEPTED_KEY, 'true');
+      // גם לעדכן הסכמה לאנליטיקס
+      markConsentAsked();
+    }
+  };
 
   // --- מצב הדגשת עסקה (לאחר ניווט מחיפוש גלובלי) ---
   const [highlightedTransactionId, setHighlightedTransactionId] = useState<string | null>(null);
@@ -416,6 +435,7 @@ const App: React.FC = () => {
   // --- Callbacks להדרכת משתמש חדש (Tour) ---
   const handleTourComplete = useCallback(() => {
     setShowTour(false);
+    setTourPending(false); // ה-Tour הסתיים - עכשיו אפשר להציג דיאלוגים אחרים
     // שמור את שם התיקייה כדי לא להציג שוב באותה תיקייה
     if (dirHandle) {
       try {
@@ -432,6 +452,7 @@ const App: React.FC = () => {
   
   const handleTourSkip = useCallback(() => {
     setShowTour(false);
+    setTourPending(false); // ה-Tour דולג - עכשיו אפשר להציג דיאלוגים אחרים
     // שמור את שם התיקייה גם בדילוג
     if (dirHandle) {
       try {
@@ -466,7 +487,9 @@ const App: React.FC = () => {
   const handlePickDirectory = async () => {
     try {
       // @ts-expect-error - showDirectoryPicker is not in all TS libs
-      const dir = await window.showDirectoryPicker();
+      // בקש הרשאת קריאה+כתיבה מיד בבחירת התיקיה - פופאפ אחד במקום שניים
+      const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+      
       // נקה את סטטוס הקונפליקטים שנדחו - זו תיקייה חדשה
       setDismissedConflictCount(null);
       setInitialPromptShown(false); // אפס את הדגל כדי להציג את הדיאלוג בתיקייה חדשה
@@ -669,9 +692,14 @@ const App: React.FC = () => {
       setLoadingState(null);
       
       // הפעל את ה-Tour למשתמש חדש (אחרי delay קצר לתת לממשק להיטען)
+      // סמן מיד שאנחנו בודקים Tour - לחסום דיאלוגים אחרים עד שנדע
+      setTourPending(true);
       const shouldShowTour = await checkShouldShowTour(dir);
       if (shouldShowTour) {
         setTimeout(() => setShowTour(true), 500);
+      } else {
+        // אין צורך ב-Tour - שחרר את החסימה
+        setTourPending(false);
       }
 
       // --- Analytics: טיפול בפרופיל משתמש ---
@@ -692,17 +720,53 @@ const App: React.FC = () => {
           categoryCount: uniqueCategories.size
         });
         
-        // אם המשתמש עדיין לא ענה על שאלת ההסכמה - הצג באנר
-        if (profile.analyticsConsent === null && !wasConsentAsked()) {
-          setShowConsentBanner(true);
-        }
-        // אם כבר הסכים בעבר - שלח סטטיסטיקות טעינה
-        else if (profile.analyticsConsent === true) {
+        // שלח סטטיסטיקות טעינה (המשתמש כבר אישר בכניסה)
+        if (profile.analyticsConsent === true || termsAccepted) {
+          // יצירת sessionId ייחודי לקישור בין אירועים
+          const sessionId = crypto.randomUUID();
+          setAnalyticsSessionId(sessionId);
+          
+          // חשב קטגוריות לא מזוהות - אלה שבאקסל אבל לא קיימות ב-categories.json
+          const loadedCategoryNames = new Set(loadedCategories?.map(c => c.name) || []);
+          const loadedAliasNames = new Set(Object.keys(loadedCategoryAliases || {}));
+          
+          // קבץ עסקאות לפי קטגוריה לא מזוהה
+          const unknownCategoriesMap = new Map<string, { count: number; descriptions: Map<string, number> }>();
+          
+          for (const d of allDetails) {
+            const cat = d.category;
+            if (cat && !loadedCategoryNames.has(cat) && !loadedAliasNames.has(cat)) {
+              // קטגוריה לא מזוהה
+              if (!unknownCategoriesMap.has(cat)) {
+                unknownCategoriesMap.set(cat, { count: 0, descriptions: new Map() });
+              }
+              const entry = unknownCategoriesMap.get(cat)!;
+              entry.count++;
+              // ספור תיאורים
+              const desc = d.description || '';
+              if (desc) {
+                entry.descriptions.set(desc, (entry.descriptions.get(desc) || 0) + 1);
+              }
+            }
+          }
+          
+          // המר ל-array עם TOP 10 תיאורים לכל קטגוריה
+          const unknownCategories: UnknownCategoryInfo[] = Array.from(unknownCategoriesMap.entries()).map(([excelCategory, data]) => ({
+            excelCategory,
+            count: data.count,
+            descriptions: Array.from(data.descriptions.entries())
+              .sort((a, b) => b[1] - a[1]) // מיון לפי כמות יורדת
+              .slice(0, 10) // TOP 10
+              .map(([desc]) => desc)
+          }));
+          
           await trackFilesLoaded(profile, {
             fileCount: excelFileEntries.length,
             transactionCount: allDetails.length,
             monthCount: uniqueMonths.length,
-            categoryCount: uniqueCategories.size
+            categoryCount: uniqueCategories.size,
+            sessionId,
+            unknownCategories: unknownCategories.length > 0 ? unknownCategories : undefined
           });
         }
       } catch (analyticsError) {
@@ -1270,6 +1334,10 @@ const App: React.FC = () => {
     // אם הדיאלוג כבר הוצג בסשן הזה - לא מציגים שוב (למנוע הצגה אחרי מחיקת קטגוריה)
     if (initialPromptShown) return;
     
+    // 🆕 חכה שה-Tour יסתיים/ידולג לפני הצגת דיאלוג קטגוריות/קונפליקטים
+    // אם יש Tour בהמתנה (לפני או במהלך התצוגה) - לא להציג דיאלוג נוסף במקביל
+    if (tourPending) return;
+    
     // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList וגם לא ב-categoryAliases (כבר מופו)
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
     const missingCats = excelCats.filter(catName => 
@@ -1380,12 +1448,51 @@ const App: React.FC = () => {
               return d;
             })
           }) : a);
+          
+          // --- Analytics: שלח את המיפויים שהמשתמש בחר ---
+          if (userProfile?.analyticsConsent === true && analyticsSessionId) {
+            try {
+              // בנה את רשימת המיפויים עם תיאורי עסקאות
+              const categoryMappings: CategoryMapping[] = Object.entries(mapping).map(([excelName, catDef]) => {
+                // מצא את העסקאות עם הקטגוריה הזו
+                const transactionsWithCategory = analysis?.details.filter(d => d.category === excelName) || [];
+                // קבץ תיאורים וספור
+                const descCounts = new Map<string, number>();
+                for (const t of transactionsWithCategory) {
+                  const desc = t.description || '';
+                  if (desc) {
+                    descCounts.set(desc, (descCounts.get(desc) || 0) + 1);
+                  }
+                }
+                // TOP 10 תיאורים
+                const topDescriptions = Array.from(descCounts.entries())
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 10)
+                  .map(([desc]) => desc);
+                
+                return {
+                  excelCategory: excelName,
+                  selectedCategory: catDef.name,
+                  count: transactionsWithCategory.length,
+                  descriptions: topDescriptions
+                };
+              });
+              
+              await trackCategoryAssigned(userProfile, {
+                sessionId: analyticsSessionId,
+                mappings: categoryMappings
+              });
+            } catch (analyticsError) {
+              console.debug('[Analytics] Error sending category mappings:', analyticsError);
+            }
+          }
+          
           setNewCategoriesPrompt(null);
         }
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis, categoriesList, categoriesLoadedOnce, dirHandle, categoryRules, categoryAliases, detectMerchantConflicts, dismissedConflictCount]);
+  }, [analysis, categoriesList, categoriesLoadedOnce, dirHandle, categoryRules, categoryAliases, detectMerchantConflicts, dismissedConflictCount, tourPending]);
 
   // טען קטגוריות מהתיקיה שנבחרה בכל פעם ש-dirHandle משתנה
   React.useEffect(() => {
@@ -1646,102 +1753,14 @@ const App: React.FC = () => {
     <div className="app-container">
       {/* Onboarding screen: show until analysis is ready */}
       {!analysis && (
-        <div className="onboarding" role="dialog" aria-labelledby="onboardingTitle" aria-modal="true">
-          <div className="onboarding-inner">
-            <h1 id="onboardingTitle">ברוך הבא למערכת ניתוח חיובי אשראי</h1>
-            
-            {/* מצב טעינה - הצגת התקדמות */}
-            {loadingState ? (
-              <div className="loading-state" style={{ 
-                padding: '32px 24px',
-                textAlign: 'center',
-                animation: 'fadeIn 0.3s ease'
-              }}>
-                <div className="loading-spinner" style={{
-                  width: 48,
-                  height: 48,
-                  margin: '0 auto 16px',
-                  border: '4px solid #e5e7eb',
-                  borderTopColor: '#3b82f6',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }} />
-                <p style={{ 
-                  fontSize: '1.25rem', 
-                  fontWeight: 500, 
-                  marginBottom: 8,
-                  color: '#1f2937'
-                }}>
-                  {loadingState.message}
-                </p>
-                {loadingState.progress && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{
-                      width: '100%',
-                      maxWidth: 300,
-                      height: 8,
-                      backgroundColor: '#e5e7eb',
-                      borderRadius: 4,
-                      margin: '0 auto',
-                      overflow: 'hidden'
-                    }}>
-                      <div style={{
-                        width: `${(loadingState.progress.current / loadingState.progress.total) * 100}%`,
-                        height: '100%',
-                        backgroundColor: '#3b82f6',
-                        borderRadius: 4,
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
-                    <p style={{ 
-                      fontSize: '0.875rem', 
-                      color: '#6b7280', 
-                      marginTop: 8 
-                    }}>
-                      {loadingState.progress.current} / {loadingState.progress.total}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <p className="onboarding-sub">בחר תיקיה עם קבצי Excel (XLSX/XLS) של פירוטי אשראי / בנק. לאחר הבחירה נטען ונבצע עיבוד ראשוני.</p>
-
-                <div className="cta-row">
-                  <button onClick={handlePickDirectory} className="folder-btn primary cta" autoFocus>
-                    📁 בחר תיקיה עם קבצי Excel
-                  </button>
-                </div>
-                {/* מה המערכת עושה */}
-                <div className="modern-card" style={{ textAlign: 'right' }}>
-                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>מה המערכת עושה</h3>
-                  <ul className="onboarding-hints" aria-label="יכולות וכלים">
-                    <li>קוראת קבצי Excel (XLSX/XLS) של בנק וכרטיס אשראי – גם מתת-תיקיות.</li>
-                    <li>מזהה אוטומטית סוג גיליון (אשראי/בנק) ומאחדת נתונים.</li>
-                    <li>מקטלגת, מנתחת וממחישה בגרפים/טבלאות לפי חודש/שנה.</li>
-                  </ul>
-                </div>
-                {/* Privacy Details */}
-                <div className="modern-card privacy-details-card" style={{ textAlign: 'right' }}>
-                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>🛡️ אבטחה ופרטיות</h3>
-                  <ul className="onboarding-hints" aria-label="אבטחה ופרטיות">
-                    <li><strong>Zero-Knowledge:</strong> אנחנו לא מבקשים סיסמאות לבנק או לאשראי.</li>
-                    <li><strong>עיבוד מקומי:</strong> כל הניתוח מתבצע בדפדפן שלך, לא בשרתים שלנו.</li>
-                    <li><strong>ללא העלאה:</strong> הקבצים שלך לא עוזבים את המחשב שלך.</li>
-                    <li><strong>קוד פתוח:</strong> ניתן לבדוק את הקוד ולוודא בעצמך.</li>
-                  </ul>
-                </div>
-              </>
-            )}
-
-            {/* שגיאות */}
-            {error && (
-              <div className="error-msg" style={{ marginTop: '12px' }}>
-                {error}
-              </div>
-            )}
-          </div>
-        </div>
+        <OnboardingScreen
+          termsAccepted={termsAccepted}
+          onTermsChange={handleTermsChange}
+          onShowTermsModal={() => setShowTermsModal(true)}
+          onPickDirectory={handlePickDirectory}
+          loadingState={loadingState}
+          error={error}
+        />
       )}
       {error && (
         <div className="error-msg">{error}</div>
@@ -1884,37 +1903,11 @@ const App: React.FC = () => {
           onToggleRule={handleToggleRule}
         />
       )}
-      {/* Analytics Consent Banner */}
-      {showConsentBanner && (
-        <AnalyticsConsentBanner
-          onAccept={async () => {
-            setShowConsentBanner(false);
-            markConsentAsked();
-            if (dirHandle && userProfile) {
-              const updated = await updateAnalyticsConsent(dirHandle, true);
-              if (updated) {
-                setUserProfile(updated);
-                // שלח אירוע החלטת הסכמה + סטטיסטיקות
-                const isNewUser = (userProfile as UserProfile & { _isNewUser?: boolean })._isNewUser ?? false;
-                await trackConsentDecision(updated, true, isNewUser, analyticsStats || undefined);
-              }
-            }
-          }}
-          onDecline={async () => {
-            setShowConsentBanner(false);
-            markConsentAsked();
-            if (dirHandle && userProfile) {
-              const updated = await updateAnalyticsConsent(dirHandle, false);
-              if (updated) {
-                setUserProfile(updated);
-                // שלח אירוע החלטת הסכמה (בלי סטטיסטיקות)
-                const isNewUser = (userProfile as UserProfile & { _isNewUser?: boolean })._isNewUser ?? false;
-                await trackConsentDecision(updated, false, isNewUser);
-              }
-            }
-          }}
-        />
-      )}
+      {/* Terms Modal */}
+      <TermsModal 
+        isOpen={showTermsModal} 
+        onClose={() => setShowTermsModal(false)} 
+      />
       {/* Onboarding Tour למשתמש חדש */}
       <OnboardingTour
         isOpen={showTour}
