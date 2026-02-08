@@ -1478,6 +1478,7 @@ const App: React.FC = () => {
                 };
               });
               
+              console.log('[Analytics DEBUG] category_assigned mappings:', categoryMappings);
               await trackCategoryAssigned(userProfile, {
                 sessionId: analyticsSessionId,
                 mappings: categoryMappings
@@ -1485,6 +1486,12 @@ const App: React.FC = () => {
             } catch (analyticsError) {
               console.debug('[Analytics] Error sending category mappings:', analyticsError);
             }
+          } else {
+            console.log('Analytics DEBUG] category_assigned NOT sent:', {
+              analyticsConsent: userProfile?.analyticsConsent,
+              termsAccepted,
+              analyticsSessionId
+            })
           }
           
           setNewCategoriesPrompt(null);
