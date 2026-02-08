@@ -1450,8 +1450,16 @@ const App: React.FC = () => {
           }) : a);
           
           // --- Analytics: שלח את המיפויים שהמשתמש בחר ---
-          if ((userProfile?.analyticsConsent === true || termsAccepted) && analyticsSessionId) {
+          if (userProfile?.analyticsConsent === true || termsAccepted) {
             try {
+              // אם אין sessionId, צור אחד חדש
+              let sessionIdToUse = analyticsSessionId;
+              if (!sessionIdToUse) {
+                sessionIdToUse = crypto.randomUUID();
+                setAnalyticsSessionId(sessionIdToUse);
+                console.log('[Analytics DEBUG] Created new sessionId:', sessionIdToUse);
+              }
+              
               // בנה את רשימת המיפויים עם תיאורי עסקאות
               const categoryMappings: CategoryMapping[] = Object.entries(mapping).map(([excelName, catDef]) => {
                 // מצא את העסקאות עם הקטגוריה הזו
@@ -1478,20 +1486,24 @@ const App: React.FC = () => {
                 };
               });
               
+              // DEBUG: הדפס את המיפויים לפני שליחה
               console.log('[Analytics DEBUG] category_assigned mappings:', categoryMappings);
+              
               await trackCategoryAssigned(userProfile, {
-                sessionId: analyticsSessionId,
+                sessionId: sessionIdToUse,
                 mappings: categoryMappings
               });
+              console.log('[Analytics DEBUG] category_assigned sent successfully!');
             } catch (analyticsError) {
               console.debug('[Analytics] Error sending category mappings:', analyticsError);
             }
           } else {
-            console.log('Analytics DEBUG] category_assigned NOT sent:', {
+            // DEBUG: למה לא נשלח
+            console.log('[Analytics DEBUG] category_assigned NOT sent:', {
               analyticsConsent: userProfile?.analyticsConsent,
               termsAccepted,
               analyticsSessionId
-            })
+            });
           }
           
           setNewCategoriesPrompt(null);
