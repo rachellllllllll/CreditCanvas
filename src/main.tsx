@@ -1,11 +1,35 @@
 import './polyfills';  // חובה! לפני כל דבר אחר
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import AdminDashboard from './components/AdminDashboard.tsx'
+
+/**
+ * Simple hash-based router
+ * #/admin -> AdminDashboard
+ * everything else -> App
+ */
+function Router() {
+  const [route, setRoute] = useState(window.location.hash);
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(window.location.hash);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // אם ה-hash הוא #/admin, הצג את דף האדמין
+  if (route === '#/admin' || route === '#admin') {
+    return <AdminDashboard />;
+  }
+
+  // אחרת, הצג את האפליקציה הרגילה
+  return <App />;
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Router />
   </StrictMode>,
 )
