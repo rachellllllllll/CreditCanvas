@@ -147,13 +147,45 @@ export default function AdminDashboard() {
           <div className="admin-login-card">
             <h1>🔐 כניסת מנהל</h1>
             <p>התחבר עם חשבון Google מורשה</p>
+            
+            {error && (
+              <div className="login-error">
+                ⚠️ {error}
+                {error.includes('auth/unauthorized-domain') && (
+                  <p className="error-hint">
+                    יש להוסיף את הדומיין ב-Firebase Console → Authentication → Settings → Authorized domains
+                  </p>
+                )}
+                {error.includes('auth/operation-not-allowed') && (
+                  <p className="error-hint">
+                    יש להפעיל Google Sign-in ב-Firebase Console → Authentication → Sign-in method → Google
+                  </p>
+                )}
+              </div>
+            )}
+            
             <button 
               className="google-login-btn"
               onClick={async () => {
+                setError(null);
                 try {
                   await signInWithGoogle();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : 'שגיאה בהתחברות');
+                } catch (err: unknown) {
+                  console.error('[Admin] Login error:', err);
+                  if (err instanceof Error) {
+                    // שגיאות נפוצות
+                    if (err.message.includes('auth/unauthorized-domain')) {
+                      setError('הדומיין לא מורשה. יש להוסיף אותו ב-Firebase Console.');
+                    } else if (err.message.includes('auth/operation-not-allowed')) {
+                      setError('Google Sign-in לא מופעל. יש להפעיל ב-Firebase Console.');
+                    } else if (err.message.includes('popup-closed')) {
+                      setError('החלון נסגר. נסה שוב.');
+                    } else {
+                      setError(err.message);
+                    }
+                  } else {
+                    setError('שגיאה לא ידועה בהתחברות');
+                  }
                 }
               }}
             >

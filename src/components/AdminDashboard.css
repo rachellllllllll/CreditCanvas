@@ -55,6 +55,22 @@
   opacity: 0.8;
 }
 
+.login-error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.error-hint {
+  font-size: 0.85rem;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
 .google-login-btn {
   display: inline-flex;
   align-items: center;
