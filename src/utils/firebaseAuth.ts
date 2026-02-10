@@ -36,7 +36,8 @@ const ADMIN_EMAILS_ENV = import.meta.env.VITE_ADMIN_EMAILS || '';
 const ADMIN_EMAILS: string[] = ADMIN_EMAILS_ENV 
   ? ADMIN_EMAILS_ENV.split(',').map((e: string) => e.trim().toLowerCase())
   : [
-      'r0527124976@gmail.com'
+      // הוסף את המייל שלך כאן:
+      // 'your-email@gmail.com',
     ];
 
 // ============================================
@@ -87,29 +88,57 @@ function getFirebaseAuth(): Auth | null {
  * התחברות עם Google (redirect - עובד טוב יותר ברשתות מוגבלות)
  */
 export async function signInWithGoogle(): Promise<void> {
+  console.log('[Auth] signInWithGoogle called');
+  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
+    console.error('[Auth] No auth instance for sign in');
     throw new Error('Firebase Auth לא זמין');
   }
 
+  console.log('[Auth] Starting redirect to Google...');
+  console.log('[Auth] Auth domain:', firebaseConfig.authDomain);
+  
   // Redirect לדף Google - המשתמש יחזור אחרי ההתחברות
   await signInWithRedirect(authInstance, googleProvider);
+  console.log('[Auth] signInWithRedirect completed (should not reach here)');
 }
 
 /**
  * בדיקת תוצאת redirect (קוראים לזה בטעינת הדף)
  */
 export async function checkRedirectResult(): Promise<User | null> {
+  console.log('[Auth] checkRedirectResult called');
+  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
+    console.error('[Auth] No auth instance available');
     return null;
   }
 
+  console.log('[Auth] Auth instance ready, checking redirect result...');
+  console.log('[Auth] Current URL:', window.location.href);
+
   try {
     const result = await getRedirectResult(authInstance);
+    console.log('[Auth] getRedirectResult completed');
+    console.log('[Auth] Result:', result);
+    
+    if (result?.user) {
+      console.log('[Auth] User from redirect:', result.user.email);
+    } else {
+      console.log('[Auth] No user from redirect (normal if not returning from login)');
+    }
+    
     return result?.user || null;
   } catch (error: unknown) {
     console.error('[Auth] Redirect result error:', error);
+    // Log more details
+    if (error instanceof Error) {
+      console.error('[Auth] Error name:', error.name);
+      console.error('[Auth] Error message:', error.message);
+      console.error('[Auth] Error stack:', error.stack);
+    }
     throw error;
   }
 }
@@ -128,13 +157,19 @@ export async function logOut(): Promise<void> {
  * האזנה לשינויי authentication
  */
 export function onAuthChange(callback: (user: User | null) => void): () => void {
+  console.log('[Auth] onAuthChange listener registered');
+  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
+    console.error('[Auth] No auth instance for listener');
     callback(null);
     return () => {};
   }
   
-  return onAuthStateChanged(authInstance, callback);
+  return onAuthStateChanged(authInstance, (user) => {
+    console.log('[Auth] Auth state changed:', user ? `User: ${user.email}` : 'No user');
+    callback(user);
+  });
 }
 
 /**

@@ -48,6 +48,8 @@ interface Stats {
 // ============================================
 
 export default function AdminDashboard() {
+  console.log('[Admin] AdminDashboard component rendering');
+  
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
@@ -58,9 +60,12 @@ export default function AdminDashboard() {
 
   // האזנה לשינויי auth + בדיקת redirect result
   useEffect(() => {
+    console.log('[Admin] useEffect started, checking redirect...');
+    
     // בדוק אם חזרנו מ-redirect של Google
     checkRedirectResult()
       .then((redirectUser) => {
+        console.log('[Admin] checkRedirectResult resolved:', redirectUser?.email || 'no user');
         if (redirectUser) {
           console.log('[Admin] User from redirect:', redirectUser.email);
         }
@@ -70,8 +75,10 @@ export default function AdminDashboard() {
         setError(err instanceof Error ? err.message : 'שגיאה בהתחברות');
       });
 
+    console.log('[Admin] Setting up auth listener...');
     // האזן לשינויים
     const unsubscribe = onAuthChange((authUser) => {
+      console.log('[Admin] onAuthChange callback:', authUser?.email || 'no user');
       setUser(authUser);
       setLoading(false);
     });
