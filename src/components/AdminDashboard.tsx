@@ -9,6 +9,7 @@ import {
   logOut, 
   onAuthChange, 
   isAdmin,
+  checkRedirectResult,
   type User 
 } from '../utils/firebaseAuth';
 import { 
@@ -55,8 +56,21 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
-  // האזנה לשינויי auth
+  // האזנה לשינויי auth + בדיקת redirect result
   useEffect(() => {
+    // בדוק אם חזרנו מ-redirect של Google
+    checkRedirectResult()
+      .then((redirectUser) => {
+        if (redirectUser) {
+          console.log('[Admin] User from redirect:', redirectUser.email);
+        }
+      })
+      .catch((err) => {
+        console.error('[Admin] Redirect error:', err);
+        setError(err instanceof Error ? err.message : 'שגיאה בהתחברות');
+      });
+
+    // האזן לשינויים
     const unsubscribe = onAuthChange((authUser) => {
       setUser(authUser);
       setLoading(false);
@@ -75,19 +89,32 @@ export default function AdminDashboard() {
   async function loadAnalyticsData() {
     setLoadingData(true);
     setError(null);
+    console.log('[Admin] Starting to load analytics data...');
 
     try {
       const apps = getApps();
+      console.log('[Admin] Firebase apps:', apps.length);
       if (apps.length === 0) {
         throw new Error('Firebase לא מאותחל');
       }
       
       const db = getFirestore(apps[0]);
-      const eventsRef = collection(db, 'analytics_events');
+      console.log('[Admin] Got Firestore instance');
       
-      // שליפת 500 אירועים אחרונים
+      const eventsRef = collection(db, 'analytics_events');
+      console.log('[Admin] Collection reference created');
+      
+      // שליפת 500 אירועים אחרונים - עם timeout
       const q = query(eventsRef, orderBy('timestamp', 'desc'), limit(500));
-      const snapshot = await getDocs(q);
+      console.log('[Admin] Query created, fetching...');
+      
+      // Timeout של 15 שניות
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout - טעינת הנתונים לקחה יותר מדי זמן. ייתכן שיש בעיית רשת.')), 15000);
+      });
+      
+      const snapshot = await Promise.race([getDocs(q), timeoutPromise]) as Awaited<ReturnType<typeof getDocs>>;
+      console.log('[Admin] Got snapshot, docs count:', snapshot.size);
       
       const loadedEvents: AnalyticsEvent[] = [];
       snapshot.forEach((doc) => {
@@ -97,7 +124,19 @@ export default function AdminDashboard() {
         } as AnalyticsEvent);
       });
       
+      console.log('[Admin] Loaded events:', loadedEvents.length);
       setEvents(loadedEvents);
+      
+      // אם אין אירועים - הצג הודעה
+      if (loadedEvents.length === 0) {
+        setStats({
+          totalEvents: 0,
+          uniqueVisitors: 0,
+          eventsToday: 0,
+          eventsByType: {}
+        });
+        return;
+      }
       
       // חישוב סטטיסטיקות
       const uniqueVisitors = new Set(loadedEvents.map(e => e.visitorId)).size;
@@ -120,7 +159,7 @@ export default function AdminDashboard() {
       });
       
     } catch (err) {
-      console.error('Error loading analytics:', err);
+      console.error('[Admin] Error loading analytics:', err);
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים');
     } finally {
       setLoadingData(false);
@@ -169,20 +208,13 @@ export default function AdminDashboard() {
               onClick={async () => {
                 setError(null);
                 try {
+                  // זה יעשה redirect לדף Google
+                  // המשתמש יחזור אחרי ההתחברות
                   await signInWithGoogle();
                 } catch (err: unknown) {
                   console.error('[Admin] Login error:', err);
                   if (err instanceof Error) {
-                    // שגיאות נפוצות
-                    if (err.message.includes('auth/unauthorized-domain')) {
-                      setError('הדומיין לא מורשה. יש להוסיף אותו ב-Firebase Console.');
-                    } else if (err.message.includes('auth/operation-not-allowed')) {
-                      setError('Google Sign-in לא מופעל. יש להפעיל ב-Firebase Console.');
-                    } else if (err.message.includes('popup-closed')) {
-                      setError('החלון נסגר. נסה שוב.');
-                    } else {
-                      setError(err.message);
-                    }
+                    setError(err.message);
                   } else {
                     setError('שגיאה לא ידועה בהתחברות');
                   }
