@@ -9,6 +9,7 @@ import {
   logOut, 
   onAuthChange, 
   isAdmin,
+  checkRedirectResult,
   type User 
 } from '../utils/firebaseAuth';
 import { 
@@ -55,8 +56,21 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
-  // האזנה לשינויי auth
+  // האזנה לשינויי auth + בדיקת redirect result
   useEffect(() => {
+    // בדוק אם חזרנו מ-redirect של Google
+    checkRedirectResult()
+      .then((redirectUser) => {
+        if (redirectUser) {
+          console.log('[Admin] User from redirect:', redirectUser.email);
+        }
+      })
+      .catch((err) => {
+        console.error('[Admin] Redirect error:', err);
+        setError(err instanceof Error ? err.message : 'שגיאה בהתחברות');
+      });
+
+    // האזן לשינויים
     const unsubscribe = onAuthChange((authUser) => {
       setUser(authUser);
       setLoading(false);
@@ -169,20 +183,13 @@ export default function AdminDashboard() {
               onClick={async () => {
                 setError(null);
                 try {
+                  // זה יעשה redirect לדף Google
+                  // המשתמש יחזור אחרי ההתחברות
                   await signInWithGoogle();
                 } catch (err: unknown) {
                   console.error('[Admin] Login error:', err);
                   if (err instanceof Error) {
-                    // שגיאות נפוצות
-                    if (err.message.includes('auth/unauthorized-domain')) {
-                      setError('הדומיין לא מורשה. יש להוסיף אותו ב-Firebase Console.');
-                    } else if (err.message.includes('auth/operation-not-allowed')) {
-                      setError('Google Sign-in לא מופעל. יש להפעיל ב-Firebase Console.');
-                    } else if (err.message.includes('popup-closed')) {
-                      setError('החלון נסגר. נסה שוב.');
-                    } else {
-                      setError(err.message);
-                    }
+                    setError(err.message);
                   } else {
                     setError('שגיאה לא ידועה בהתחברות');
                   }
