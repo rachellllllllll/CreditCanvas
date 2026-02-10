@@ -6,15 +6,14 @@
  */
 
 import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithRedirect,
-  getRedirectResult,
-  GoogleAuthProvider,
+import { 
+  getAuth, 
+  signInWithPopup,
+  GoogleAuthProvider, 
   signOut,
   onAuthStateChanged,
   type Auth,
-  type User
+  type User 
 } from 'firebase/auth';
 
 // ============================================
@@ -33,11 +32,11 @@ const firebaseConfig = {
 // רשימת מיילים מורשים לאדמין
 // אפשר להגדיר גם מ-environment variable: VITE_ADMIN_EMAILS=email1@gmail.com,email2@gmail.com
 const ADMIN_EMAILS_ENV = import.meta.env.VITE_ADMIN_EMAILS || '';
-const ADMIN_EMAILS: string[] = ADMIN_EMAILS_ENV
+const ADMIN_EMAILS: string[] = ADMIN_EMAILS_ENV 
   ? ADMIN_EMAILS_ENV.split(',').map((e: string) => e.trim().toLowerCase())
   : [
     'r0527124976@gmail.com'
-  ];
+    ];
 
 // ============================================
 // Firebase Initialization
@@ -84,62 +83,44 @@ function getFirebaseAuth(): Auth | null {
 // ============================================
 
 /**
- * התחברות עם Google (redirect - עובד טוב יותר ברשתות מוגבלות)
+ * התחברות עם Google (popup - יותר אמין מ-redirect)
  */
-export async function signInWithGoogle(): Promise<void> {
+export async function signInWithGoogle(): Promise<User> {
   console.log('[Auth] signInWithGoogle called');
-
+  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
     console.error('[Auth] No auth instance for sign in');
     throw new Error('Firebase Auth לא זמין');
   }
 
-  console.log('[Auth] Starting redirect to Google...');
-  console.log('[Auth] Auth domain:', firebaseConfig.authDomain);
-
-  // Redirect לדף Google - המשתמש יחזור אחרי ההתחברות
-  await signInWithRedirect(authInstance, googleProvider);
-  console.log('[Auth] signInWithRedirect completed (should not reach here)');
-}
-
-/**
- * בדיקת תוצאת redirect (קוראים לזה בטעינת הדף)
- */
-export async function checkRedirectResult(): Promise<User | null> {
-  console.log('[Auth] checkRedirectResult called');
-
-  const authInstance = getFirebaseAuth();
-  if (!authInstance) {
-    console.error('[Auth] No auth instance available');
-    return null;
-  }
-
-  console.log('[Auth] Auth instance ready, checking redirect result...');
-  console.log('[Auth] Current URL:', window.location.href);
-
+  console.log('[Auth] Opening Google sign-in popup...');
+  
   try {
-    const result = await getRedirectResult(authInstance);
-    console.log('[Auth] getRedirectResult completed');
-    console.log('[Auth] Result:', result);
-
-    if (result?.user) {
-      console.log('[Auth] User from redirect:', result.user.email);
-    } else {
-      console.log('[Auth] No user from redirect (normal if not returning from login)');
-    }
-
-    return result?.user || null;
+    const result = await signInWithPopup(authInstance, googleProvider);
+    console.log('[Auth] Sign-in successful:', result.user.email);
+    return result.user;
   } catch (error: unknown) {
-    console.error('[Auth] Redirect result error:', error);
-    // Log more details
+    console.error('[Auth] Sign-in error:', error);
     if (error instanceof Error) {
-      console.error('[Auth] Error name:', error.name);
-      console.error('[Auth] Error message:', error.message);
-      console.error('[Auth] Error stack:', error.stack);
+      // Handle specific errors
+      if (error.message.includes('popup-closed-by-user')) {
+        throw new Error('החלון נסגר לפני השלמת ההתחברות');
+      }
+      if (error.message.includes('popup-blocked')) {
+        throw new Error('הדפדפן חסם את חלון ההתחברות. אנא אפשר popups לאתר זה.');
+      }
     }
     throw error;
   }
+}
+
+/**
+ * בדיקת תוצאת redirect - לא בשימוש יותר (נשאר לתאימות)
+ */
+export async function checkRedirectResult(): Promise<User | null> {
+  console.log('[Auth] checkRedirectResult called (no-op with popup auth)');
+  return null;
 }
 
 /**
@@ -157,14 +138,14 @@ export async function logOut(): Promise<void> {
  */
 export function onAuthChange(callback: (user: User | null) => void): () => void {
   console.log('[Auth] onAuthChange listener registered');
-
+  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
     console.error('[Auth] No auth instance for listener');
     callback(null);
-    return () => { };
+    return () => {};
   }
-
+  
   return onAuthStateChanged(authInstance, (user) => {
     console.log('[Auth] Auth state changed:', user ? `User: ${user.email}` : 'No user');
     callback(user);
@@ -190,15 +171,15 @@ export function isAdmin(user: User | null): boolean {
   if (!user || !user.email) {
     return false;
   }
-
+  
   const userEmail = user.email.toLowerCase();
-
+  
   // אם אין רשימת אדמינים מוגדרת - אפשר לכולם (לפיתוח)
   if (ADMIN_EMAILS.length === 0) {
     console.warn('[Auth] אין רשימת אדמינים מוגדרת - כל משתמש מחובר יכול לגשת');
     return true;
   }
-
+  
   return ADMIN_EMAILS.includes(userEmail);
 }
 
