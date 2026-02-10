@@ -8,7 +8,8 @@
 import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut,
   onAuthStateChanged,
@@ -83,25 +84,32 @@ function getFirebaseAuth(): Auth | null {
 // ============================================
 
 /**
- * התחברות עם Google
+ * התחברות עם Google (redirect - עובד טוב יותר ברשתות מוגבלות)
  */
-export async function signInWithGoogle(): Promise<User | null> {
+export async function signInWithGoogle(): Promise<void> {
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
     throw new Error('Firebase Auth לא זמין');
   }
 
+  // Redirect לדף Google - המשתמש יחזור אחרי ההתחברות
+  await signInWithRedirect(authInstance, googleProvider);
+}
+
+/**
+ * בדיקת תוצאת redirect (קוראים לזה בטעינת הדף)
+ */
+export async function checkRedirectResult(): Promise<User | null> {
+  const authInstance = getFirebaseAuth();
+  if (!authInstance) {
+    return null;
+  }
+
   try {
-    const result = await signInWithPopup(authInstance, googleProvider);
-    return result.user;
+    const result = await getRedirectResult(authInstance);
+    return result?.user || null;
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      // המשתמש סגר את החלון
-      if (error.message.includes('popup-closed-by-user')) {
-        return null;
-      }
-      throw error;
-    }
+    console.error('[Auth] Redirect result error:', error);
     throw error;
   }
 }
