@@ -72,9 +72,15 @@ interface VendorAnalysis {
   incomeByMonth: Map<string, number>;
   // יציאות (חיובים) לפי חודש
   expenseByMonth: Map<string, number>;
+  // עסקאות בודדות לפי חודש (לבדיקת התאמה ברמת עסקה)
+  expenseTransactionsByMonth: Map<string, number[]>;
+  incomeTransactionsByMonth: Map<string, number[]>;
   // סכום כולל
   totalIncome: number;
   totalExpense: number;
+  // מונים לעסקאות
+  incomeTransactionCount: number;
+  expenseTransactionCount: number;
   // עסקאות
   transactions: CreditDetail[];
 }
@@ -94,8 +100,12 @@ function analyzeVendors(details: CreditDetail[]): Map<string, VendorAnalysis> {
         description: desc,
         incomeByMonth: new Map(),
         expenseByMonth: new Map(),
+        expenseTransactionsByMonth: new Map(),
+        incomeTransactionsByMonth: new Map(),
         totalIncome: 0,
         totalExpense: 0,
+        incomeTransactionCount: 0,
+        expenseTransactionCount: 0,
         transactions: [],
       });
     }
@@ -109,16 +119,28 @@ function analyzeVendors(details: CreditDetail[]): Map<string, VendorAnalysis> {
     // direction מציין את כיוון הזרימה: income = כסף נכנס, expense = כסף יוצא
     if (d.direction === 'income') {
       vendor.totalIncome += d.amount;
+      vendor.incomeTransactionCount++;
       vendor.incomeByMonth.set(
         monthYear,
         (vendor.incomeByMonth.get(monthYear) || 0) + d.amount
       );
+      // שמור עסקאות בודדות לפי חודש
+      if (!vendor.incomeTransactionsByMonth.has(monthYear)) {
+        vendor.incomeTransactionsByMonth.set(monthYear, []);
+      }
+      vendor.incomeTransactionsByMonth.get(monthYear)!.push(d.amount);
     } else {
       vendor.totalExpense += d.amount;
+      vendor.expenseTransactionCount++;
       vendor.expenseByMonth.set(
         monthYear,
         (vendor.expenseByMonth.get(monthYear) || 0) + d.amount
       );
+      // שמור עסקאות בודדות לפי חודש
+      if (!vendor.expenseTransactionsByMonth.has(monthYear)) {
+        vendor.expenseTransactionsByMonth.set(monthYear, []);
+      }
+      vendor.expenseTransactionsByMonth.get(monthYear)!.push(d.amount);
     }
   }
 
@@ -127,16 +149,27 @@ function analyzeVendors(details: CreditDetail[]): Map<string, VendorAnalysis> {
 
 /**
  * בודק אם יש יציאה מקבילה באותו חודש (לזיהוי גביה לא מאושרת / העברה)
+ * 
+ * בודק ברמת עסקה בודדת (±3₪) - לא על סכום כולל!
+ * דוגמה: אם יש 2 הוצאות של 29₪ (סה"כ 58₪) והכנסה של 29₪,
+ * הגרסה הישנה לא הייתה תופסת (58≠29), הגרסה החדשה כן (29≈29).
  */
 function hasMatchingExpenseInMonth(
   vendor: VendorAnalysis,
   monthYear: string,
   incomeAmount: number,
-  tolerance: number = 1 // סטיית סכום מותרת
+  tolerance: number = 3 // סטיית סכום מותרת - הוגדל ל-3₪
 ): boolean {
-  const expenseInMonth = vendor.expenseByMonth.get(monthYear) || 0;
-  // בדוק אם יש יציאה בסכום דומה
-  return Math.abs(expenseInMonth - incomeAmount) <= tolerance;
+  // בדיקה ברמת עסקה בודדת: האם יש עסקת הוצאה באותו סכום (±tolerance)?
+  const expenseTransactions = vendor.expenseTransactionsByMonth.get(monthYear);
+  if (expenseTransactions) {
+    for (const expenseAmount of expenseTransactions) {
+      if (Math.abs(expenseAmount - incomeAmount) <= tolerance) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -225,6 +258,14 @@ export function detectAutoIncomeSources(
   for (const [desc, vendor] of vendors) {
     // דלג אם כבר יש כלל לבית עסק זה
     if (existingDescriptions.has(desc)) continue;
+
+    // === קריטריון 0: בדיקת יחס הוצאות/הכנסות ויחס עסקאות ===
+    // אם יש יותר הוצאות מהכנסות - זה לא מקור הכנסה (למשל: דן חברה לתחבורה ציבורית)
+    if (vendor.totalExpense > vendor.totalIncome) continue;
+    
+    // אם מספר עסקאות ההוצאה >= מספר עסקאות ההכנסה - זה לא מקור הכנסה
+    // (אם יש 10 חיובים ו-3 החזרים, ברור שזה לא הכנסה)
+    if (vendor.expenseTransactionCount >= vendor.incomeTransactionCount) continue;
 
     // בדוק כמה חודשים נכנס כסף
     const monthsWithIncome = vendor.incomeByMonth.size;
