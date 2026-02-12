@@ -12,7 +12,7 @@ import {
   getDocs,
   where
 } from 'firebase/firestore';
-import { getApps } from 'firebase/app';
+import { getFirebaseApp } from '../../../utils/firebaseAuth';
 import type { 
   AnalyticsEvent, 
   Stats, 
@@ -71,12 +71,12 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     setError(null);
 
     try {
-      const apps = getApps();
-      if (apps.length === 0) {
-        throw new Error('Firebase לא מאותחל');
+      const app = getFirebaseApp();
+      if (!app) {
+        throw new Error('Firebase לא מאותחל - בדוק את ההגדרות');
       }
 
-      const db = getFirestore(apps[0]);
+      const db = getFirestore(app);
       const eventsRef = collection(db, 'analytics_events');
       
       const startTime = getDateBoundary(dateRange);

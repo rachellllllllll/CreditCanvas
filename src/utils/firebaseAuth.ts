@@ -35,7 +35,8 @@ const ADMIN_EMAILS_ENV = import.meta.env.VITE_ADMIN_EMAILS || '';
 const ADMIN_EMAILS: string[] = ADMIN_EMAILS_ENV 
   ? ADMIN_EMAILS_ENV.split(',').map((e: string) => e.trim().toLowerCase())
   : [
-    'r0527124976@gmail.com'
+      // הוסף את המייל שלך כאן:
+      // 'your-email@gmail.com',
     ];
 
 // ============================================
@@ -46,7 +47,7 @@ let firebaseApp: FirebaseApp | null = null;
 let auth: Auth | null = null;
 const googleProvider = new GoogleAuthProvider();
 
-function getFirebaseApp(): FirebaseApp | null {
+export function getFirebaseApp(): FirebaseApp | null {
   if (!firebaseApp) {
     try {
       const existingApps = getApps();
@@ -55,6 +56,7 @@ function getFirebaseApp(): FirebaseApp | null {
       } else {
         firebaseApp = initializeApp(firebaseConfig);
       }
+      console.log('[Auth] Firebase app initialized successfully');
     } catch (err) {
       console.error('[Auth] Failed to initialize Firebase:', err);
       return null;
@@ -62,6 +64,9 @@ function getFirebaseApp(): FirebaseApp | null {
   }
   return firebaseApp;
 }
+
+// Eagerly initialize Firebase at module load to avoid race conditions
+getFirebaseApp();
 
 function getFirebaseAuth(): Auth | null {
   if (!auth) {
