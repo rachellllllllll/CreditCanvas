@@ -17,15 +17,18 @@ import './App.css';
 import './index.css';
 import MainView from './components/MainView';
 import NewCategoriesTablePrompt from './components/NewCategoriesTablePrompt';
-import TransactionsChat from './components/TransactionsChat';
 import TermsModal from './components/TermsModal';
 import OnboardingTour from './components/OnboardingTour';
 import OnboardingScreen from './components/OnboardingScreen';
+import FeedbackPopup from './components/FeedbackPopup';
+import { useFeedbackPopup } from './components/useFeedbackPopup';
 import {
   type UserProfile,
   type UnknownCategoryInfo,
   type CategoryMapping,
   getOrCreateUserProfile,
+  saveUserProfile,
+  trackEvent,
   trackSessionStart,
   trackFilesLoaded,
   trackCategoryAssigned,
@@ -194,7 +197,11 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     
     // --- זיהוי עסקאות בחיוב מיידי (משיכת מזומן וכד') ---
     const transactionType = rowObj['סוג עסקה'] || rowObj['סוגעסקה'] || '';
-    if (transactionType.includes('משיכת מזומן') || transactionType.includes('חיוב מיידי')) {
+    const notes = rowObj['הערות'] || '';
+    const isImmediateCharge = transactionType.includes('משיכת מזומן') 
+      || transactionType.includes('חיוב מיידי')
+      || notes.includes('מיידי') || notes.includes('מידי');
+    if (isImmediateCharge) {
       // בחיוב מיידי: תאריך החיוב = תאריך העסקה
       chargeDate = date;
     }
@@ -207,12 +214,12 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     // Normalize date (support both dd-mm-yyyy and dd/mm/yy and Excel serial numbers)
     if (/^\d{1,5}$/.test(date)) {
       // Excel serial date
-      const excelEpoch = new Date(1899, 11, 30);
+      const excelEpoch = Date.UTC(1899, 11, 30);
       const serial = parseInt(date, 10);
       if (!isNaN(serial)) {
-        const d = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
+        const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
         // Format as dd/m/yy
-        date = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
+        date = `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear().toString().slice(-2)}`;
       }
     } else {
       date = date.replace(/\./g, '/').replace(/-/g, '/');
@@ -242,12 +249,12 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     // --- normalize chargeDate ---
     if (chargeDate) {
       if (/^\d{1,5}$/.test(chargeDate)) {
-        const excelEpoch = new Date(1899, 11, 30);
+        const excelEpoch = Date.UTC(1899, 11, 30);
         const serial = parseInt(chargeDate, 10);
         //if (!isNaN(serial) && serial > 0 && serial < 60000) {
         if (!isNaN(serial)) {
-          const d = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
-          chargeDate = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
+          const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
+          chargeDate = `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear().toString().slice(-2)}`;
         }
       } else {
         chargeDate = chargeDate.replace(/\./g, '/').replace(/-/g, '/');
@@ -308,8 +315,6 @@ const getMonthYear = (dateStr: string): string => {
 };
 
 const App: React.FC = () => {
-  // מצב לפתיחת חלון הצ'אט
-  const [chatOpen, setChatOpen] = useState(false);
 
   // --- שמירת העדפות משתמש ב-localStorage ---
   const APP_PREFS_KEY = 'appPreferences';
@@ -439,6 +444,15 @@ const App: React.FC = () => {
   // File System Access API: Directory handle (מוגדר כאן כדי שיהיה זמין ל-callbacks)
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
+  // --- Feedback Popup ---
+  const feedbackPopup = useFeedbackPopup({
+    profile: userProfile,
+    dirHandle,
+    analysisReady: !!analysis,
+    saveProfile: saveUserProfile,
+    trackEvent,
+  });
+
   // --- Callbacks להדרכת משתמש חדש (Tour) ---
   const handleTourComplete = useCallback(() => {
     setShowTour(false);
@@ -497,12 +511,21 @@ const App: React.FC = () => {
       // בקש הרשאת קריאה+כתיבה מיד בבחירת התיקיה - פופאפ אחד במקום שניים
       const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
       
+      // --- איפוס פילטרים ומצבים בבחירת תיקייה חדשה ---
       // נקה את סטטוס הקונפליקטים שנדחו - זו תיקייה חדשה
       setDismissedConflictCount(null);
       setInitialPromptShown(false); // אפס את הדגל כדי להציג את הדיאלוג בתיקייה חדשה
+      
+      // אפס displayMode לברירת מחדל
+      setDisplayModeInternal('all');
+      
+      // נקה פילטרים מ-localStorage (יגרום לאיפוס בקומפוננטות)
       try {
         localStorage.removeItem('dismissedConflictCount');
+        localStorage.removeItem('mainViewFilterPreferences'); // selectedCards, includeBank
+        localStorage.removeItem('missingDataAlert_dismissed'); // התראות נתונים חסרים
       } catch { /* ignore */ }
+      
       await handlePickDirectory_Internal(dir);
     } catch (err) {
       console.error('שגיאה בבחירת תיקיה:', err);
@@ -897,11 +920,6 @@ const App: React.FC = () => {
     trackFeature('change_date_mode');
   }, [trackFeature]);
 
-  const handleOpenChatWithTracking = useCallback(() => {
-    setChatOpen(true);
-    trackFeature('use_chat');
-  }, [trackFeature]);
-
   // שמירת העדפות App ב-localStorage בכל שינוי
   React.useEffect(() => {
     const prefs = { view, displayMode, dateMode };
@@ -1250,7 +1268,11 @@ const App: React.FC = () => {
   }, [dirHandle]);
 
   // State for multi-category prompt
-  const [newCategoriesPrompt, setNewCategoriesPrompt] = useState<null | { names: string[], onConfirm: (mapping: Record<string, CategoryDef>) => void }>(null);
+  const [newCategoriesPrompt, setNewCategoriesPrompt] = useState<null | { 
+    names: string[], 
+    onConfirm: (mapping: Record<string, CategoryDef>) => void,
+    onConflictsResolved?: (resolved: Record<string, string>) => void 
+  }>(null);
 
   const [categoryAliases, setCategoryAliases] = useState<Record<string, string>>({});
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1396,21 +1418,26 @@ const App: React.FC = () => {
       return false;
     };
     
-    const merchantToCategories = new Map<string, Set<string>>();
+    const merchantToCategories = new Map<string, Map<string, number>>();
     for (const tx of details) {
       if (isTransactionCoveredByRule(tx)) continue;
       const merchant = extractMerchantName(tx.description);
       const category = tx.category || '';
       if (!merchant || merchant.length <= 2 || !category) continue;
       if (!merchantToCategories.has(merchant)) {
-        merchantToCategories.set(merchant, new Set());
+        merchantToCategories.set(merchant, new Map());
       }
-      merchantToCategories.get(merchant)!.add(category);
+      const catMap = merchantToCategories.get(merchant)!;
+      catMap.set(category, (catMap.get(category) || 0) + 1);
     }
     
     let conflictCount = 0;
-    for (const [, categories] of merchantToCategories.entries()) {
-      if (categories.size > 1) conflictCount++;
+    for (const [, catMap] of merchantToCategories.entries()) {
+      if (catMap.size <= 1) continue;
+      // ספור רק קונפליקטים עם >= 3 עסקאות (בהתאמה ללוגיקה ב-NewCategoriesTablePrompt)
+      let total = 0;
+      for (const count of catMap.values()) total += count;
+      if (total >= 3) conflictCount++;
     }
     return conflictCount;
   }, []);
@@ -1507,6 +1534,24 @@ const App: React.FC = () => {
       const namesToPass = catsWithoutDefaults.length > 0 ? catsWithoutDefaults : excelCats as string[];
       setNewCategoriesPrompt({
         names: namesToPass,
+        // טיפול בקונפליקטים שנפתרו - יצירת כללי קטגוריה שישמרו את הבחירות
+        onConflictsResolved: async (resolved: Record<string, string>) => {
+          if (!dirHandle || Object.keys(resolved).length === 0) return;
+          
+          // לכל קונפליקט שנפתר, צור כלל קטגוריה שמגדיר את בית העסק לקטגוריה שנבחרה
+          // הכלל יהיה לפי תיאור שמכיל את שם בית העסק
+          for (const [merchantName, targetCategory] of Object.entries(resolved)) {
+            // צור regex שיתאים לתיאורים שמכילים את שם בית העסק
+            const escapedMerchant = merchantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            await addDescriptionContainsRule(dirHandle, escapedMerchant, targetCategory);
+          }
+          
+          // עדכן את ה-state של הכללים
+          const updatedRules = await loadCategoryRules(dirHandle);
+          setCategoryRules(updatedRules);
+          
+          console.log(`✅ נשמרו ${Object.keys(resolved).length} כללי קטגוריה לקונפליקטים שנפתרו`);
+        },
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
           const merged = [...categoriesList];
           const newAliases = { ...categoryAliases };
@@ -1936,30 +1981,27 @@ const App: React.FC = () => {
             externalRuleToEdit={ruleToEditFromSettings}
             onClearExternalRuleToEdit={() => setRuleToEditFromSettings(null)}
           />
-          {/* אייקון צ'אט בפינה */}
-          <button
-            className="chat-fab"
-            title="שאל שאלה על העסקאות"
-            onClick={handleOpenChatWithTracking}
-            style={{
-              display: chatOpen ? 'none' : 'flex',
-            }}
-          >
-            💬
-          </button>
-          {/* חלון צ'אט (modal) - תמיד במונט, מוסתר עם CSS */}
-          <div
-            className={`chat-modal${chatOpen ? '' : ' chat-modal--hidden'}`}
-          >
-            <div className="chat-modal-header">
-              <span>צ'אט עסקאות</span>
-              <button onClick={() => setChatOpen(false)} className="chat-modal-close" title="סגור">✖️</button>
-            </div>
-            <div className="chat-modal-content">
-              <TransactionsChat details={analysis.details} showClearChatButton={true} />
-            </div>
-          </div>
         </>
+      )}
+      {/* Feedback Popup — מופיע אוטומטית לפי לוגיקת תזמון */}
+      {feedbackPopup.showPopup && userProfile && (
+        <FeedbackPopup
+          profile={userProfile}
+          onSubmit={(data) => {
+            feedbackPopup.handleSubmit(data);
+            // עדכן את ה-profile המקומי כדי שלא יופיע שוב באותו session
+            setUserProfile(prev => prev ? {
+              ...prev,
+              feedback: {
+                lastSubmittedAt: new Date().toISOString(),
+                lastDismissedAt: prev.feedback?.lastDismissedAt ?? null,
+                dismissCount: 0,
+                totalSubmissions: (prev.feedback?.totalSubmissions ?? 0) + 1,
+              }
+            } : prev);
+          }}
+          onDismiss={feedbackPopup.handleDismiss}
+        />
       )}
       <EditCategoryDialog
         open={!!editDialog?.open}
@@ -1974,6 +2016,7 @@ const App: React.FC = () => {
           names={newCategoriesPrompt.names}
           categoriesList={categoriesList}
           onConfirm={newCategoriesPrompt.onConfirm}
+          onConflictsResolved={newCategoriesPrompt.onConflictsResolved}
           onCancel={() => {
             // שמור את מספר הקונפליקטים הנוכחי כדי לא להציג שוב את אותם קונפליקטים
             if (analysis) {

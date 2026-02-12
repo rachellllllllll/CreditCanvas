@@ -57,6 +57,24 @@
 }
 @keyframes dropdownFade { from { opacity:0; transform:translateY(-4px);} to { opacity:1; transform:translateY(0);} }
 
+/* --- Section header (e.g. "🕐 לאחרונה") --- */
+.CategorySelectOrAdd-dropdown-section-title {
+  padding: 6px 12px 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.02em;
+  user-select: none;
+  direction: rtl;
+}
+
+/* Separator between recent and all */
+.CategorySelectOrAdd-dropdown-separator {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 10px;
+}
+
 .CategorySelectOrAdd-dropdown-option {
   padding: 7px 12px;
   cursor: pointer;
@@ -66,11 +84,29 @@
   font-size: 16px;
   color: #222;
   background: #fff;
-  transition: background 0.15s;
+  transition: background 0.12s;
 }
 
 .CategorySelectOrAdd-dropdown-option.selected {
   background: #eef2ff;
+}
+
+/* Keyboard highlight */
+.CategorySelectOrAdd-dropdown-option.highlighted {
+  background: #e0e7ff;
+}
+
+/* Colored dot chip in dropdown */
+.CategorySelectOrAdd-dropdown-option-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.10);
 }
 
 .CategorySelectOrAdd-icon-btn {

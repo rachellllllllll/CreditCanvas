@@ -3,11 +3,12 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import AdminDashboard from './components/AdminDashboard.tsx'
+// Use the new enhanced Admin Dashboard
+import { AdminDashboardV2 as AdminDashboard } from './components/admin'
 
 /**
  * Simple hash-based router
- * #/admin -> AdminDashboard
+ * #/admin -> AdminDashboard (V2 - Enhanced)
  * everything else -> App
  */
 function Router() {

@@ -13,6 +13,8 @@ interface NewCategoriesTablePromptProps {
   allDetails?: CreditDetail[];
   // כללי קטגוריות - לסינון קונפליקטים מכוונים
   categoryRules?: CategoryRule[];
+  // callback לקונפליקטים שנפתרו (בית עסק -> קטגוריה שנבחרה)
+  onConflictsResolved?: (resolved: Record<string, string>) => void;
 }
 
 // קונפליקט של בית עסק בקטגוריות שונות
@@ -302,7 +304,7 @@ const isTransactionCoveredByRule = (tx: CreditDetail, rules: CategoryRule[]): bo
   return false;
 };
 
-const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ names, categoriesList, onConfirm, onCancel, allDetails = [], categoryRules = [] }) => {
+const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ names, categoriesList, onConfirm, onCancel, allDetails = [], categoryRules = [], onConflictsResolved }) => {
   // חשב ספירת עסקאות לכל קטגוריה (נדרש לפני findIdenticalCategories)
   const initialTransactionCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -448,6 +450,12 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         mapping[n] = { name: n, icon: defaults?.icon, color: defaults?.color };
       }
     });
+    
+    // שלח את הקונפליקטים שנפתרו (בית עסק -> קטגוריה שנבחרה)
+    if (onConflictsResolved && Object.keys(resolvedConflicts).length > 0) {
+      onConflictsResolved(resolvedConflicts);
+    }
+    
     onConfirm(mapping);
   };
 
@@ -754,6 +762,15 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   };
 
   // מסך סיכום בכניסה ראשונה
+  // אם אין קונפליקטים ואין קטגוריות חדשות להגדרה — אין מה להציג, סגור אוטומטית
+  const hasNothingToShow = summaryStats.conflictsCount === 0 && summaryStats.newCategories === 0 && activeNames.length === 0;
+  React.useEffect(() => {
+    if (hasNothingToShow) {
+      handleConfirm();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNothingToShow]);
+
   if (viewMode === 'summary') {
     return (
       <div className="new-cats-overlay">

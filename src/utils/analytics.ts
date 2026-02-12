@@ -76,12 +76,20 @@ function getFirestoreDb(): Firestore | null {
 // Types
 // ============================================
 
+export interface FeedbackState {
+  lastSubmittedAt: string | null;   // ISO date — מתי שלח משוב אחרון
+  lastDismissedAt: string | null;   // ISO date — מתי לחץ "לא עכשיו" אחרון
+  dismissCount: number;             // כמה פעמים דחה ברצף (מתאפס אחרי שליחה)
+  totalSubmissions: number;         // סה"כ משובים שנשלחו
+}
+
 export interface UserProfile {
   visitorId: string;
   firstSeen: string;
   analyticsConsent: boolean | null; // null = לא ענה עדיין
   lastSeen?: string;
   visitCount?: number;
+  feedback?: FeedbackState;
 }
 
 export interface AnalyticsEvent {

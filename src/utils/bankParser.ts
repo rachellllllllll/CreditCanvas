@@ -1,16 +1,16 @@
 import type { CreditDetail } from '../types';
 
-function normalizeDate(input: any): string {
+function normalizeDate(input: string | number): string {
   let date = String(input ?? '').trim();
   if (!date) return '';
   if (/^\d{1,5}$/.test(date)) {
-    const excelEpoch = new Date(1899, 11, 30);
+    const excelEpoch = Date.UTC(1899, 11, 30);
     const serial = parseInt(date, 10);
     if (!isNaN(serial)) {
-      const d = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
+      const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
       return `${dd}/${mm}/${String(yyyy).slice(-2)}`; // dd/mm/yy
     }
   }
@@ -18,7 +18,7 @@ function normalizeDate(input: any): string {
   return date;
 }
 
-function parseNumber(s: any): number {
+function parseNumber(s: string | number): number {
   if (s == null) return 0;
   let str = String(s).trim();
   // remove spaces and common currency/rtl marks
@@ -34,21 +34,21 @@ function parseNumber(s: any): number {
     str = str.replace(/,/g, '.');
   }
   // keep only digits, dot, minus
-  str = str.replace(/[^0-9.\-]/g, '');
+  str = str.replace(/[^0-9.-]/g, '');
   const f = parseFloat(str);
   return isNaN(f) ? 0 : f;
 }
 
-export function parseBankStatementFromSheet(sheetData: any[][], fileName: string, sheetName: string): Promise<CreditDetail[]> {
+export function parseBankStatementFromSheet(sheetData: (string | number)[][], fileName: string, sheetName: string): Promise<CreditDetail[]> {
   // sheetData הוא כבר מערך דו-ממדי (מ-xlsxMinimal)
-  const json: any[][] = sheetData;
+  const json: (string | number)[][] = sheetData;
   if (!json?.length) return Promise.resolve([]);
 
   // מצא שורת כותרת: מחפש עמודות מוכרות
   let headerIdx = -1;
   let headers: string[] = [];
   for (let i = 0; i < Math.min(json.length, 30); i++) {
-    const row = (json[i] || []).map((c: any) => String(c ?? '').replace(/"/g, '').replace(/\r?\n/g, '').trim());
+    const row = (json[i] || []).map((c: string | number) => String(c ?? '').replace(/"/g, '').replace(/\r?\n/g, '').trim());
     const hasDate = row.some((h: string) => /תאריך/.test(h) || /Date/i.test(h));
     // הרחבת זיהוי שדה תיאור: תיאור/תאור/פירוט/פרטים/הפעולה/תיאור פעולה
     const hasDesc = row.some((h: string) => /(תיאור פעולה|הפעולה|תיאור|תאור|פירוט|פרטים|Description)/i.test(h));
@@ -82,7 +82,7 @@ export function parseBankStatementFromSheet(sheetData: any[][], fileName: string
   for (let r = headerIdx + 1; r < json.length; r++) {
     const row = json[r] || [];
     const dateRaw = dateIdx >= 0 ? row[dateIdx] : '';
-    let date = normalizeDate(dateRaw);
+    const date = normalizeDate(dateRaw);
 
     // תיאור: אם קיימים גם "פרטים" וגם "הפעולה" – לשלב שניהם. אחרת פרטים, ואם אין אז תיאור, ואם אין אז הפעולה
     const descriptionParts: string[] = [];
@@ -157,7 +157,7 @@ export function parseBankStatementFromCSV(rows: string[][], fileName: string): C
   let headerIdx = -1;
   let headers: string[] = [];
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
-    const row = (rows[i] || []).map((c: any) => String(c ?? '').replace(/"/g, '').replace(/\r?\n/g, '').trim());
+    const row = (rows[i] || []).map((c: string) => String(c ?? '').replace(/"/g, '').replace(/\r?\n/g, '').trim());
     const hasDate = row.some((h: string) => /תאריך/.test(h) || /Date/i.test(h));
     const hasDesc = row.some((h: string) => /(תיאור פעולה|הפעולה|תיאור|תאור|פירוט|פרטים|Description)/i.test(h));
     const hasDebitCredit = row.some((h: string) => /חובה\/זכות/.test(h)) || (row.some((h: string) => /חובה|Debit/i.test(h)) && row.some((h: string) => /זכות|Credit/i.test(h)));
@@ -187,7 +187,7 @@ export function parseBankStatementFromCSV(rows: string[][], fileName: string): C
   for (let r = headerIdx + 1; r < rows.length; r++) {
     const row = rows[r] || [];
     const dateRaw = dateIdx >= 0 ? row[dateIdx] : '';
-    let date = normalizeDate(dateRaw);
+    const date = normalizeDate(dateRaw);
 
     const descriptionParts: string[] = [];
     if (!descriptionParts.length && descIdx >= 0) {

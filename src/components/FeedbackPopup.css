@@ -1,0 +1,274 @@
+/* ============================================
+   FeedbackPopup — עיצוב תואם ל-TermsModal
+   ============================================ */
+
+/* Overlay */
+.feedback-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: feedback-overlay-in 0.25s ease;
+}
+
+@keyframes feedback-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal */
+.feedback-popup {
+  background: white;
+  border-radius: 16px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: feedback-popup-appear 0.25s ease-out;
+  direction: rtl;
+  text-align: right;
+  overflow: hidden;
+}
+
+@keyframes feedback-popup-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Success state animation */
+.feedback-popup--success {
+  animation: feedback-success-pulse 0.4s ease;
+}
+
+@keyframes feedback-success-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+/* Header */
+.feedback-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 12px;
+}
+
+.feedback-popup-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.feedback-popup-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.feedback-popup-close:hover {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Body */
+.feedback-popup-body {
+  padding: 8px 24px 20px;
+}
+
+.feedback-popup-subtitle {
+  margin: 0 0 16px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Stars */
+.feedback-stars {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  direction: ltr;
+}
+
+.feedback-star {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: transform 0.15s, color 0.15s;
+  color: #d1d5db;
+  line-height: 1;
+}
+
+.feedback-star:hover {
+  transform: scale(1.2);
+}
+
+.feedback-star--active {
+  color: #f59e0b;
+}
+
+.feedback-star--hover {
+  color: #fbbf24;
+}
+
+/* Rating label */
+.feedback-rating-label {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-bottom: 14px;
+  min-height: 1.2em;
+  transition: color 0.15s;
+}
+
+.feedback-rating-label--active {
+  color: #6b7280;
+}
+
+/* Textarea */
+.feedback-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: vertical;
+  direction: rtl;
+  text-align: right;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  color: #374151;
+  background: #fafafa;
+  box-sizing: border-box;
+}
+
+.feedback-textarea::placeholder {
+  color: #9ca3af;
+}
+
+.feedback-textarea:focus {
+  outline: none;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  background: #fff;
+}
+
+/* Footer */
+.feedback-popup-footer {
+  padding: 12px 24px 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.feedback-btn {
+  padding: 10px 28px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-family: inherit;
+}
+
+.feedback-btn--primary {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+}
+
+.feedback-btn--primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+}
+
+.feedback-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.feedback-btn--secondary {
+  background: transparent;
+  color: #6b7280;
+  border: 1.5px solid #e5e7eb;
+}
+
+.feedback-btn--secondary:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+/* Success state */
+.feedback-success {
+  padding: 32px 24px;
+  text-align: center;
+  animation: feedback-success-in 0.3s ease;
+}
+
+@keyframes feedback-success-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.feedback-success-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.feedback-success h3 {
+  margin: 0 0 8px;
+  color: #1f2937;
+  font-size: 1.15rem;
+}
+
+.feedback-success p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .feedback-popup {
+    max-width: 100%;
+    margin: 0 12px;
+  }
+
+  .feedback-popup-header,
+  .feedback-popup-body,
+  .feedback-popup-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .feedback-star {
+    font-size: 1.7rem;
+  }
+}

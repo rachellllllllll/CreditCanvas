@@ -62,25 +62,25 @@ function colLetterToNum(col: string): number {
  * ממיר תאריך סריאלי של Excel למחרוזת תאריך
  * Excel מתחיל מ-1900-01-01 (סריאלי 1)
  */
-function excelSerialToDate(serial: number): string {
-  const utc_days = Math.floor(serial - 25569);
-  const utc_value = utc_days * 86400;
-  const date_info = new Date(utc_value * 1000);
+// function excelSerialToDate(serial: number): string {
+//   const utc_days = Math.floor(serial - 25569);
+//   const utc_value = utc_days * 86400;
+//   const date_info = new Date(utc_value * 1000);
 
-  const day = date_info.getUTCDate().toString().padStart(2, '0');
-  const month = (date_info.getUTCMonth() + 1).toString().padStart(2, '0');
-  const year = date_info.getUTCFullYear();
+//   const day = date_info.getUTCDate().toString().padStart(2, '0');
+//   const month = (date_info.getUTCMonth() + 1).toString().padStart(2, '0');
+//   const year = date_info.getUTCFullYear();
 
-  return `${day}/${month}/${year}`;
-}
+//   return `${day}/${month}/${year}`;
+// }
 
 /**
  * בודק אם מספר הוא תאריך סריאלי של Excel
  */
-function isExcelDate(num: number): boolean {
-  // תאריכים ב-Excel הם בין 1 (1900-01-01) ל-~60000 (שנת 2064)
-  return num > 1 && num < 60000;
-}
+// function isExcelDate(num: number): boolean {
+//   // תאריכים ב-Excel הם בין 1 (1900-01-01) ל-~60000 (שנת 2064)
+//   return num > 1 && num < 60000;
+// }
 
 /**
  * קורא את shared strings (מיפוי טקסטים משותפים)
@@ -134,7 +134,7 @@ async function parseSheet(
 
   for (let i = 0; i < rowElements.length; i++) {
     const rowElement = rowElements[i];
-    const rowIndex = parseInt(rowElement.getAttribute('r') || '0', 10);
+    // const rowIndex = parseInt(rowElement.getAttribute('r') || '0', 10);
     const row: Row = {};
 
     const cells = getElementsByTag(rowElement, 'c');
@@ -142,7 +142,7 @@ async function parseSheet(
       const cell = cells[j];
       const cellRef = cell.getAttribute('r') || ''; // e.g., "A1", "B2"
       const cellType = cell.getAttribute('t'); // s=string, n=number, b=boolean
-      const cellStyle = cell.getAttribute('s'); // style index (for dates)
+      // const cellStyle = cell.getAttribute('s'); // style index (for dates)
 
       // חילוץ הערך
       const vElement = getElementsByTag(cell, 'v')[0];
@@ -297,8 +297,8 @@ async function parseWorkbookSheetNames(zip: JSZip): Promise<{ name: string; path
  * ממיר Row[] (מבנה פנימי) למערך דו-ממדי פשוט
  * שומר על תאים ריקים בתוך שורה (לא דוחף עמודות קדימה)
  */
-function rowsToArray(rows: Row[]): any[][] {
-  const result: any[][] = [];
+function rowsToArray(rows: Row[]): (string | number)[][] {
+  const result: (string | number)[][] = [];
 
   // מצא את העמודה המקסימום בכל השורות
   let maxColNum = -1;
@@ -319,7 +319,7 @@ function rowsToArray(rows: Row[]): any[][] {
 
   // בנה את המערך עם שמירה על מיקום עמודות
   for (const row of rows) {
-    const arr: any[] = [];
+    const arr: (string | number)[] = [];
 
     // עבור כל עמודה מ-A עד המקסימום
     for (let colNum = 0; colNum <= maxColNum; colNum++) {
@@ -366,14 +366,14 @@ export async function readXLSX(arrayBuffer: ArrayBuffer): Promise<Workbook> {
 /**
  * פונקציית עזר: ממיר גיליון למערך דו-ממדי (תואם ל-XLSX.utils.sheet_to_json)
  */
-export function sheetToArray(sheet: Sheet): any[][] {
+export function sheetToArray(sheet: Sheet): (string | number)[][] {
   return rowsToArray(sheet.rows);
 }
 
 /**
  * פונקציית עזר: מחזיר את הגיליון הראשון כמערך
  */
-export function getFirstSheetAsArray(workbook: Workbook): any[][] {
+export function getFirstSheetAsArray(workbook: Workbook): (string | number)[][] {
   if (workbook.sheets.length === 0) {
     return [];
   }

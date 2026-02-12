@@ -118,12 +118,12 @@ const MainView: React.FC<MainViewProps> = ({
   }, [onTrackFeature]);
   
   // פונקציה לפתיחת עריכת כלל
-  const handleEditRule = useCallback((rule: CategoryRule) => {
-    setRuleToEdit(rule);
-    setGlobalSearchInitialText('');
-    setIsGlobalSearchOpen(true);
-    onTrackFeature?.('edit_rule_from_mapping');
-  }, [onTrackFeature]);
+  // const handleEditRule = useCallback((rule: CategoryRule) => {
+  //   setRuleToEdit(rule);
+  //   setGlobalSearchInitialText('');
+  //   setIsGlobalSearchOpen(true);
+  //   onTrackFeature?.('edit_rule_from_mapping');
+  // }, [onTrackFeature]);
   
   // אפקט לפתיחת עריכת כלל מחוץ ל-MainView (למשל מ-SettingsMenu)
   useEffect(() => {
