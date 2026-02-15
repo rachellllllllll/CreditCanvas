@@ -52,7 +52,8 @@ export default function AdminDashboardV2() {
     error: dataError,
     dateRange,
     setDateRange,
-    refresh
+    refresh,
+    loadUserFullHistory
   } = useAnalyticsData();
 
   // Auth state management
@@ -296,7 +297,7 @@ export default function AdminDashboardV2() {
           </div>
 
           {/* Users Table with Timeline */}
-          <UsersTable events={events} />
+          <UsersTable events={events} loadUserFullHistory={loadUserFullHistory} />
 
           {/* Feedback Table */}
           <FeedbackTable feedbackEvents={feedbackEntries} />

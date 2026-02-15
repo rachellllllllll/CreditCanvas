@@ -333,10 +333,10 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   
   // State לפתרון קונפליקטים (מוגדר כאן כדי שיהיה זמין ל-useEffect)
   const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, string>>({});
-
+  
   // שמור את הקטגוריות המקוריות משמורה בנפרד - בשביל הבדיקה אם קטגוריה כבר קיימת בקובץ JSON
   const originalCategoriesRef = React.useRef<Set<string>>(new Set(categoriesList.map(c => c.name)));
-  
+
   // חשב את רשימת השמות בפועל (אחרי ביטולי איחודים והסרת קטגוריות שנפתרו בקונפליקטים)
   const activeNames = React.useMemo(() => {
     const result = [...filteredNames];
@@ -347,28 +347,33 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       }
     }
     
-    // הסר קטגוריות חדשות שרוב העסקאות שלהן נפתרו לקטגוריות אחרות בשלב הקונפליקטים
-    // למשל: "ביגוד" → כל הסוחרים נבחרו ל"אופנה" → אין צורך להגדיר "ביגוד" בנפרד
+    // הסר קטגוריות חדשות שהמשתמש בחר נגדן בקונפליקטים
+    // למשל: "ביגוד" מעולם לא נבחרה כיעד, וסוחרים שלה הועברו ל"אופנה" → מיותרת
     if (Object.keys(resolvedConflicts).length > 0) {
+      // אילו קטגוריות נבחרו כיעד בקונפליקטים?
+      const chosenTargets = new Set(Object.values(resolvedConflicts));
+      
       return result.filter(name => {
-        // קטגוריות שכבר קיימות בקובץ לא מסוננות
+        // קטגוריות שכבר קיימות בקובץ — לא מסוננות
         if (originalCategoriesRef.current.has(name)) return true;
         
+        // אם הקטגוריה נבחרה כיעד בלפחות קונפליקט אחד — המשתמש רוצה אותה
+        if (chosenTargets.has(name)) return true;
+        
+        // בדוק אם יש סוחרים של הקטגוריה שהועברו לקטגוריות אחרות
         const txs = allDetails.filter(d => d.category === name);
         if (txs.length === 0) return true;
         
-        // ספור עסקאות ששייכות לסוחרים שנפתרו לקטגוריה אחרת
-        let resolvedToOtherCount = 0;
-        for (const tx of txs) {
+        const hasResolvedAwayMerchants = txs.some(tx => {
           const merchant = extractMerchantName(tx.description);
           const resolvedTo = resolvedConflicts[merchant];
-          if (resolvedTo && resolvedTo !== name) {
-            resolvedToOtherCount++;
-          }
-        }
+          return resolvedTo && resolvedTo !== name;
+        });
         
-        // אם רוב העסקאות (>=50%) נפתרו לקטגוריות אחרות → הקטגוריה מיותרת
-        return resolvedToOtherCount / txs.length < 0.5;
+        // אם המשתמש אף פעם לא בחר קטגוריה זו, וסוחרים שלה הועברו → מיותרת
+        if (hasResolvedAwayMerchants) return false;
+        
+        return true;
       });
     }
     
@@ -379,7 +384,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   const [localCategories, setLocalCategories] = useState<CategoryDef[]>([...categoriesList]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, CategoryDef | null>>(() => Object.fromEntries(names.map(n => [n, null])));
-  
+
   // חשב ברירות מחדל לכל קטגוריה חדשה (פעם אחת בלבד)
   const defaultIconsAndColors = React.useMemo(() => {
     const result: Record<string, { icon: string; color: string; recommendedIcons?: string[] }> = {};
@@ -467,22 +472,36 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
   const handleConfirm = async () => {
     const mapping: Record<string, CategoryDef> = {};
+    const activeSet = new Set(activeNames);
+    
     names.forEach(n => {
+      // דלג על קטגוריות שהוסרו (נפתרו בקונפליקטים לקטגוריה אחרת)
+      if (!activeSet.has(n) && !originalCategoriesRef.current.has(n)) return;
+      
       const chosen = selectedCats[n] || drafts[n];
       if (chosen) {
         mapping[n] = chosen;
       } else {
-        const defaults = defaultIconsAndColors[n];
-        mapping[n] = { name: n, icon: defaults?.icon, color: defaults?.color };
+        // בדוק אם הקטגוריה אוחדה אוטומטית (ולא בוטלה) — השתמש ביעד האיחוד במקום identity
+        const activeMerge = autoMergedGroups.find(m => !cancelledMerges.has(m.target) && m.sources.includes(n));
+        if (activeMerge) {
+          const targetDef = localCategories.find(c => c.name === activeMerge.target)
+            || categoriesList.find(c => c.name === activeMerge.target)
+            || activeMerge.targetDef;
+          mapping[n] = targetDef;
+        } else {
+          const defaults = defaultIconsAndColors[n];
+          mapping[n] = { name: n, icon: defaults?.icon, color: defaults?.color };
+        }
       }
     });
     
     // עבור קטגוריות שהוסרו כי נפתרו בקונפליקטים - מפה אותן לקטגוריה הדומיננטית (כ-alias)
     if (Object.keys(resolvedConflicts).length > 0) {
-      const activeSet = new Set(activeNames);
       for (const name of names) {
         if (activeSet.has(name)) continue; // עדיין פעילה בטבלה — לא לגעת
         if (originalCategoriesRef.current.has(name)) continue; // כבר קיימת בקובץ
+        if (mapping[name]) continue; // כבר טופלה
         
         // חפש את הקטגוריה שקיבלה הכי הרבה סוחרים מהקטגוריה הזו
         const txs = allDetails.filter(d => d.category === name);
@@ -508,36 +527,79 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     
     // שלח את הקונפליקטים שנפתרו (בית עסק -> קטגוריה שנבחרה)
     // חשוב: ממתינים לסיום השמירה לפני סגירת הדיאלוג כדי שהכללים יישמרו לדיסק
+    // סנן סוחרים שה-alias כבר מטפל בהם — אין צורך בכלל סוחר כפול
     if (onConflictsResolved && Object.keys(resolvedConflicts).length > 0) {
-      await onConflictsResolved(resolvedConflicts);
+      // בנה מפת alias: קטגוריית מקור → קטגוריית יעד
+      const aliasResolution: Record<string, string> = {};
+      for (const [excelName, catDef] of Object.entries(mapping)) {
+        if (excelName !== catDef.name) {
+          aliasResolution[excelName] = catDef.name;
+        }
+      }
+      
+      // סנן: שמור רק סוחרים שה-alias לא מכסה
+      // לכל סוחר, בדוק את כל הקטגוריות שהוא מופיע בהן
+      const filteredConflicts: Record<string, string> = {};
+      for (const [merchant, target] of Object.entries(resolvedConflicts)) {
+        // מצא את כל הקטגוריות של הסוחר הזה
+        const merchantCategories = new Set<string>();
+        for (const d of allDetails) {
+          if (d.category && extractMerchantName(d.description) === merchant) {
+            merchantCategories.add(d.category);
+          }
+        }
+        
+        // בדוק אם כל הקטגוריות של הסוחר מגיעות ליעד דרך alias או שהן כבר היעד
+        let aliasCoversAll = true;
+        for (const cat of merchantCategories) {
+          const resolved = aliasResolution[cat] || cat; // החל alias אם קיים
+          if (resolved !== target) {
+            aliasCoversAll = false;
+            break;
+          }
+        }
+        
+        if (!aliasCoversAll) {
+          filteredConflicts[merchant] = target; // ה-alias לא מכסה — צריך כלל סוחר
+        }
+      }
+      
+      if (Object.keys(filteredConflicts).length > 0) {
+        await onConflictsResolved(filteredConflicts);
+      }
     }
     
     onConfirm(mapping);
   };
 
   // נטרל כפתור אישור אם יש טיוטות פתוחות או קטגוריה ללא ברירת מחדל שלא אושרה
+  // בודק רק activeNames — קטגוריות שסוננו (נפתרו בקונפליקטים) לא חוסמות
   const disableConfirm = React.useMemo(() => {
     // בדוק רק טיוטות שלא נבחרה להן קטגוריה סופית
-    const hasPendingDrafts = names.some(n => {
+    const hasPendingDrafts = activeNames.some(n => {
       // אם יש קטגוריה נבחרת, הטיוטה לא רלוונטית
       if (selectedCats[n]) return false;
       return !!drafts[n];
     });
-    const hasBlockingNoDefaults = names.some(n => {
+    const hasBlockingNoDefaults = activeNames.some(n => {
+      // קטגוריות שכבר קיימות בקובץ לא צריכות דיפולט
+      if (originalCategoriesRef.current.has(n)) return false;
       const d = defaultIconsAndColors[n];
       const hasDefaults = !!(d?.icon && d?.color);
       return !hasDefaults && !selectedCats[n];
     });
     return hasPendingDrafts || hasBlockingNoDefaults;
-  }, [names, drafts, defaultIconsAndColors, selectedCats]);
+  }, [activeNames, drafts, defaultIconsAndColors, selectedCats]);
 
   // מונה חסימות: כמה פריטים דורשים אישור (טיוטות + ללא דיפולט)
   const blockingInfo = React.useMemo(() => {
     let draftCount = 0;
     let noDefaultCount = 0;
-    names.forEach(n => {
+    activeNames.forEach(n => {
       // אם יש קטגוריה נבחרת, לא צריך לספור כחוסם
       if (selectedCats[n]) return;
+      // קטגוריות שכבר קיימות בקובץ לא צריכות דיפולט
+      if (originalCategoriesRef.current.has(n)) return;
       
       if (drafts[n]) draftCount += 1;
       const d = defaultIconsAndColors[n];
@@ -545,7 +607,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       if (!hasDefaults) noDefaultCount += 1;
     });
     return { draftCount, noDefaultCount, total: draftCount + noDefaultCount };
-  }, [names, drafts, defaultIconsAndColors, selectedCats]);
+  }, [activeNames, drafts, defaultIconsAndColors, selectedCats]);
 
   // אינדקס עסקאות לפי שם קטגוריה (יעיל יותר מ-filter פר רנדר)
   const detailsByName = React.useMemo(() => {
@@ -759,11 +821,17 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       const categories = Array.from(catMap.keys());
       
       // בדוק אם כל הקטגוריות שייכות לאותה קבוצה (יתאחדו ממילא)
+      // אבל רק אם אין קטגוריה שאוחדה אוטומטית - אחרת המשתמש צריך לראות את הקונפליקט
       const groupKeys = categories.map(c => getGroupKey(c));
       const uniqueGroups = new Set(groupKeys.filter(k => k !== null));
-      // אם כולן באותה קבוצה (או שאין להן קבוצה אבל יש קבוצה אחת דומיננטית), זה לא קונפליקט אמיתי
       if (uniqueGroups.size === 1 && groupKeys.filter(k => k !== null).length === categories.length) {
-        continue; // דלג - הקטגוריות יתאחדו ממילא
+        // בדוק אם אחת הקטגוריות אוחדה אוטומטית - אם כן, הצג קונפליקט
+        const hasAutoMergedCategory = categories.some(c => 
+          autoMergedGroups.some(m => !cancelledMerges.has(m.target) && m.sources.includes(c))
+        );
+        if (!hasAutoMergedCategory) {
+          continue; // דלג - הקטגוריות יתאחדו ממילא ואין עניין
+        }
       }
       
       const transactionCounts: Record<string, number> = {};
@@ -787,7 +855,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     // מיין לפי סה"כ עסקאות
     conflicts.sort((a, b) => b.totalTransactions - a.totalTransactions);
     return conflicts;
-  }, [allDetails, categoryRules]);
+  }, [allDetails, categoryRules, autoMergedGroups, cancelledMerges]);
 
   // סטטיסטיקות לסיכום
   const summaryStats = React.useMemo(() => {
@@ -820,8 +888,10 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   // מסך סיכום בכניסה ראשונה
   // אם אין קונפליקטים ואין קטגוריות חדשות להגדרה — אין מה להציג, סגור אוטומטית
   const hasNothingToShow = summaryStats.conflictsCount === 0 && summaryStats.newCategories === 0 && activeNames.length === 0;
+  const autoConfirmedRef = React.useRef(false);
   React.useEffect(() => {
-    if (hasNothingToShow) {
+    if (hasNothingToShow && !autoConfirmedRef.current) {
+      autoConfirmedRef.current = true;
       handleConfirm();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

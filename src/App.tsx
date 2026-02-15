@@ -1416,6 +1416,16 @@ const App: React.FC = () => {
         if (!rule.active) continue;
         const c = rule.conditions;
         if (c.descriptionEquals && tx.description === c.descriptionEquals) return true;
+        if (c.descriptionContains) {
+          const cleaned = tx.description
+            .replace(/\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?/g, '')
+            .replace(/\d{4,}/g, '')
+            .replace(/[*#\-_]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+          if (cleaned.includes(c.descriptionContains.toLowerCase())) return true;
+        }
         if (c.descriptionRegex) {
           try {
             const regex = new RegExp(c.descriptionRegex, 'i');
@@ -1460,12 +1470,16 @@ const App: React.FC = () => {
     }
   });
 
+  const autoMergeRunRef = React.useRef(false);
   React.useEffect(() => {
     // חכה שהקטגוריות יטענו לפחות פעם אחת
     if (!analysis || !categoriesLoadedOnce) return;
     
     // אם הדיאלוג כבר הוצג בסשן הזה - לא מציגים שוב (למנוע הצגה אחרי מחיקת קטגוריה)
     if (initialPromptShown) return;
+    
+    // אם auto-merge כבר רץ — לא לרוץ שוב (כדי למנוע לולאה מ-setAnalysis/setCategoryAliases)
+    if (autoMergeRunRef.current) return;
     
     // 🆕 חכה שה-Tour יסתיים/ידולג לפני הצגת דיאלוג קטגוריות/קונפליקטים
     // אם יש Tour בהמתנה (לפני או במהלך התצוגה) - לא להציג דיאלוג נוסף במקביל
@@ -1480,7 +1494,7 @@ const App: React.FC = () => {
     ) as string[];
     
     // בדוק גם קונפליקטים בין בתי עסק (גם אם אין קטגוריות חדשות)
-    const conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
+    let conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
     
     // אם אין קטגוריות חדשות ואין קונפליקטים - אין צורך בדיאלוג
     if (missingCats.length === 0 && conflictCount === 0) return;
@@ -1503,7 +1517,103 @@ const App: React.FC = () => {
       }
     }
     
-    // אשר אוטומטית קטגוריות עם דיפולט
+    // --- שלב א: איחוד אוטומטי של קטגוריות מאותה קבוצה (תמיד, גם כשיש קונפליקטים) ---
+    const getGroupKeyForCat = (catName: string): string | null => {
+      const lower = catName.toLowerCase();
+      let chosen: string | null = null;
+      for (const key of Object.keys(KNOWN_CATEGORY_DEFAULTS)) {
+        if (lower.includes(key)) {
+          if (!chosen || key.length > chosen.length) chosen = key;
+        }
+      }
+      return chosen;
+    };
+    
+    const autoMergedAliases: Record<string, string> = {}; // חדשה → קיימת
+    
+    // מצא קטגוריות חדשות (עם דיפולט) שיש להן קיימת באותה קבוצה → alias
+    for (const cat of catsWithDefaults) {
+      const groupKey = getGroupKeyForCat(cat);
+      if (!groupKey) continue;
+      // חפש קטגוריה קיימת באותה קבוצה
+      const existingInGroup = categoriesList.find(existing => {
+        const existingKey = getGroupKeyForCat(existing.name);
+        return existingKey === groupKey && existing.name !== cat;
+      });
+      if (existingInGroup) {
+        autoMergedAliases[cat] = existingInGroup.name;
+      }
+    }
+    
+    // גם בין הקטגוריות החדשות בלבד — אם יש 2+ באותה קבוצה, אחד אותן
+    const remainingNew = catsWithDefaults.filter(c => !autoMergedAliases[c]);
+    const groupedNew = new Map<string, string[]>();
+    for (const cat of remainingNew) {
+      const groupKey = getGroupKeyForCat(cat);
+      if (!groupKey) continue;
+      if (!groupedNew.has(groupKey)) groupedNew.set(groupKey, []);
+      groupedNew.get(groupKey)!.push(cat);
+    }
+    for (const [, members] of groupedNew.entries()) {
+      if (members.length < 2) continue;
+      const target = members.reduce((a, b) => {
+        const countA = analysis.details.filter(d => d.category === a).length;
+        const countB = analysis.details.filter(d => d.category === b).length;
+        return countA >= countB ? a : b;
+      });
+      for (const m of members) {
+        if (m !== target) {
+          autoMergedAliases[m] = target;
+        }
+      }
+    }
+    
+    // שמור aliases ועדכן עסקאות
+    if (Object.keys(autoMergedAliases).length > 0) {
+      autoMergeRunRef.current = true; // מנע הרצה חוזרת כש-setAnalysis/setCategoryAliases מעדכנים
+      const newAliases = { ...categoryAliases, ...autoMergedAliases };
+      setCategoryAliases(newAliases);
+      if (dirHandle) {
+        saveAliasesToDir(dirHandle, newAliases, 'category');
+      }
+      setAnalysis(a => a ? ({
+        ...a,
+        details: a.details.map(d => {
+          if (d.category && autoMergedAliases[d.category]) {
+            return { ...d, category: autoMergedAliases[d.category] };
+          }
+          return d;
+        })
+      }) : a);
+      console.log(`🔄 אוחדו אוטומטית ${Object.keys(autoMergedAliases).length} קטגוריות:`,
+        Object.entries(autoMergedAliases).map(([from, to]) => `${from} → ${to}`).join(', '));
+      
+      // סנן קטגוריות שאוחדו מ-missingCats
+      const mergedAwayNames = new Set(Object.keys(autoMergedAliases));
+      const filteredMissing = missingCats.filter(c => !mergedAwayNames.has(c));
+      missingCats.length = 0;
+      missingCats.push(...filteredMissing);
+      
+      // הסר מ-catsWithDefaults את אלו שאוחדו
+      const newCatsWithDefaults = catsWithDefaults.filter(c => !mergedAwayNames.has(c));
+      catsWithDefaults.length = 0;
+      catsWithDefaults.push(...newCatsWithDefaults);
+      
+      // חשב מחדש קונפליקטים אחרי האיחוד
+      const mergedDetails = analysis.details.map(d => {
+        if (d.category && autoMergedAliases[d.category]) {
+          return { ...d, category: autoMergedAliases[d.category] };
+        }
+        return d;
+      });
+      conflictCount = detectMerchantConflicts(mergedDetails, categoryRules);
+    }
+    
+    // אם אחרי האיחוד אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
+    if (missingCats.length === 0 && conflictCount === 0) return;
+    
+    // --- שלב ב: אישור אוטומטי של קטגוריות עם דיפולט (תמיד, לא תלוי בקונפליקטים) ---
+    // קונפליקטים הם בין בתי עסק, לא בין קיומן של קטגוריות — לכן אפשר לאשר קטגוריות במקביל
     if (catsWithDefaults.length > 0) {
       const autoApprovedMapping: Record<string, CategoryDef> = {};
       for (const cat of catsWithDefaults) {
@@ -1515,7 +1625,6 @@ const App: React.FC = () => {
         };
       }
       
-      // הוסף לרשימת הקטגוריות - רק אם באמת יש מה להוסיף
       const newCatsToAdd = Object.values(autoApprovedMapping).filter(
         catDef => !categoriesList.find(c => c.name === catDef.name)
       );
@@ -1528,18 +1637,39 @@ const App: React.FC = () => {
         }
         console.log(`✅ נוספו אוטומטית ${newCatsToAdd.length} קטגוריות:`, newCatsToAdd.map(c => c.name).join(', '));
       }
+      
+      // סנן קטגוריות שאושרו מ-missingCats — הן כבר לא "חסרות"
+      const approvedNames = new Set(catsWithDefaults);
+      const stillMissing = missingCats.filter(c => !approvedNames.has(c));
+      missingCats.length = 0;
+      missingCats.push(...stillMissing);
     }
     
-    // הצג דיאלוג אם יש קטגוריות חדשות (עם או בלי דיפולט) או קונפליקטים
-    // העבר את כל הקטגוריות מהאקסל - הדיאלוג יציג רק את הרלוונטיות
-    const shouldShowDialog = catsWithoutDefaults.length > 0 || conflictCount > 0;
+    // אחרי אישור אוטומטי — אם אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
+    if (missingCats.length === 0 && conflictCount === 0) return;
+    
+    console.log('📋 סטטוס דיאלוג:', {
+      missingCats: missingCats.length,
+      catsWithoutDefaults: catsWithoutDefaults.length,
+      conflictCount,
+      catsWithDefaults: catsWithDefaults.length,
+    });
+    
+    // הצג דיאלוג אם יש קטגוריות חדשות (ללא דיפולט) או קונפליקטים
+    // קטגוריות עם דיפולט כבר אושרו אוטומטית למעלה
+    const hasNewCats = missingCats.length > 0; // רק קטגוריות שלא אושרו אוטומטית (ללא דיפולט)
+    const shouldShowDialog = hasNewCats || conflictCount > 0;
     
     if (shouldShowDialog) {
       // סמן שהדיאלוג הוצג בסשן הזה
       setInitialPromptShown(true);
       
-      // אם יש קטגוריות חדשות - העבר אותן, אחרת העבר את כל הקטגוריות מהאקסל (לזיהוי קונפליקטים)
-      const namesToPass = catsWithoutDefaults.length > 0 ? catsWithoutDefaults : excelCats as string[];
+      // missingCats בשלב הזה מכילות רק קטגוריות ללא דיפולט (אלו עם דיפולט כבר אושרו)
+      // אם אין קטגוריות חדשות אבל יש קונפליקטים — העבר את כל הקטגוריות מהאקסל (לזיהוי קונפליקטים)
+      // סנן קטגוריות שאוחדו אוטומטית — הן כבר לא רלוונטיות
+      // categoryAliases עדיין לא מעודכן (state ישתנה ברנדר הבא), לכן בדוק גם autoMergedAliases
+      const filteredExcelCats = excelCats.filter(c => c && !categoryAliases[c] && !autoMergedAliases[c]) as string[];
+      const namesToPass = missingCats.length > 0 ? missingCats : filteredExcelCats;
       setNewCategoriesPrompt({
         names: namesToPass,
         // טיפול בקונפליקטים שנפתרו - יצירת כללי קטגוריה שישמרו את הבחירות
@@ -1553,15 +1683,12 @@ const App: React.FC = () => {
           let rulesChanged = false;
           
           for (const [merchantName, targetCategory] of Object.entries(resolved)) {
-            // פצל לפי רווחים, בריחה של כל מילה בנפרד, וחיבור עם תבנית גמישה
-            const words = merchantName.split(/\s+/).filter(w => w.length > 0);
-            const escapedWords = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-            // תבנית שמתאימה לרווח, מקף, קו תחתון, כוכבית, סולמית בין מילים
-            const flexiblePattern = escapedWords.join('[\\s\\-_*#]+');
+            // שמור את שם הסוחר המנוקה כ-descriptionContains (קריא ופשוט)
+            const cleanName = merchantName.trim().toLowerCase();
             
-            const exists = rules.some(r => r.conditions.descriptionRegex === flexiblePattern && r.category === targetCategory);
+            const exists = rules.some(r => r.conditions.descriptionContains === cleanName && r.category === targetCategory);
             if (!exists) {
-              rules.push(createRule({ category: targetCategory, conditions: { descriptionRegex: flexiblePattern } }));
+              rules.push(createRule({ category: targetCategory, conditions: { descriptionContains: cleanName } }));
               rulesChanged = true;
             }
           }

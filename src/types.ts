@@ -62,6 +62,7 @@ export interface CategoryRule {
   conditions: {
     transactionId?: string;     // התאמה לעסקה בודדת לפי מזהה
     descriptionEquals?: string; // התאמה מדויקת לתיאור
+    descriptionContains?: string; // התאמה לפי מילות מפתח (מנוקות מסימנים) בתיאור
     descriptionRegex?: string;  // חלופה: התאמה לפי ביטוי רגולרי (i)
     minAmount?: number;         // סכום מינימלי להחלה
     maxAmount?: number;         // סכום מקסימלי (אופציונלי)

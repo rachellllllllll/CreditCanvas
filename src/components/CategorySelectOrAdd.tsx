@@ -48,6 +48,9 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
   const [color, setColor] = useState(defaultColor || colorPalette[Math.floor(Math.random() * colorPalette.length)]);
   const initialIconRef = useRef<string>(defaultIcon || ICONS[0]);
   const initialColorRef = useRef<string>(defaultColor || color);
+  // ref יציב ל-onDraftChange כדי למנוע לולאה אינסופית כשההורה יוצר פונקציה חדשה בכל רנדר
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [editingMode, setEditingMode] = useState(false);
@@ -104,13 +107,14 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
     onChange(name);
     setShowDropdown(false);
     setEditingMode(false);
-    if (onDraftChange) onDraftChange(null);
+    if (onDraftChangeRef.current) onDraftChangeRef.current(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   // דווח טיוטה להורה כאשר יש שינוי בשם/אייקון/צבע ולא אושרה הוספה
   useEffect(() => {
-    if (!onDraftChange) return;
+    const cb = onDraftChangeRef.current;
+    if (!cb) return;
     const t = (input || '').trim();
     const baselineName = (value || '').trim();
     const isNameEdited = t !== baselineName;
@@ -119,19 +123,19 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
     const touched = editingMode || isNameEdited || isIconEdited || isColorEdited;
     if (touched) {
       const draftName = t || baselineName;
-      if (draftName) onDraftChange({ name: draftName, icon: icon || defaultIcon || '', color: color || defaultColor || '' });
-      else onDraftChange(null);
+      if (draftName) cb({ name: draftName, icon: icon || defaultIcon || '', color: color || defaultColor || '' });
+      else cb(null);
     } else {
-      onDraftChange(null);
+      cb(null);
     }
-  }, [input, icon, color, editingMode, value, defaultIcon, defaultColor, onDraftChange]);
+  }, [input, icon, color, editingMode, value, defaultIcon, defaultColor]);
 
   // עדכן בסיס להשוואה כשמתחלפים ערכי ברירת המחדל (לדוגמה שורה אחרת)
   useEffect(() => {
     initialIconRef.current = defaultIcon || icon;
     initialColorRef.current = defaultColor || color;
     // איפוס טיוטה כשהקונטקסט מתחלף
-    if (onDraftChange) onDraftChange(null);
+    if (onDraftChangeRef.current) onDraftChangeRef.current(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultIcon, defaultColor]);
 

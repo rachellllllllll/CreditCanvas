@@ -27,6 +27,7 @@ const getRuleType = (rule: CategoryRule): RuleType => {
   // כללים עם תנאים מתקדמים (dates)
   const hasAdvanced = rule.conditions.dateFrom || rule.conditions.dateTo;
   if (hasAdvanced) return 'advanced';
+  if (rule.conditions.descriptionContains) return 'business';
   if (rule.conditions.descriptionRegex) return 'regex';
   // כללים עם מגבלות סכום - לא משנה אם יש גם תיאור
   if (rule.conditions.minAmount !== undefined || rule.conditions.maxAmount !== undefined) {
@@ -77,6 +78,8 @@ const formatRuleDescription = (rule: CategoryRule): { text: string; subtext?: st
   let text = '';
   if (c.descriptionEquals) {
     text = c.descriptionEquals;
+  } else if (c.descriptionContains) {
+    text = c.descriptionContains;
   } else if (c.descriptionRegex) {
     text = `"${c.descriptionRegex}"`;
   } else if (badges.length > 0) {
@@ -176,7 +179,7 @@ const DescriptionCategoriesMappingDialog: React.FC<DescriptionCategoriesMappingD
   
   // Get rules to display based on filter type and showInactive
   let displayRules: CategoryRule[];
-  const baseRules = showInactive ? inactiveRules : activeRules;
+  const baseRules = showInactive ? rules : activeRules;
   if (filterType === 'all') {
     displayRules = filterBySearch(baseRules);
   } else {
@@ -186,9 +189,9 @@ const DescriptionCategoriesMappingDialog: React.FC<DescriptionCategoriesMappingD
   
   // ספירה לפי סוג ל-dropdown
   const getTypeCount = (type: RuleType | 'all'): number => {
-    const rules = showInactive ? inactiveRules : activeRules;
-    if (type === 'all') return rules.length;
-    return rules.filter(r => getRuleType(r) === type).length;
+    const countBase = showInactive ? rules : activeRules;
+    if (type === 'all') return countBase.length;
+    return countBase.filter(r => getRuleType(r) === type).length;
   };
   
   // פונקציה להחלפת מיון

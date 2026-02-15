@@ -3,24 +3,27 @@
  * טבלת משתמשים — כל שורה = משתמש ייחודי, עם Timeline נפתח
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { AnalyticsEvent } from './types';
 import { aggregateUsers, deviceIcon, formatShortDuration } from './userDataUtils';
 import UserTimeline from './UserTimeline';
 
 interface UsersTableProps {
   events: AnalyticsEvent[];
+  loadUserFullHistory?: (visitorId: string) => Promise<AnalyticsEvent[]>;
 }
 
 type SortKey = 'visits' | 'files' | 'lastSeen' | 'duration' | 'errors';
 type FilterKey = 'all' | 'withFeedback' | 'withErrors' | 'new' | 'powerUsers';
 
-export default function UsersTable({ events }: UsersTableProps) {
+export default function UsersTable({ events, loadUserFullHistory }: UsersTableProps) {
   const [sortBy, setSortBy] = useState<SortKey>('lastSeen');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterBy, setFilterBy] = useState<FilterKey>('all');
   const [searchText, setSearchText] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [fullHistoryUser, setFullHistoryUser] = useState<{ visitorId: string; events: AnalyticsEvent[] } | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [page, setPage] = useState(0);
   const pageSize = 20;
 
@@ -121,7 +124,40 @@ export default function UsersTable({ events }: UsersTableProps) {
     link.click();
   };
 
-  const selectedUser = selectedUserId ? users.find(u => u.visitorId === selectedUserId) : null;
+  // כשנבחר משתמש — טען את ההיסטוריה המלאה שלו (ללא הגבלת תאריך)
+  useEffect(() => {
+    if (!selectedUserId || !loadUserFullHistory) {
+      setFullHistoryUser(null);
+      return;
+    }
+    // אם כבר טעון עבור אותו משתמש, דלג
+    if (fullHistoryUser?.visitorId === selectedUserId) return;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    loadUserFullHistory(selectedUserId).then(fullEvents => {
+      if (cancelled) return;
+      if (fullEvents.length > 0) {
+        setFullHistoryUser({ visitorId: selectedUserId, events: fullEvents });
+      } else {
+        // fallback: השתמש באירועים המסוננים
+        setFullHistoryUser(null);
+      }
+      setHistoryLoading(false);
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUserId, loadUserFullHistory]);
+
+  // בנה user summary מההיסטוריה המלאה אם קיימת, אחרת מהאירועים המסוננים
+  const selectedUser = useMemo(() => {
+    if (!selectedUserId) return null;
+    if (fullHistoryUser?.visitorId === selectedUserId) {
+      const fullUsers = aggregateUsers(fullHistoryUser.events);
+      return fullUsers.find(u => u.visitorId === selectedUserId) || null;
+    }
+    return users.find(u => u.visitorId === selectedUserId) || null;
+  }, [selectedUserId, fullHistoryUser, users]);
 
   if (users.length === 0) {
     return (
@@ -252,13 +288,20 @@ export default function UsersTable({ events }: UsersTableProps) {
                 </tr>
 
                 {/* Timeline panel - opens below selected row */}
-                {selectedUserId === u.visitorId && selectedUser && (
+                {selectedUserId === u.visitorId && (
                   <tr className="timeline-row">
                     <td colSpan={9} style={{ padding: 0, border: 'none' }}>
-                      <UserTimeline
-                        user={selectedUser}
-                        onClose={() => setSelectedUserId(null)}
-                      />
+                      {historyLoading ? (
+                        <div className="user-timeline-panel" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: 32 }}>
+                          <div className="spinner" style={{ width: 24, height: 24 }} />
+                          <span style={{ color: 'var(--admin-text-secondary)' }}>טוען היסטוריה מלאה...</span>
+                        </div>
+                      ) : selectedUser ? (
+                        <UserTimeline
+                          user={selectedUser}
+                          onClose={() => setSelectedUserId(null)}
+                        />
+                      ) : null}
                     </td>
                   </tr>
                 )}

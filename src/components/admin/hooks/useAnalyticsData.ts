@@ -38,6 +38,7 @@ interface UseAnalyticsDataReturn {
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
   refresh: () => Promise<void>;
+  loadUserFullHistory: (visitorId: string) => Promise<AnalyticsEvent[]>;
 }
 
 export function useAnalyticsData(): UseAnalyticsDataReturn {
@@ -318,6 +319,31 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     loadData();
   }, [loadData]);
 
+  // Load full history for a specific user (ignores date filter)
+  const loadUserFullHistory = useCallback(async (visitorId: string): Promise<AnalyticsEvent[]> => {
+    try {
+      const app = getFirebaseApp();
+      if (!app) return [];
+      const db = getFirestore(app);
+      const eventsRef = collection(db, 'analytics_events');
+      const q = query(
+        eventsRef,
+        where('visitorId', '==', visitorId),
+        orderBy('timestamp', 'desc'),
+        limit(500)
+      );
+      const snapshot = await getDocs(q);
+      const result: AnalyticsEvent[] = [];
+      snapshot.forEach((doc) => {
+        result.push({ id: doc.id, ...doc.data() } as AnalyticsEvent);
+      });
+      return result;
+    } catch (err) {
+      console.error('[Admin] Error loading user history:', err);
+      return [];
+    }
+  }, []);
+
   return {
     events,
     stats,
@@ -332,6 +358,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     error,
     dateRange,
     setDateRange,
-    refresh: loadData
+    refresh: loadData,
+    loadUserFullHistory
   };
 }

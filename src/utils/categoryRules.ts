@@ -1,6 +1,18 @@
 import type { CategoryRule, CreditDetail } from '../types';
 
 const CATEGORY_RULES_FILENAME = 'category-rules.json';
+
+// ניקוי תיאור עסקה מסימנים מיוחדים להשוואה (זהה ל-extractMerchantName)
+function cleanDescription(description: string): string {
+  if (!description) return '';
+  return description
+    .replace(/\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?/g, '') // תאריכים
+    .replace(/\d{4,}/g, '') // מספרים ארוכים
+    .replace(/[*#\-_]+/g, ' ') // סימנים מיוחדים → רווח
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
 const LEGACY_DESC_MAP_FILENAME = 'description-categories.json';
 
 // Load existing rules. If legacy mapping file exists and no rules file yet, migrate entries.
@@ -99,6 +111,11 @@ export function applyCategoryRules(details: CreditDetail[], rules: CategoryRule[
       const c = rule.conditions;
       // Match descriptionEquals
       if (c.descriptionEquals && c.descriptionEquals !== d.description) continue;
+      // Match descriptionContains (מילות מפתח מנוקות מסימנים)
+      if (c.descriptionContains) {
+        const cleaned = cleanDescription(d.description);
+        if (!cleaned.includes(c.descriptionContains.toLowerCase())) continue;
+      }
       // Match descriptionRegex
       if (c.descriptionRegex) {
         let re: RegExp | null = null;
