@@ -333,6 +333,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   
   // State לפתרון קונפליקטים (מוגדר כאן כדי שיהיה זמין ל-useEffect)
   const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, string>>({});
+
+  // שמור את הקטגוריות המקוריות משמורה בנפרד - בשביל הבדיקה אם קטגוריה כבר קיימת בקובץ JSON
+  const originalCategoriesRef = React.useRef<Set<string>>(new Set(categoriesList.map(c => c.name)));
   
   // חשב את רשימת השמות בפועל (אחרי ביטולי איחודים והסרת קטגוריות שנפתרו בקונפליקטים)
   const activeNames = React.useMemo(() => {
@@ -377,9 +380,6 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, CategoryDef | null>>(() => Object.fromEntries(names.map(n => [n, null])));
   
-  // שמור את הקטגוריות המקוריות משמורה בנפרד - בשביל הבדיקה אם קטגוריה כבר קיימת בקובץ JSON
-  const originalCategoriesRef = React.useRef<Set<string>>(new Set(categoriesList.map(c => c.name)));
-
   // חשב ברירות מחדל לכל קטגוריה חדשה (פעם אחת בלבד)
   const defaultIconsAndColors = React.useMemo(() => {
     const result: Record<string, { icon: string; color: string; recommendedIcons?: string[] }> = {};
