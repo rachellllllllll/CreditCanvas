@@ -439,7 +439,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     setSelectedCats(prev => ({ ...prev, [name]: cat }));
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const mapping: Record<string, CategoryDef> = {};
     names.forEach(n => {
       const chosen = selectedCats[n] || drafts[n];
@@ -452,8 +452,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     });
     
     // שלח את הקונפליקטים שנפתרו (בית עסק -> קטגוריה שנבחרה)
+    // חשוב: ממתינים לסיום השמירה לפני סגירת הדיאלוג כדי שהכללים יישמרו לדיסק
     if (onConflictsResolved && Object.keys(resolvedConflicts).length > 0) {
-      onConflictsResolved(resolvedConflicts);
+      await onConflictsResolved(resolvedConflicts);
     }
     
     onConfirm(mapping);

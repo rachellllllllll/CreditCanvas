@@ -41,7 +41,7 @@ import {
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
 import { processCreditChargeMatching } from './utils/creditChargePatterns';
-import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules } from './utils/categoryRules';
+import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
 import {
@@ -1547,16 +1547,43 @@ const App: React.FC = () => {
           if (!dirHandle || Object.keys(resolved).length === 0) return;
           
           // לכל קונפליקט שנפתר, צור כלל קטגוריה שמגדיר את בית העסק לקטגוריה שנבחרה
-          // הכלל יהיה לפי תיאור שמכיל את שם בית העסק
+          // שם בית העסק מופק מתיאור מנוקה (מקפים/כוכביות/קווים הוחלפו ברווחים),
+          // לכן יוצרים regex גמיש שמתאים גם לתיאור המקורי (עם מקפים וכו')
+          const rules = await loadCategoryRules(dirHandle);
+          let rulesChanged = false;
+          
           for (const [merchantName, targetCategory] of Object.entries(resolved)) {
-            // צור regex שיתאים לתיאורים שמכילים את שם בית העסק
-            const escapedMerchant = merchantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            await addDescriptionContainsRule(dirHandle, escapedMerchant, targetCategory);
+            // פצל לפי רווחים, בריחה של כל מילה בנפרד, וחיבור עם תבנית גמישה
+            const words = merchantName.split(/\s+/).filter(w => w.length > 0);
+            const escapedWords = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            // תבנית שמתאימה לרווח, מקף, קו תחתון, כוכבית, סולמית בין מילים
+            const flexiblePattern = escapedWords.join('[\\s\\-_*#]+');
+            
+            const exists = rules.some(r => r.conditions.descriptionRegex === flexiblePattern && r.category === targetCategory);
+            if (!exists) {
+              rules.push(createRule({ category: targetCategory, conditions: { descriptionRegex: flexiblePattern } }));
+              rulesChanged = true;
+            }
+          }
+          
+          if (rulesChanged) {
+            await saveCategoryRules(dirHandle, rules);
           }
           
           // עדכן את ה-state של הכללים
-          const updatedRules = await loadCategoryRules(dirHandle);
-          setCategoryRules(updatedRules);
+          setCategoryRules([...rules]);
+          
+          // עדכן את analysis כדי שהקונפליקטים ייעלמו מייד (בלי לחכות לטעינה מחדש)
+          setAnalysis(a => a ? ({
+            ...a,
+            details: applyCategoryRules(a.details, rules)
+          }) : a);
+          
+          // שמור dismissedConflictCount גם ב-confirm (לא רק ב-cancel) כרשת ביטחון
+          try {
+            localStorage.setItem('dismissedConflictCount', '0');
+            setDismissedConflictCount(0);
+          } catch { /* ignore */ }
           
           console.log(`✅ נשמרו ${Object.keys(resolved).length} כללי קטגוריה לקונפליקטים שנפתרו`);
         },
@@ -1600,8 +1627,16 @@ const App: React.FC = () => {
             })
           }) : a);
           
-          // --- Analytics: שלח את המיפויים שהמשתמש בחר ---
-          if (userProfile?.analyticsConsent === true || termsAccepted) {
+          // --- Analytics: שלח רק מיפויים חדשים (לא קטגוריות שכבר קיימות) ---
+          // סנן החוצה קטגוריות שלא השתנו (שם זהה למקור ואין שינוי אמיתי)
+          const newMappings = Object.entries(mapping).filter(([excelName, catDef]) => {
+            // שלח רק אם זה מיפוי חדש (שם שונה) או קטגוריה שלא הייתה קודם
+            const isNewCategory = !categoriesList.find(c => c.name === catDef.name);
+            const isRename = excelName !== catDef.name;
+            return isNewCategory || isRename;
+          });
+          
+          if (newMappings.length > 0 && (userProfile?.analyticsConsent === true || termsAccepted)) {
             try {
               // אם אין sessionId, צור אחד חדש
               let sessionIdToUse = analyticsSessionId;
@@ -1618,8 +1653,8 @@ const App: React.FC = () => {
                 setUserProfile(loadedProfile);
               }
               
-              // בנה את רשימת המיפויים עם תיאורי עסקאות
-              const categoryMappings: CategoryMapping[] = Object.entries(mapping).map(([excelName, catDef]) => {
+              // בנה את רשימת המיפויים עם תיאורי עסקאות - רק חדשים
+              const categoryMappings: CategoryMapping[] = newMappings.map(([excelName, catDef]) => {
                 // מצא את העסקאות עם הקטגוריה הזו
                 const transactionsWithCategory = analysis?.details.filter(d => d.category === excelName) || [];
                 // קבץ תיאורים וספור
