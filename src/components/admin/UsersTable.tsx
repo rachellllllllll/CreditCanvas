@@ -163,7 +163,7 @@ export default function UsersTable({ events }: UsersTableProps) {
             <option value="withFeedback">עם משוב 💬</option>
             <option value="withErrors">עם שגיאות 🔴</option>
             <option value="new">חדשים (ביקור אחד) 🆕</option>
-            <option value="powerUsers">Power Users (5+) 🔥</option>
+            <option value="powerUsers">משתמשי-על (5+) 🔥</option>
           </select>
           <button onClick={exportCSV} className="export-btn" title="ייצוא ל-CSV">
             📥 ייצוא
@@ -293,13 +293,13 @@ function referrerShort(ref: string): string {
     facebook: '📘 Facebook',
     whatsapp: '💬 WhatsApp',
     linkedin: '💼 LinkedIn',
-    twitter: '🐦 X',
+    twitter: '🐦 Twitter/X',
     github: '🐙 GitHub',
     telegram: '✈️ Telegram',
     bing: '🔎 Bing',
     reddit: '🤖 Reddit',
     other: '🌐 אחר',
-    unknown: '❓',
+    unknown: '❓ לא ידוע',
   };
   return map[ref] || ref;
 }

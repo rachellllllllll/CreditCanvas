@@ -94,6 +94,10 @@ export function aggregateUsers(events: AnalyticsEvent[]): UserSummary[] {
       if (e.event === 'session_duration' && typeof e.metadata?.durationSeconds === 'number') {
         totalDuration += e.metadata.durationSeconds as number;
       }
+      // תאימות לאחור - duration ישן בתוך session_start
+      if (e.event === 'session_start' && typeof e.metadata?.prevSessionDurationSeconds === 'number') {
+        totalDuration += e.metadata.prevSessionDurationSeconds as number;
+      }
       if (e.event === 'feature_used' && e.metadata?.feature) {
         featuresUsed.add(e.metadata.feature as string);
       }
@@ -276,13 +280,19 @@ function formatEvent(e: AnalyticsEvent): FormattedEvent {
         details: [],
       };
 
-    default:
+    default: {
+      const hebrewKeys: Record<string, string> = {
+        deviceType: 'סוג מכשיר', referrer: 'מקור', fileCount: 'קבצים',
+        transactionCount: 'עסקאות', feature: 'פיצ׳ר', errorType: 'סוג שגיאה',
+        rating: 'דירוג', visitCount: 'מספר ביקור',
+      };
       return {
         icon: '📌',
         color: '#64748b',
-        title: e.event,
-        details: Object.entries(m).slice(0, 3).map(([k, v]) => `${k}: ${v}`),
+        title: e.event.replace(/_/g, ' '),
+        details: Object.entries(m).slice(0, 3).map(([k, v]) => `${hebrewKeys[k] || k}: ${v}`),
       };
+    }
   }
 }
 
@@ -336,7 +346,7 @@ function formatDuration(seconds: number): string {
 
 export function formatShortDuration(seconds: number): string {
   if (!seconds) return '—';
-  if (seconds < 60) return `${seconds}ש׳`;
+  if (seconds < 60) return `${seconds}שנ׳`;
   const min = Math.floor(seconds / 60);
   const sec = seconds % 60;
   if (min < 60) return `${min}:${sec.toString().padStart(2, '0')}`;

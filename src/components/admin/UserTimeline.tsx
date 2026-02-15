@@ -3,7 +3,7 @@
  * תצוגת Timeline ויזואלית של כל הפעילות של משתמש בודד
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { UserSummary } from './userDataUtils';
 import { buildTimeline, deviceIcon, formatShortDuration } from './userDataUtils';
 
@@ -14,10 +14,18 @@ interface UserTimelineProps {
 
 export default function UserTimeline({ user, onClose }: UserTimelineProps) {
   const timeline = buildTimeline(user.events);
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(
-    // פותחים את 2 הימים האחרונים כברירת מחדל
+  const daysRef = useRef<HTMLDivElement>(null);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(    // פותחים את 2 הימים האחרונים כברירת מחדל
     new Set(timeline.slice(0, 2).map(d => d.date))
   );
+
+  // Reset scroll and expanded days when switching users
+  useEffect(() => {
+    if (daysRef.current) {
+      daysRef.current.scrollTop = 0;
+    }
+    setExpandedDays(new Set(timeline.slice(0, 2).map(d => d.date)));
+  }, [user.visitorId]);
 
   const toggleDay = (date: string) => {
     setExpandedDays(prev => {
@@ -67,7 +75,7 @@ export default function UserTimeline({ user, onClose }: UserTimelineProps) {
       )}
 
       {/* Timeline Days */}
-      <div className="timeline-days">
+      <div className="timeline-days" ref={daysRef}>
         {timeline.map(day => {
           const isOpen = expandedDays.has(day.date);
           return (

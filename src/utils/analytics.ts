@@ -326,7 +326,6 @@ export async function trackSessionStart(
 ): Promise<void> {
   const deviceInfo = getDeviceInfo();
   const referrer = getReferrerSource();
-  const prevSessionDuration = getPreviousSessionDuration();
   
   // התחל סשן חדש
   startSession();
@@ -339,7 +338,6 @@ export async function trackSessionStart(
     locale: deviceInfo.language,
     deviceType: deviceInfo.deviceType,
     referrer, // מקור התנועה
-    ...(prevSessionDuration ? { prevSessionDurationSeconds: prevSessionDuration } : {})
   }, true); // skipConsentCheck = true
 }
 

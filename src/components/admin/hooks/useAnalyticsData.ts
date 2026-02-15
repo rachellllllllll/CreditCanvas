@@ -94,7 +94,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
 
       // Timeout of 15 seconds
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout - טעינת הנתונים לקחה יותר מדי זמן')), 15000);
+        setTimeout(() => reject(new Error('תם הזמן — טעינת הנתונים לקחה יותר מדי זמן')), 15000);
       });
 
       const snapshot = await Promise.race([getDocs(q), timeoutPromise]);
@@ -156,6 +156,11 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       
       if (e.event === 'session_duration' && typeof e.metadata?.durationSeconds === 'number') {
         totalSessionDuration += e.metadata.durationSeconds as number;
+        sessionCount++;
+      }
+      // תאימות לאחור - נתוני duration ישנים שנשמרו בתוך session_start
+      if (e.event === 'session_start' && typeof e.metadata?.prevSessionDurationSeconds === 'number') {
+        totalSessionDuration += e.metadata.prevSessionDurationSeconds as number;
         sessionCount++;
       }
 

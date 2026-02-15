@@ -155,5 +155,5 @@ function formatEventName(name: string): string {
     'page_view': 'צפייה בדף',
     'user_feedback': 'משוב משתמש',
   };
-  return nameMap[name] || name;
+  return nameMap[name] || name.replace(/_/g, ' ');
 }

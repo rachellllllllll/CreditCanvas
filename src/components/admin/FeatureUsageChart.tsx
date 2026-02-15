@@ -21,7 +21,7 @@ export default function FeatureUsageChart({ featureData }: FeatureUsageChartProp
   if (total === 0) {
     return (
       <div className="device-chart chart-empty">
-        <p>⚡ אין נתוני שימוש בפיצ'רים</p>
+        <p>⚡ אין נתוני שימוש בפיצ׳רים</p>
       </div>
     );
   }
@@ -33,7 +33,7 @@ export default function FeatureUsageChart({ featureData }: FeatureUsageChartProp
 
   return (
     <div className="device-chart">
-      <h3 className="chart-title">⚡ שימוש בפיצ'רים</h3>
+      <h3 className="chart-title">⚡ שימוש בפיצ׳רים</h3>
       <div className="device-bars">
         {sorted.map(([feature, count], index) => {
           const percentage = total > 0 ? (count / total) * 100 : 0;

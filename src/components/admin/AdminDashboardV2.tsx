@@ -188,7 +188,7 @@ export default function AdminDashboardV2() {
             </span>
           )}
           <button onClick={logOut} className="logout-btn">התנתק</button>
-          <a href="/" className="back-link">← חזרה</a>
+          <a href="/" className="back-link">← חזרה לאפליקציה</a>
         </div>
       </header>
 
@@ -314,7 +314,7 @@ export default function AdminDashboardV2() {
 // ============================================
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}ש׳`;
+  if (seconds < 60) return `${seconds}שנ׳`;
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   if (minutes < 60) return `${minutes}:${secs.toString().padStart(2, '0')}`;
