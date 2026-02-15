@@ -329,7 +329,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
     for (const key of allCategories) {
       map[key] = Array(12).fill(0);
     }
-    details.forEach(d => {
+    displayDetails.forEach(d => {
       // Get the group key based on current groupBy setting
       const groupKey = groupBy === 'business'
         ? (d.description || 'ללא שם')
@@ -349,12 +349,12 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
       }
     });
     return map;
-  }, [details, allCategories, displayCategoryFor, groupBy, shouldSkipInCalculation, getEffectiveDate]);
+  }, [displayDetails, allCategories, displayCategoryFor, groupBy, shouldSkipInCalculation, getEffectiveDate]);
 
   // סכומי חודשים לכלל העסקאות + סכום שנתי כולל - דילוג על חיובי אשראי עם פירוט
   const monthlyTotalsAll: number[] = React.useMemo(() => {
     const arr = Array(12).fill(0);
-    details.forEach(d => {
+    displayDetails.forEach(d => {
       if (shouldSkipInCalculation(d)) return;
       const effDate = getEffectiveDate(d);
       const parts = effDate.split('/') || [];
@@ -365,7 +365,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
       arr[monthIdx] += signedAmount(d);
     });
     return arr;
-  }, [details, shouldSkipInCalculation, getEffectiveDate]);
+  }, [displayDetails, shouldSkipInCalculation, getEffectiveDate]);
 
   const grandTotalAll = React.useMemo(() => monthlyTotalsAll.reduce((a, b) => a + b, 0), [monthlyTotalsAll]);
 
@@ -476,7 +476,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
   // Helper: extract year from transaction data if in yearly view
   const getYearFromData = () => {
     if (!isYearlyView || !details.length) return undefined;
-    const firstDate = details[0].date;
+    const firstDate = getEffectiveDate(details[0]);
     const parts = firstDate.split('/');
     if (parts.length >= 3) {
       let year = parts[2];
@@ -1271,7 +1271,8 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
               const businessesByMonth: Record<number, Record<string, number>> = {};
               for (let m = 0; m < 12; m++) businessesByMonth[m] = {};
               (grouped[cat] || []).forEach(tx => {
-                const parts = tx.date?.split('/') || [];
+                const effDate = getEffectiveDate(tx);
+                const parts = effDate.split('/') || [];
                 let monthIdx = 0;
                 if (parts.length >= 2) {
                   monthIdx = Math.max(0, Math.min(11, parseInt(parts[1], 10) - 1));
