@@ -145,7 +145,7 @@ function formatEventName(name: string): string {
     'files_loaded': 'טעינת קבצים',
     'file_upload_success': 'העלאה מוצלחת',
     'file_error': 'שגיאת קובץ',
-    'consent_decision': 'הסכמה',
+    'consent_decision': 'החלטת הסכמה',
     'feature_used': 'שימוש בפיצ׳ר',
     'category_assigned': 'הקצאת קטגוריה',
     'category_stats': 'סטטיסטיקות',
@@ -153,6 +153,7 @@ function formatEventName(name: string): string {
     'returning_user': 'משתמש חוזר',
     'error_occurred': 'שגיאה',
     'page_view': 'צפייה בדף',
+    'user_feedback': 'משוב משתמש',
   };
   return nameMap[name] || name;
 }

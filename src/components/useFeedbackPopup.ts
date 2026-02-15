@@ -58,6 +58,7 @@ interface UseFeedbackPopupOptions {
   profile: UserProfile | null;
   dirHandle: FileSystemDirectoryHandle | null;
   analysisReady: boolean; // האם יש נתונים מוצגים
+  isDialogOpen: boolean; // האם יש דיאלוג אחר פתוח (קונפליקטים, Tour וכו')
   saveProfile: (dir: FileSystemDirectoryHandle, profile: UserProfile) => Promise<void>;
   trackEvent: (event: string, profile: UserProfile | null, metadata?: Record<string, unknown>) => Promise<void>;
 }
@@ -66,6 +67,7 @@ export function useFeedbackPopup({
   profile,
   dirHandle,
   analysisReady,
+  isDialogOpen,
   saveProfile,
   trackEvent,
 }: UseFeedbackPopupOptions) {
@@ -74,9 +76,26 @@ export function useFeedbackPopup({
   // Guard so we only trigger the timer once per session
   const triggeredRef = useRef(false);
 
-  // Timer: 30 שניות אחרי שהנתונים מוצגים
+  // כשדיאלוג נפתח — מבטלים טיימר קיים, מסתירים popup אם מוצג,
+  // ומאפשרים re-trigger כשהדיאלוג ייסגר
+  useEffect(() => {
+    if (isDialogOpen) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (showPopup) {
+        setShowPopup(false);
+      }
+      // מאפשר טיימר חדש כשהדיאלוג ייסגר
+      triggeredRef.current = false;
+    }
+  }, [isDialogOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Timer: 30 שניות אחרי שהנתונים מוצגים ואין דיאלוג פתוח
   useEffect(() => {
     if (!analysisReady || !profile || triggeredRef.current) return;
+    if (isDialogOpen) return; // לא מתחילים טיימר בזמן דיאלוג פתוח
     if (!shouldShowFeedback(profile)) return;
 
     triggeredRef.current = true;
@@ -90,7 +109,7 @@ export function useFeedbackPopup({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [analysisReady, profile]);
+  }, [analysisReady, profile, isDialogOpen]);
 
   const handleSubmit = useCallback(async (data: { rating: number; text: string }) => {
     if (!profile || !dirHandle) return;

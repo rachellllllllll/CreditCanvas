@@ -19,8 +19,11 @@ import TrendChart from './TrendChart';
 import EventsPieChart from './EventsPieChart';
 import DeviceChart from './DeviceChart';
 import HourlyHeatmap from './HourlyHeatmap';
-import EventsTable from './EventsTable';
+import UsersTable from './UsersTable';
 import FeedbackTable from './FeedbackTable';
+import ReferrerChart from './ReferrerChart';
+import FeatureUsageChart from './FeatureUsageChart';
+import CategoryMappingsTable from './CategoryMappingsTable';
 import { extractFeedbackEntries, calculateFeedbackStats } from './feedbackUtils';
 import './AdminDashboard.css';
 
@@ -42,6 +45,9 @@ export default function AdminDashboardV2() {
     trendData,
     hourlyActivity,
     deviceBreakdown,
+    referrerBreakdown,
+    featureUsage,
+    categoryMappings,
     loading: dataLoading,
     error: dataError,
     dateRange,
@@ -151,9 +157,6 @@ export default function AdminDashboardV2() {
     );
   }
 
-  // Get event types for filter
-  const eventTypes = Object.keys(stats?.eventsByType || {});
-
   // Extract feedback data
   const feedbackEntries = extractFeedbackEntries(events);
   const feedbackStats = calculateFeedbackStats(feedbackEntries);
@@ -179,6 +182,11 @@ export default function AdminDashboardV2() {
           <button onClick={refresh} className="refresh-btn" disabled={dataLoading}>
             {dataLoading ? '⏳' : '🔄'} רענן
           </button>
+          {!dataLoading && events.length > 0 && (
+            <span className="last-updated">
+              עודכן {new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
           <button onClick={logOut} className="logout-btn">התנתק</button>
           <a href="/" className="back-link">← חזרה</a>
         </div>
@@ -199,7 +207,7 @@ export default function AdminDashboardV2() {
         </div>
       ) : (
         <>
-          {/* KPI Cards */}
+          {/* KPI Cards - Row 1: Core metrics */}
           <div className="kpi-grid">
             <KPICard
               icon="👥"
@@ -208,10 +216,10 @@ export default function AdminDashboardV2() {
               color="primary"
             />
             <KPICard
-              icon="📊"
-              value={stats?.totalEvents || 0}
-              label="סה״כ אירועים"
-              color="info"
+              icon="🆕"
+              value={stats?.newVisitors || 0}
+              label="משתמשים חדשים"
+              color="primary"
             />
             <KPICard
               icon="📤"
@@ -220,22 +228,19 @@ export default function AdminDashboardV2() {
               color="success"
             />
             <KPICard
-              icon="🆕"
-              value={stats?.newVisitors || 0}
-              label="משתמשים חדשים"
-              color="primary"
-            />
-            <KPICard
               icon="⏱️"
-              value={formatDuration(stats?.avgSessionDuration || 0)}
+              value={stats?.avgSessionDuration ? formatDuration(stats.avgSessionDuration) : '—'}
               label="זמן שהייה ממוצע"
               color="info"
             />
+          </div>
+          {/* KPI Cards - Row 2: Secondary metrics */}
+          <div className="kpi-grid kpi-grid-secondary">
             <KPICard
-              icon="❌"
-              value={stats?.errorCount || 0}
-              label="שגיאות"
-              color={stats?.errorCount && stats.errorCount > 0 ? 'error' : 'success'}
+              icon="📊"
+              value={stats?.totalEvents || 0}
+              label="סה״כ אירועים"
+              color="info"
             />
             <KPICard
               icon="💬"
@@ -243,9 +248,18 @@ export default function AdminDashboardV2() {
               label={`משובים (${feedbackStats.totalFeedbacks})`}
               color={feedbackStats.averageRating >= 4 ? 'success' : feedbackStats.averageRating >= 3 ? 'warning' : feedbackStats.totalFeedbacks > 0 ? 'error' : 'info'}
             />
+            <KPICard
+              icon="❌"
+              value={stats?.errorCount || 0}
+              label="שגיאות"
+              color={stats?.errorCount && stats.errorCount > 0 ? 'error' : 'success'}
+            />
           </div>
 
           {/* Charts Grid */}
+          <div className="section-header">
+            <h2>📈 גרפים ותובנות</h2>
+          </div>
           <div className="charts-grid">
             {/* Trend Chart - Full Width */}
             <div className="chart-card full-width">
@@ -265,55 +279,32 @@ export default function AdminDashboardV2() {
               <DeviceChart breakdown={deviceBreakdown} />
             </div>
 
-            {/* Hourly Heatmap */}
+            {/* Referrer Sources */}
             <div className="chart-card">
-              <HourlyHeatmap data={hourlyActivity} />
+              <ReferrerChart referrerData={referrerBreakdown} />
             </div>
 
-            {/* Quick Stats */}
+            {/* Feature Usage */}
             <div className="chart-card">
-              <h3 className="chart-title">📋 סיכום מהיר</h3>
-              <div className="quick-stats">
-                <QuickStatItem 
-                  label="אירועים היום" 
-                  value={stats?.eventsToday || 0} 
-                />
-                <QuickStatItem 
-                  label="סוגי אירועים" 
-                  value={eventTypes.length} 
-                />
-                <QuickStatItem 
-                  label="משתמשים חוזרים" 
-                  value={stats?.returningVisitors || 0} 
-                />
-                <QuickStatItem 
-                  label="אחוז מובייל" 
-                  value={`${calculateMobilePercent(deviceBreakdown)}%`} 
-                />
-              </div>
+              <FeatureUsageChart featureData={featureUsage} />
+            </div>
+
+            {/* Hourly Heatmap - Full Width */}
+            <div className="chart-card full-width">
+              <HourlyHeatmap data={hourlyActivity} />
             </div>
           </div>
+
+          {/* Users Table with Timeline */}
+          <UsersTable events={events} />
 
           {/* Feedback Table */}
           <FeedbackTable feedbackEvents={feedbackEntries} />
 
-          {/* Events Table */}
-          <EventsTable events={events} eventTypes={eventTypes} />
+          {/* Category Mappings Table */}
+          <CategoryMappingsTable mappings={categoryMappings} />
         </>
       )}
-    </div>
-  );
-}
-
-// ============================================
-// Helper Components
-// ============================================
-
-function QuickStatItem({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="quick-stat-item">
-      <span className="quick-stat-value">{value}</span>
-      <span className="quick-stat-label">{label}</span>
     </div>
   );
 }
@@ -330,10 +321,4 @@ function formatDuration(seconds: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${hours}:${mins.toString().padStart(2, '0')}`;
-}
-
-function calculateMobilePercent(breakdown: { desktop: number; mobile: number; tablet: number }): number {
-  const total = breakdown.desktop + breakdown.mobile + breakdown.tablet;
-  if (total === 0) return 0;
-  return Math.round(((breakdown.mobile + breakdown.tablet) / total) * 100);
 }

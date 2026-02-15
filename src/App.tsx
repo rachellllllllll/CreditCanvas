@@ -34,6 +34,7 @@ import {
   trackCategoryAssigned,
   trackFeatureUsage,
   trackFileError,
+  trackPreviousSessionDuration,
   markConsentAsked,
   updateLastActivity,
   saveSessionDurationForLater
@@ -444,15 +445,6 @@ const App: React.FC = () => {
   // File System Access API: Directory handle (מוגדר כאן כדי שיהיה זמין ל-callbacks)
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
-  // --- Feedback Popup ---
-  const feedbackPopup = useFeedbackPopup({
-    profile: userProfile,
-    dirHandle,
-    analysisReady: !!analysis,
-    saveProfile: saveUserProfile,
-    trackEvent,
-  });
-
   // --- Callbacks להדרכת משתמש חדש (Tour) ---
   const handleTourComplete = useCallback(() => {
     setShowTour(false);
@@ -826,6 +818,9 @@ const App: React.FC = () => {
         
         // שלח session_start תמיד - לכל המשתמשים (גם מי שסירב)
         await trackSessionStart(profile, isNewUser);
+        
+        // שלח את משך הסשן הקודם (אם קיים מהביקור הקודם)
+        await trackPreviousSessionDuration(profile);
         
         // שמור סטטיסטיקות לשליחה ברגע ההחלטה
         const uniqueCategories = new Set(allDetails.map(d => d.category).filter(Boolean));
@@ -1273,6 +1268,19 @@ const App: React.FC = () => {
     onConfirm: (mapping: Record<string, CategoryDef>) => void,
     onConflictsResolved?: (resolved: Record<string, string>) => void 
   }>(null);
+
+  // --- Feedback Popup ---
+  // דוחים את ה-Feedback כשדיאלוג אחר פתוח (קונפליקטים, Tour, עריכת קטגוריה)
+  // הטיימר מתאפס כשדיאלוג נסגר, ומתחיל 30 שניות מחדש
+  const isFeedbackBlockingDialogOpen = !!newCategoriesPrompt || !!showTour || tourPending || !!editDialog?.open;
+  const feedbackPopup = useFeedbackPopup({
+    profile: userProfile,
+    dirHandle,
+    analysisReady: !!analysis,
+    isDialogOpen: isFeedbackBlockingDialogOpen,
+    saveProfile: saveUserProfile,
+    trackEvent,
+  });
 
   const [categoryAliases, setCategoryAliases] = useState<Record<string, string>>({});
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1983,8 +1991,8 @@ const App: React.FC = () => {
           />
         </>
       )}
-      {/* Feedback Popup — מופיע אוטומטית לפי לוגיקת תזמון */}
-      {feedbackPopup.showPopup && userProfile && (
+      {/* Feedback Popup — מופיע אוטומטית לפי לוגיקת תזמון, רק כשאין דיאלוג אחר פתוח */}
+      {feedbackPopup.showPopup && userProfile && !isFeedbackBlockingDialogOpen && (
         <FeedbackPopup
           profile={userProfile}
           onSubmit={(data) => {

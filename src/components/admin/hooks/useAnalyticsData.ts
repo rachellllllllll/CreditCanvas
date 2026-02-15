@@ -30,6 +30,9 @@ interface UseAnalyticsDataReturn {
   dailyStats: DailyStats[];
   hourlyActivity: HourlyActivity[];
   deviceBreakdown: DeviceBreakdown;
+  referrerBreakdown: Record<string, number>;
+  featureUsage: Record<string, number>;
+  categoryMappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string }>;
   loading: boolean;
   error: string | null;
   dateRange: DateRange;
@@ -156,11 +159,11 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
         sessionCount++;
       }
 
-      if (e.event === 'files_loaded' || e.event === 'file_upload_success') {
+      if (e.event === 'files_loaded') {
         totalFileUploads++;
       }
 
-      if (e.event === 'file_error' || e.event === 'error_occurred') {
+      if (e.event === 'file_error') {
         errorCount++;
       }
     });
@@ -205,7 +208,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       if (e.event === 'session_start') {
         day.visitors++;
       }
-      if (e.event === 'files_loaded' || e.event === 'file_upload_success') {
+      if (e.event === 'files_loaded') {
         day.fileUploads++;
       }
     });
@@ -222,7 +225,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       fileUploads: d.fileUploads,
       errors: events.filter(e => 
         new Date(e.timestamp).toISOString().split('T')[0] === d.date && 
-        (e.event === 'file_error' || e.event === 'error_occurred')
+        (e.event === 'file_error')
       ).length
     }));
   }, [trendData, events]);
@@ -259,6 +262,52 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     return breakdown;
   }, [events]);
 
+  // Calculate referrer breakdown from session_start events
+  const referrerBreakdown = useMemo((): Record<string, number> => {
+    const breakdown: Record<string, number> = {};
+    events.forEach(e => {
+      if (e.event === 'session_start' && e.metadata?.referrer) {
+        const ref = e.metadata.referrer as string;
+        breakdown[ref] = (breakdown[ref] || 0) + 1;
+      }
+    });
+    return breakdown;
+  }, [events]);
+
+  // Calculate feature usage from feature_used events
+  const featureUsage = useMemo((): Record<string, number> => {
+    const usage: Record<string, number> = {};
+    events.forEach(e => {
+      if (e.event === 'feature_used' && e.metadata?.feature) {
+        const feature = e.metadata.feature as string;
+        usage[feature] = (usage[feature] || 0) + 1;
+      }
+    });
+    return usage;
+  }, [events]);
+
+  // Extract category mappings from category_assigned events
+  const categoryMappings = useMemo(() => {
+    const mappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string }> = [];
+    events.forEach(e => {
+      if (e.event === 'category_assigned' && Array.isArray(e.metadata?.mappings)) {
+        const eventDate = new Date(e.timestamp).toLocaleDateString('he-IL');
+        (e.metadata.mappings as Array<{ excelCategory?: string; selectedCategory?: string; count?: number; descriptions?: string[] }>).forEach(m => {
+          if (m.excelCategory && m.selectedCategory) {
+            mappings.push({
+              excelCategory: m.excelCategory,
+              selectedCategory: m.selectedCategory,
+              count: m.count || 0,
+              descriptions: m.descriptions || [],
+              date: eventDate,
+            });
+          }
+        });
+      }
+    });
+    return mappings;
+  }, [events]);
+
   // Load data on mount and when date range changes
   useEffect(() => {
     loadData();
@@ -271,6 +320,9 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     dailyStats,
     hourlyActivity,
     deviceBreakdown,
+    referrerBreakdown,
+    featureUsage,
+    categoryMappings,
     loading,
     error,
     dateRange,
