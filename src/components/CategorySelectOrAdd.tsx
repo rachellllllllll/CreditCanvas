@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ICONS } from './icons';
+import { ICONS, ICON_CATEGORIES, ICON_SEARCH_MAP, searchIcons } from './icons';
 import type { CategoryDef } from './CategoryManager';
 import './CategorySelectOrAdd.css';
 
@@ -19,6 +19,31 @@ function pushRecentCategory(name: string) {
   const list = getRecentCategories().filter(n => n !== name);
   list.unshift(name);
   localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, MAX_RECENT)));
+}
+
+// --- Recently-used icons helpers (localStorage) ---
+const RECENT_ICONS_KEY = 'CategorySelectOrAdd_recentIcons';
+const MAX_RECENT_ICONS = 24;
+
+function getRecentIcons(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_ICONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function pushRecentIcon(emoji: string) {
+  const list = getRecentIcons().filter(e => e !== emoji);
+  list.unshift(emoji);
+  localStorage.setItem(RECENT_ICONS_KEY, JSON.stringify(list.slice(0, MAX_RECENT_ICONS)));
+}
+
+// Validate emoji input
+function isValidEmoji(str: string): boolean {
+  const s = str.trim();
+  if (!s || s.length > 8) return false;
+  const emojiPattern = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/u;
+  return emojiPattern.test(s);
 }
 
 const colorPalette = [
@@ -52,7 +77,19 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [iconSearch, setIconSearch] = useState('');
+  const [recentIcons, setRecentIcons] = useState<string[]>(getRecentIcons());
+  const [hoveredIcon, setHoveredIcon] = useState<string | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onIconHover = useCallback((emoji: string) => {
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+    setHoveredIcon(emoji);
+  }, []);
+  const onIconLeave = useCallback(() => {
+    hoverTimerRef.current = setTimeout(() => setHoveredIcon(null), 120);
+  }, []);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [visibleCategoryId, setVisibleCategoryId] = useState<string | null>(null);
   const [editingMode, setEditingMode] = useState(false);
   const [userTyped, setUserTyped] = useState(false); // מעקב אם המשתמש הקליד
   const [highlightIndex, setHighlightIndex] = useState(-1); // keyboard nav index
@@ -105,11 +142,65 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
     if (!name) return;
     onAddCategory({ name, icon, color });
     onChange(name);
+    pushRecentCategory(name);
+    setRecentNames(getRecentCategories());
     setShowDropdown(false);
     setEditingMode(false);
     if (onDraftChangeRef.current) onDraftChangeRef.current(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
+
+  const handleIconSelect = useCallback((ic: string) => {
+    setIcon(ic);
+    pushRecentIcon(ic);
+    setRecentIcons(getRecentIcons());
+    setShowIconPicker(false);
+    setIconSearch('');
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  // Scroll tracking: highlight bottom tab matching visible category
+  useEffect(() => {
+    if (!showIconPicker || iconSearch) {
+      setVisibleCategoryId(null);
+      return;
+    }
+    const container = contentRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const catId = (entry.target as HTMLElement).getAttribute('data-cat-id');
+            if (catId) { setVisibleCategoryId(catId); break; }
+          }
+        }
+      },
+      { root: container, rootMargin: '-10% 0px -70% 0px', threshold: 0 }
+    );
+
+    // Small delay to let DOM render before observing
+    const timer = setTimeout(() => {
+      const groups = container.querySelectorAll('[data-cat-id]');
+      groups.forEach(el => observer.observe(el));
+    }, 50);
+
+    return () => { clearTimeout(timer); observer.disconnect(); };
+  }, [showIconPicker, iconSearch]);
+
+  // Scroll to category group when clicking a tab
+  const scrollToCategory = useCallback((catId: string) => {
+    const container = contentRef.current;
+    if (!container) return;
+    setIconSearch('');
+    requestAnimationFrame(() => {
+      const el = container.querySelector(`[data-cat-id="${catId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }, []);
 
   // דווח טיוטה להורה כאשר יש שינוי בשם/אייקון/צבע ולא אושרה הוספה
   useEffect(() => {
@@ -141,6 +232,8 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const iconPickerBoxRef = useRef<HTMLDivElement | null>(null);
+  const iconSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   // נשמור מיקום יחסית לימין (right) כדי שיעבוד טוב ב-RTL גם אם left לא משפיע
@@ -392,7 +485,7 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
         <>
           <button
             type="button"
-            onClick={() => setShowIconPicker(true)}
+            onClick={() => { setShowIconPicker(true); setIconSearch(''); }}
             className="CategorySelectOrAdd-icon-btn"
             title="בחר אייקון"
             aria-label="בחר אייקון"
@@ -418,60 +511,172 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
           </button>
         </>
       )}
-      {/* Icon Picker Popup */}
+      {/* Icon Picker Popup — Teams-style */}
       {showIconPicker && (
-        <div className="CategorySelectOrAdd-icon-picker-overlay">
+        <div className="CategorySelectOrAdd-icon-picker-overlay" onClick={e => { if (e.target === e.currentTarget) { setShowIconPicker(false); setIconSearch(''); } }}>
           <div
             className="CategorySelectOrAdd-icon-picker-box"
-            ref={el => {
-              iconPickerBoxRef.current = el;
-              // העבר פוקוס ל-icon picker כשנפתח
-              if (el) requestAnimationFrame(() => el.focus());
-            }}
+            ref={el => { iconPickerBoxRef.current = el; }}
             tabIndex={-1}
           >
-            <h3 className="CategorySelectOrAdd-icon-picker-title">{input.trim() || 'בחר אייקון'}</h3>
-            <div className="CategorySelectOrAdd-icon-picker-list">
-              {/* Show recommended icons first if available */}
-              {propRecommendedIcons.length > 0 && (
+            {/* Top bar: preview + search */}
+            <div className="CategorySelectOrAdd-icon-picker-topbar">
+              <span className="CategorySelectOrAdd-icon-picker-preview-dot" style={{ backgroundColor: color }}>
+                {hoveredIcon || icon}
+              </span>
+              <div className="CategorySelectOrAdd-icon-picker-search-wrap">
+                <input
+                  ref={iconSearchInputRef}
+                  type="text"
+                  className="CategorySelectOrAdd-icon-picker-search"
+                  placeholder="חפש משהו מהנה"
+                  value={iconSearch}
+                  onChange={e => setIconSearch(e.target.value)}
+                  autoFocus
+                />
+                {iconSearch && (
+                  <button
+                    className="CategorySelectOrAdd-icon-picker-search-clear"
+                    onClick={() => { setIconSearch(''); iconSearchInputRef.current?.focus(); }}
+                    aria-label="נקה חיפוש"
+                  >×</button>
+                )}
+              </div>
+            </div>
+
+            {/* Scrollable content area */}
+            <div className="CategorySelectOrAdd-icon-picker-content" ref={contentRef}>
+              {/* Search results */}
+              {iconSearch ? (
+                (() => {
+                  const results = searchIcons(iconSearch);
+                  const pastedEmoji = isValidEmoji(iconSearch) ? iconSearch.trim() : null;
+                  return (
+                    <>
+                      {pastedEmoji && (
+                        <>
+                          <div className="CategorySelectOrAdd-icon-picker-section-title">אמוג'י שהודבק</div>
+                          <div className="CategorySelectOrAdd-icon-picker-grid">
+                            <span
+                              className={'CategorySelectOrAdd-icon-picker-icon pasted-emoji' + (pastedEmoji === icon ? ' selected' : '')}
+                              onClick={() => handleIconSelect(pastedEmoji)}
+                              onMouseEnter={() => onIconHover(pastedEmoji)}
+                              onMouseLeave={onIconLeave}
+                            >{pastedEmoji}</span>
+                          </div>
+                        </>
+                      )}
+                      {results.length > 0 && (
+                        <>
+                          <div className="CategorySelectOrAdd-icon-picker-section-title">תוצאות חיפוש</div>
+                          <div className="CategorySelectOrAdd-icon-picker-grid">
+                            {results.map(ic => {
+                              const kw = ICON_SEARCH_MAP[ic] || [];
+                              const matched = kw.filter(k => k.includes(iconSearch.toLowerCase()));
+                              const tooltip = matched.length > 0 ? matched.join(', ') : kw.slice(0, 3).join(', ');
+                              return (
+                                <span
+                                  key={ic}
+                                  className={'CategorySelectOrAdd-icon-picker-icon' + (ic === icon ? ' selected' : '')}
+                                  onClick={() => handleIconSelect(ic)}
+                                  onMouseEnter={() => onIconHover(ic)}
+                                  onMouseLeave={onIconLeave}
+                                  title={tooltip}
+                                >{ic}</span>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                      {!pastedEmoji && results.length === 0 && (
+                        <div className="CategorySelectOrAdd-icon-picker-no-results">לא נמצאו תוצאות עבור "{iconSearch}"</div>
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                /* Full view: recent → recommended → all categories → custom */
                 <>
-                  <div className="CategorySelectOrAdd-icon-picker-recommended-title">
-                    הנה כמה איקונים שנראים לנו מתאימים:
-                  </div>
-                  <div className="CategorySelectOrAdd-icon-picker-recommended">
-                    {propRecommendedIcons.slice(0, 5).map(ic => (
-                      <span
-                        key={ic}
-                        className={
-                          'CategorySelectOrAdd-icon-picker-icon' + (ic === icon ? ' selected' : '')
-                        }
-                        onClick={() => { setIcon(ic); setShowIconPicker(false); requestAnimationFrame(() => inputRef.current?.focus()); }}
-                        title={ic}
-                      >{ic}</span>
-                    ))}
-                  </div>
-                  <div className="CategorySelectOrAdd-icon-picker-all-title">
-                    או בחרו כל איקון אחר:
-                  </div>
+                  {/* Recent icons — first category-like group */}
+                  {recentIcons.length > 0 && (
+                    <div className="CategorySelectOrAdd-icon-picker-category-group" data-cat-id="__recent__">
+                      <div className="CategorySelectOrAdd-icon-picker-section-title">לאחרונה</div>
+                      <div className="CategorySelectOrAdd-icon-picker-grid">
+                        {recentIcons.map(ic => (
+                          <span
+                            key={`recent-${ic}`}
+                            className={'CategorySelectOrAdd-icon-picker-icon' + (ic === icon ? ' selected' : '')}
+                            onClick={() => handleIconSelect(ic)}
+                            onMouseEnter={() => onIconHover(ic)}
+                            onMouseLeave={onIconLeave}
+                            title={(ICON_SEARCH_MAP[ic] || []).slice(0, 3).join(', ')}
+                          >{ic}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Recommended icons */}
+                  {propRecommendedIcons.length > 0 && (
+                    <>
+                      <div className="CategorySelectOrAdd-icon-picker-section-title">מומלצים</div>
+                      <div className="CategorySelectOrAdd-icon-picker-grid">
+                        {propRecommendedIcons.slice(0, 8).map(ic => (
+                          <span
+                            key={`rec-${ic}`}
+                            className={'CategorySelectOrAdd-icon-picker-icon' + (ic === icon ? ' selected' : '')}
+                            onClick={() => handleIconSelect(ic)}
+                            onMouseEnter={() => onIconHover(ic)}
+                            onMouseLeave={onIconLeave}
+                            title={(ICON_SEARCH_MAP[ic] || []).slice(0, 3).join(', ')}
+                          >{ic}</span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {/* All icons grouped by category */}
+                  {ICON_CATEGORIES.map(cat => (
+                    <div key={cat.id} className="CategorySelectOrAdd-icon-picker-category-group" data-cat-id={cat.id}>
+                      <div className="CategorySelectOrAdd-icon-picker-section-title">{cat.label}</div>
+                      <div className="CategorySelectOrAdd-icon-picker-grid">
+                        {cat.icons.map(entry => (
+                          <span
+                            key={entry.emoji}
+                            className={'CategorySelectOrAdd-icon-picker-icon' + (entry.emoji === icon ? ' selected' : '')}
+                            onClick={() => handleIconSelect(entry.emoji)}
+                            onMouseEnter={() => onIconHover(entry.emoji)}
+                            onMouseLeave={onIconLeave}
+                            title={entry.keywords.slice(0, 3).join(', ')}
+                          >{entry.emoji}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
                 </>
               )}
-              {/* All icons */}
-              <div className="CategorySelectOrAdd-icon-picker-all-icons">
-                {ICONS.map(ic => (
-                  <span
-                    key={ic}
-                    className={
-                      'CategorySelectOrAdd-icon-picker-icon' + (ic === icon ? ' selected' : '')
-                    }
-            onClick={() => { setIcon(ic); setShowIconPicker(false); requestAnimationFrame(() => inputRef.current?.focus()); }}
-            title={ic}
-          >{ic}</span>
-        ))}
-      </div>
-    </div>
-    <button onClick={() => { setShowIconPicker(false); requestAnimationFrame(() => inputRef.current?.focus()); }} className="CategorySelectOrAdd-icon-picker-cancel">ביטול</button>
-  </div>
-</div>
+            </div>
+
+            {/* Bottom tab bar — like Teams */}
+            <div className="CategorySelectOrAdd-icon-picker-bottombar">
+              {recentIcons.length > 0 && (
+                <button
+                  className={`CategorySelectOrAdd-icon-picker-tab${!iconSearch && visibleCategoryId === '__recent__' ? ' active' : ''}`}
+                  onClick={() => scrollToCategory('__recent__')}
+                  title="לאחרונה"
+                >🕐</button>
+              )}
+              {ICON_CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  className={`CategorySelectOrAdd-icon-picker-tab${!iconSearch && visibleCategoryId === cat.id ? ' active' : ''}`}
+                  onClick={() => scrollToCategory(cat.id)}
+                  title={cat.label}
+                >{cat.tabIcon}</button>
+              ))}
+
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

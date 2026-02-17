@@ -1,0 +1,133 @@
+.error-boundary-recoverable,
+.error-boundary-critical {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.error-boundary-critical {
+  background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+}
+
+.error-boundary-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  padding: 40px;
+  max-width: 500px;
+  text-align: center;
+  direction: rtl;
+}
+
+.error-boundary-content h2 {
+  font-size: 24px;
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.error-boundary-content p {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.error-id {
+  font-size: 12px;
+  color: #9ca3af;
+  font-family: 'Courier New', monospace;
+  background: #f3f4f6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-top: 16px;
+}
+
+.error-details {
+  margin: 20px 0;
+  text-align: right;
+  cursor: pointer;
+}
+
+.error-details summary {
+  font-size: 12px;
+  color: #6366f1;
+  padding: 8px;
+  user-select: none;
+}
+
+.error-details summary:hover {
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.error-stack {
+  background: #1f2937;
+  color: #f3f4f6;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  overflow-x: auto;
+  text-align: left;
+  margin-top: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  flex-direction: row-reverse;
+}
+
+.error-btn-primary,
+.error-btn-secondary {
+  flex: 1;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.error-btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.error-btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.error-btn-secondary {
+  background: #e5e7eb;
+  color: #1f2937;
+}
+
+.error-btn-secondary:hover {
+  background: #d1d5db;
+}
+
+@media (max-width: 640px) {
+  .error-boundary-content {
+    padding: 24px;
+  }
+
+  .error-boundary-content h2 {
+    font-size: 20px;
+  }
+
+  .error-actions {
+    flex-direction: column;
+  }
+}

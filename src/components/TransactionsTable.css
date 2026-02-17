@@ -629,9 +629,9 @@ svg {
 /* Date column fixed width - includes source badge, card digits, and transaction type badges */
 .TransactionsTable-th-date,
 .TransactionsTable-td-date {
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
+  width: 270px;
+  min-width: 270px;
+  max-width: 270px;
 }
 
 .TransactionsTable-th-top-right {

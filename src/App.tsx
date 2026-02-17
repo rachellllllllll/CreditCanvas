@@ -22,6 +22,7 @@ import OnboardingTour from './components/OnboardingTour';
 import OnboardingScreen from './components/OnboardingScreen';
 import FeedbackPopup from './components/FeedbackPopup';
 import { useFeedbackPopup } from './components/useFeedbackPopup';
+import ErrorBoundary from './components/ErrorBoundary';
 import {
   type UserProfile,
   type UnknownCategoryInfo,
@@ -34,6 +35,7 @@ import {
   trackCategoryAssigned,
   trackFeatureUsage,
   trackFileError,
+  trackConsoleError,
   trackPreviousSessionDuration,
   markConsentAsked,
   updateLastActivity,
@@ -41,7 +43,7 @@ import {
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
 import { processCreditChargeMatching } from './utils/creditChargePatterns';
-import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule } from './utils/categoryRules';
+import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule, type RuleChangeResult } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
 import {
@@ -1109,7 +1111,8 @@ const App: React.FC = () => {
 
     // יצירת כלל (אם נבחר)
     if (createRule && dirHandle) {
-      await addAdvancedRule(dirHandle, filters, newCategory, includeDatesInRule);
+      const ruleResult = await addAdvancedRule(dirHandle, filters, newCategory, includeDatesInRule);
+      showAppToast(ruleResult, newCategory);
       // רענון הכללים
       const updatedRules = await loadCategoryRules(dirHandle);
       setCategoryRules(updatedRules);
@@ -1169,18 +1172,19 @@ const App: React.FC = () => {
     
     if (effectiveApplyToAll && newCategory && shouldCreateRule && dirHandle) {
       if (!excludeIds || excludeIds.size === 0) {
+        let ruleResult: RuleChangeResult = { action: 'unchanged' };
         // אם נפתח מחיפוש גלובלי - צור כלל עם כל הפילטרים
         if (isFromGlobalSearch && globalSearchFilters) {
-          await addAdvancedRule(dirHandle, globalSearchFilters, newCategory, includeDatesInRule);
+          ruleResult = await addAdvancedRule(dirHandle, globalSearchFilters, newCategory, includeDatesInRule);
         }
         // אם נפתח מחיפוש רגיל - צור כלל regex שמכיל את מילת החיפוש
         else if (isFromSearch && searchTerm) {
-          await addDescriptionContainsRule(dirHandle, searchTerm, newCategory);
+          ruleResult = await addDescriptionContainsRule(dirHandle, searchTerm, newCategory);
         } else if (transaction?.description) {
           // שינוי רגיל - כלל על תיאור מדויק
           // בדוק אם יש סינון סכום
           if (amountFilter && (amountFilter.minAmount !== undefined || amountFilter.maxAmount !== undefined)) {
-            await addRuleWithAmountRange(
+            ruleResult = await addRuleWithAmountRange(
               dirHandle,
               transaction.description,
               newCategory,
@@ -1188,9 +1192,10 @@ const App: React.FC = () => {
               amountFilter.maxAmount
             );
           } else {
-            await addDescriptionEqualsRule(dirHandle, transaction.description, newCategory);
+            ruleResult = await addDescriptionEqualsRule(dirHandle, transaction.description, newCategory);
           }
         }
+        showAppToast(ruleResult, newCategory);
       } else {
         // יש החרגות - שמור כל עסקה מסומנת בנפרד
         for (const id of idsToUpdate) {
@@ -1293,6 +1298,42 @@ const App: React.FC = () => {
 
   // --- Category Rules (unified system) ---
   const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
+
+  // --- App-level toast notification with undo ---
+  type AppToastData = { message: string; undoAction?: () => void; };
+  const [appToast, setAppToast] = useState<AppToastData | null>(null);
+  const appToastTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissAppToast = React.useCallback(() => {
+    if (appToastTimeoutRef.current) clearTimeout(appToastTimeoutRef.current);
+    setAppToast(null);
+  }, []);
+
+  const handleUndoRuleChange = React.useCallback(async (ruleId: string, previousCategory: string) => {
+    if (!dirHandle) return;
+    const rules = await loadCategoryRules(dirHandle);
+    const idx = rules.findIndex(r => r.id === ruleId);
+    if (idx === -1) return;
+    rules[idx] = { ...rules[idx], category: previousCategory, updatedAt: new Date().toISOString() };
+    await saveCategoryRules(dirHandle, rules);
+    setCategoryRules(rules);
+    if (analysis) {
+      setAnalysis(a => a ? { ...a, details: applyCategoryRules(a.details, rules) } : a);
+    }
+  }, [dirHandle, analysis]);
+
+  const showAppToast = React.useCallback((result: RuleChangeResult, newCategory: string) => {
+    if (result.action === 'unchanged') return;
+    if (appToastTimeoutRef.current) clearTimeout(appToastTimeoutRef.current);
+    const message = result.action === 'updated'
+      ? `🔄 כלל קטגוריה עודכן: ${result.previousCategory ?? '?'} → ${newCategory}`
+      : `✅ כלל קטגוריה חדש נוצר: → ${newCategory}`;
+    const undoAction = result.action === 'updated' && result.ruleId && result.previousCategory
+      ? () => handleUndoRuleChange(result.ruleId!, result.previousCategory!)
+      : undefined;
+    setAppToast({ message, undoAction });
+    appToastTimeoutRef.current = setTimeout(() => setAppToast(null), 6000);
+  }, [handleUndoRuleChange]);
 
   // Load category rules from directory
   React.useEffect(() => {
@@ -1754,13 +1795,21 @@ const App: React.FC = () => {
             })
           }) : a);
           
-          // --- Analytics: שלח רק מיפויים חדשים (לא קטגוריות שכבר קיימות) ---
-          // סנן החוצה קטגוריות שלא השתנו (שם זהה למקור ואין שינוי אמיתי)
-          const newMappings = Object.entries(mapping).filter(([excelName, catDef]) => {
-            // שלח רק אם זה מיפוי חדש (שם שונה) או קטגוריה שלא הייתה קודם
-            const isNewCategory = !categoriesList.find(c => c.name === catDef.name);
-            const isRename = excelName !== catDef.name;
-            return isNewCategory || isRename;
+          // --- Analytics: שלח את כל המיפויים עם סיווג לפי סוג ---
+          const newMappings = Object.entries(mapping).map(([excelName, catDef]) => {
+            const wasExisting = categoriesList.find(c => c.name === catDef.name);
+            const isSameName = excelName === catDef.name;
+            
+            let mappingType: 'manual_mapping' | 'auto_matched' | 'new_category';
+            if (!wasExisting) {
+              mappingType = 'new_category'; // קטגוריה חדשה שנוספה
+            } else if (isSameName) {
+              mappingType = 'auto_matched'; // זוהה אוטומטית
+            } else {
+              mappingType = 'manual_mapping'; // מיפוי ידני
+            }
+            
+            return { excelName, catDef, mappingType };
           });
           
           if (newMappings.length > 0 && (userProfile?.analyticsConsent === true || termsAccepted)) {
@@ -1780,8 +1829,8 @@ const App: React.FC = () => {
                 setUserProfile(loadedProfile);
               }
               
-              // בנה את רשימת המיפויים עם תיאורי עסקאות - רק חדשים
-              const categoryMappings: CategoryMapping[] = newMappings.map(([excelName, catDef]) => {
+              // בנה את רשימת המיפויים עם תיאורי עסקאות
+              const categoryMappings: CategoryMapping[] = newMappings.map(({ excelName, catDef, mappingType }) => {
                 // מצא את העסקאות עם הקטגוריה הזו
                 const transactionsWithCategory = analysis?.details.filter(d => d.category === excelName) || [];
                 // קבץ תיאורים וספור
@@ -1802,7 +1851,8 @@ const App: React.FC = () => {
                   excelCategory: excelName,
                   selectedCategory: catDef.name,
                   count: transactionsWithCategory.length,
-                  descriptions: topDescriptions
+                  descriptions: topDescriptions,
+                  mappingType
                 };
               });
               
@@ -2077,8 +2127,43 @@ const App: React.FC = () => {
     }, 3000);
   }, []);
 
+  // --- מעקב על global errors (unhandled rejections וbrower runtime errors) ---
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      trackConsoleError(userProfile, {
+        errorType: 'global_error',
+        errorName: event.error?.name || 'UnknownError',
+        errorMessage: event.error?.message || event.message || 'Unknown error',
+        isRecoverable: true,
+        timestamp: Date.now(),
+      }).catch(() => {}); // שקט על שגיאות analytics
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const error = event.reason;
+      const message = error?.message || String(error) || 'Unhandled Promise rejection';
+      
+      trackConsoleError(userProfile, {
+        errorType: 'global_error',
+        errorName: error?.name || 'PromiseRejection',
+        errorMessage: message,
+        isRecoverable: true,
+        timestamp: Date.now(),
+      }).catch(() => {}); // שקט על שגיאות analytics
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, [userProfile]);
+
   return (
-    <div className="app-container">
+    <ErrorBoundary userProfile={userProfile}>
+      <div className={`app-container${!analysis ? ' app-container--onboarding' : ''}`}>
       {/* Onboarding screen: show until analysis is ready */}
       {!analysis && (
         <OnboardingScreen
@@ -2240,8 +2325,26 @@ const App: React.FC = () => {
         onComplete={handleTourComplete}
         onSkip={handleTourSkip}
       />
+      {/* App-level toast notification */}
+      {appToast && (
+        <div className="app-toast">
+          <span className="app-toast-message">{appToast.message}</span>
+          <div className="app-toast-actions">
+            {appToast.undoAction && (
+              <button
+                className="app-toast-undo"
+                onClick={() => { appToast.undoAction?.(); dismissAppToast(); }}
+              >
+                ביטול
+              </button>
+            )}
+            <button className="app-toast-close" onClick={dismissAppToast} aria-label="סגור">✕</button>
+          </div>
+        </div>
+      )}
       <Footer />
     </div>
+    </ErrorBoundary>
   );
 }
 

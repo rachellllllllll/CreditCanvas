@@ -13,18 +13,21 @@ import {
   where
 } from 'firebase/firestore';
 import { getFirebaseApp } from '../../../utils/firebaseAuth';
-import type { 
+import { 
   AnalyticsEvent, 
   Stats, 
   DateRange, 
   TrendDataPoint,
   DailyStats,
   HourlyActivity,
-  DeviceBreakdown
+  DeviceBreakdown,
+  ConsoleErrorEvent
 } from '../types';
+import type { MappingType } from '../../../utils/analytics';
 
 interface UseAnalyticsDataReturn {
   events: AnalyticsEvent[];
+  errors: ConsoleErrorEvent[];
   stats: Stats | null;
   trendData: TrendDataPoint[];
   dailyStats: DailyStats[];
@@ -32,7 +35,7 @@ interface UseAnalyticsDataReturn {
   deviceBreakdown: DeviceBreakdown;
   referrerBreakdown: Record<string, number>;
   featureUsage: Record<string, number>;
-  categoryMappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string }>;
+  categoryMappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string; mappingType: MappingType }>;
   loading: boolean;
   error: string | null;
   dateRange: DateRange;
@@ -43,6 +46,7 @@ interface UseAnalyticsDataReturn {
 
 export function useAnalyticsData(): UseAnalyticsDataReturn {
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
+  const [errors, setErrors] = useState<ConsoleErrorEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>('week');
@@ -101,14 +105,25 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       const snapshot = await Promise.race([getDocs(q), timeoutPromise]);
       
       const loadedEvents: AnalyticsEvent[] = [];
+      const loadedErrors: ConsoleErrorEvent[] = [];
+      
       snapshot.forEach((doc) => {
-        loadedEvents.push({
-          id: doc.id,
-          ...doc.data()
-        } as AnalyticsEvent);
+        const data = doc.data();
+        if (data.event === 'console_error') {
+          loadedErrors.push({
+            id: doc.id,
+            ...data
+          } as ConsoleErrorEvent);
+        } else {
+          loadedEvents.push({
+            id: doc.id,
+            ...data
+          } as AnalyticsEvent);
+        }
       });
 
       setEvents(loadedEvents);
+      setErrors(loadedErrors);
     } catch (err) {
       console.error('[Admin] Error loading analytics:', err);
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים');
@@ -294,11 +309,11 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
 
   // Extract category mappings from category_assigned events
   const categoryMappings = useMemo(() => {
-    const mappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string }> = [];
+    const mappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string; mappingType: MappingType }> = [];
     events.forEach(e => {
       if (e.event === 'category_assigned' && Array.isArray(e.metadata?.mappings)) {
         const eventDate = new Date(e.timestamp).toLocaleDateString('he-IL');
-        (e.metadata.mappings as Array<{ excelCategory?: string; selectedCategory?: string; count?: number; descriptions?: string[] }>).forEach(m => {
+        (e.metadata.mappings as Array<{ excelCategory?: string; selectedCategory?: string; count?: number; descriptions?: string[]; mappingType?: MappingType }>).forEach(m => {
           if (m.excelCategory && m.selectedCategory) {
             mappings.push({
               excelCategory: m.excelCategory,
@@ -306,6 +321,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
               count: m.count || 0,
               descriptions: m.descriptions || [],
               date: eventDate,
+              mappingType: m.mappingType || 'manual_mapping', // fallback for old data
             });
           }
         });
@@ -346,6 +362,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
 
   return {
     events,
+    errors,
     stats,
     trendData,
     dailyStats,

@@ -24,6 +24,7 @@ import FeedbackTable from './FeedbackTable';
 import ReferrerChart from './ReferrerChart';
 import FeatureUsageChart from './FeatureUsageChart';
 import CategoryMappingsTable from './CategoryMappingsTable';
+import ErrorsTable from './ErrorsTable';
 import { extractFeedbackEntries, calculateFeedbackStats } from './feedbackUtils';
 import './AdminDashboard.css';
 
@@ -41,6 +42,7 @@ export default function AdminDashboardV2() {
   // Analytics data hook
   const {
     events,
+    errors,
     stats,
     trendData,
     hourlyActivity,
@@ -304,6 +306,18 @@ export default function AdminDashboardV2() {
 
           {/* Category Mappings Table */}
           <CategoryMappingsTable mappings={categoryMappings} />
+
+          {/* Errors Table */}
+          {errors.length > 0 && (
+            <div className="admin-section">
+              <h2>🛠️ שגיאות במערכת</h2>
+              <ErrorsTable 
+                errors={errors} 
+                eventsByType={stats?.eventsByType || {}}
+                loading={dataLoading}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

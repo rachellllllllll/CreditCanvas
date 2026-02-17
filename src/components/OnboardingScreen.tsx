@@ -261,21 +261,6 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </ul>
         </CollapsibleSection>
 
-        {/* Security Badge - Always visible, compact */}
-        <div className="security-badge">
-          <div className="security-icon">🛡️</div>
-          <div className="security-content">
-            <div className="security-title">הנתונים שלך נשארים במחשב שלך בלבד</div>
-            <div className="security-points">
-              <span>עיבוד מקומי</span>
-              <span className="dot">•</span>
-              <span>ללא העלאה לשרתים</span>
-              <span className="dot">•</span>
-              <span>ללא סיסמאות</span>
-            </div>
-          </div>
-        </div>
-
         {/* Error message */}
         {error && (
           <div className="onboarding-error">

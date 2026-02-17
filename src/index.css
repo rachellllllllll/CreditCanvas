@@ -38,6 +38,7 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%; /* הוספה: מבטיח שייקח את כל הרוחב הזמין */
+  box-sizing: border-box;
 }
 
 h1, h2, h3, h4 {
@@ -178,6 +179,12 @@ a:hover {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+/* When onboarding is shown, constrain to viewport so no page scroll */
+.app-container--onboarding {
+  height: calc(100vh - 4rem); /* 100vh minus #root padding (2rem top + 2rem bottom) */
+  overflow: hidden;
 }
 
 /* Logo container */

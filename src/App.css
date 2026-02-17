@@ -349,6 +349,7 @@
   text-align: center;
   color: #666;
   font-size: 15px;
+  flex-shrink: 0;
 }
 
 .chat-fab {
@@ -687,4 +688,71 @@
 
 .privacy-badge:hover {
   animation: securityPulse 0.6s ease;
+}
+
+/* App-level toast notification */
+.app-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #1f2937;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  animation: appToastSlideUp 0.3s ease;
+  max-width: 90vw;
+}
+
+@keyframes appToastSlideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.app-toast-message {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.app-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-toast-undo {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.app-toast-undo:hover {
+  background: #2563eb;
+}
+
+.app-toast-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.app-toast-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
 }

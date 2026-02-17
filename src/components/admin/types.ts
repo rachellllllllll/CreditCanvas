@@ -86,3 +86,29 @@ export interface PieChartData {
   value: number;
   color: string;
 }
+
+// ============================================
+// Error Tracking Types
+// ============================================
+
+export interface ConsoleErrorEvent {
+  id: string;
+  visitorId: string;
+  errorType: 'react_error' | 'global_error' | 'parse_error' | 'storage_error' | 'network_error' | 'console_error' | 'other';
+  errorName: string;
+  errorMessage: string;
+  componentStack?: string;
+  isRecoverable: boolean;
+  browserInfo: string;
+  timestamp: number;
+  createdAt: string;
+}
+
+export interface ErrorStats {
+  totalErrors: number;
+  errorsByType: Record<string, number>;
+  errorsToday: number;
+  uniqueUsersWithErrors: number;
+  topErrors: { message: string; count: number }[];
+  criticalErrorCount: number; // Unrecoverable errors
+}

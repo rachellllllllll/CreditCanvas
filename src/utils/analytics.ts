@@ -405,11 +405,14 @@ export interface UnknownCategoryInfo {
 /**
  * מיפוי קטגוריה שהמשתמש בחר
  */
+export type MappingType = 'manual_mapping' | 'auto_matched' | 'new_category';
+
 export interface CategoryMapping {
   excelCategory: string;      // שם הקטגוריה מהאקסל
   selectedCategory: string;   // הקטגוריה שהמשתמש בחר
   count: number;              // כמה עסקאות
   descriptions: string[];     // TOP 10 תיאורי עסקאות
+  mappingType: MappingType;   // סוג המיפוי: ידני/אוטומטי/חדש
 }
 
 /**
@@ -488,6 +491,66 @@ export async function trackFileError(
     retryCount: errorInfo.retryCount || 0,
     browserInfo: errorInfo.browserInfo || browserInfo
   }, true); // skipConsentCheck - תמיד שולחים שגיאות (אנונימי)
+}
+
+/**
+ * שגיאה ב-Console - זיהוי וגישור של שגיאות runtime
+ * מסננות שגיאות "חשובות" בלבד (React crashes, parse errors וכו')
+ */
+export interface ConsoleErrorInfo {
+  errorType: 'react_error' | 'global_error' | 'parse_error' | 'storage_error' | 'network_error' | 'other';
+  errorName?: string;           // e.g., "SyntaxError", "TypeError"
+  errorMessage: string;         // הודעה מסוננת (עד 200 תווים)
+  componentStack?: string;      // רק עבור React errors (מסונן)
+  isRecoverable: boolean;       // האם האפליקציה המשיכה לחזור
+  timestamp: number;            // זמן השגיאה
+  browserInfo?: string;         // דפדפן
+}
+
+/**
+ * סיווג שגיאה - מה חשוב לשמור
+ */
+function shouldTrackError(errorMessage: string): boolean {
+  // דלג על שגיאות שנורמליות/צפויות
+  const ignoredPatterns = [
+    /ResizeObserver loop/,       // ידוע בחלקים מסוימים
+    /Non-Error promise rejection/,
+    /addEventListener/,         // DOM events שנורמליים
+    /localStorage/,              // סטוראג' בדרך כלל לא קריטי
+  ];
+  
+  return !ignoredPatterns.some(pattern => pattern.test(errorMessage));
+}
+
+export async function trackConsoleError(
+  profile: UserProfile | null,
+  errorInfo: ConsoleErrorInfo
+): Promise<void> {
+  // רק שגיאות "חשובות"
+  if (!shouldTrackError(errorInfo.errorMessage)) {
+    return;
+  }
+  
+  // סינטוז בדיקה של הודעה
+  const sanitizedMessage = errorInfo.errorMessage
+    .replace(/[A-Za-z]:\\[^\s]*/g, '[PATH]')     // Windows paths
+    .replace(/\/[^\s]*/g, '[PATH]')              // Unix paths
+    .replace(/[\w.-]+\.xlsx?/gi, '[FILE]')       // Excel files
+    .replace(/http[s]?:\/\/[^\s]*/g, '[URL]')    // URLs
+    .substring(0, 200);
+  
+  const browserInfo = typeof navigator !== 'undefined' 
+    ? `${navigator.userAgent.match(/Chrome\/[\d.]+|Firefox\/[\d.]+|Safari\/[\d.]+|Edge\/[\d.]+/)?.[0] || 'Unknown'}`
+    : 'Unknown';
+  
+  await trackEvent('console_error', profile, {
+    errorType: errorInfo.errorType,
+    errorName: errorInfo.errorName || 'Unknown',
+    errorMessage: sanitizedMessage,
+    componentStack: errorInfo.componentStack?.substring(0, 100), // קטע קטן בלבד
+    isRecoverable: errorInfo.isRecoverable,
+    browserInfo: errorInfo.browserInfo || browserInfo
+  }, true); // תמיד שומרים (אנונימי)
 }
 
 /**

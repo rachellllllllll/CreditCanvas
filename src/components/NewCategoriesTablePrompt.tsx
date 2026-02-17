@@ -897,6 +897,16 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasNothingToShow]);
 
+  // Create a stable mapping of names to consistent indices to prevent DOM reconciliation issues
+  const stableIndices = React.useMemo(() => {
+    const map = new Map<string, number>();
+    const orderedFiltered = orderedNames.filter(name => activeNames.includes(name));
+    orderedFiltered.forEach((name, index) => {
+      map.set(name, index);
+    });
+    return map;
+  }, [orderedNames, activeNames]);
+
   if (viewMode === 'summary') {
     return (
       <div className="new-cats-overlay">
@@ -1171,6 +1181,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       </div>
     );
   }
+
   return (
     <div className="new-cats-overlay">
       <div className="new-cats-dialog">
@@ -1218,20 +1229,22 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
               </tr>
             </thead>
             <tbody>
-              {orderedNames.filter(name => activeNames.includes(name)).map(name => (
-                <React.Fragment key={name}>
-                  <tr>
-                    <td className="new-cats-table-name">{name}</td>
-                    <td className="new-cats-table-count">
-                      <span className="transaction-count-badge">{categoryTransactionCounts[name] || 0}</span>
-                      {(categoryTransactionCounts[name] || 0) <= LOW_COUNT_THRESHOLD && (
-                        <span className="chip chip-warning" title="מספר עסקאות נמוך – מומלץ לשקול מיזוג">מעט עסקאות</span>
-                      )}
-                    </td>
-                    <td className="new-cats-table-select">
-                      <div className="selector-and-suggest">
-                        <CategorySelectOrAdd
-                          key={`category-select-${name}`}
+              {orderedNames.filter(name => activeNames.includes(name)).map((name) => {
+                const stableIndex = stableIndices.get(name) ?? 0;
+                return (
+                  <React.Fragment key={`row-${stableIndex}`}>
+                    <tr>
+                      <td className="new-cats-table-name">{name}</td>
+                      <td className="new-cats-table-count">
+                        <span className="transaction-count-badge">{categoryTransactionCounts[name] || 0}</span>
+                        {(categoryTransactionCounts[name] || 0) <= LOW_COUNT_THRESHOLD && (
+                          <span className="chip chip-warning" title="מספר עסקאות נמוך – מומלץ לשקול מיזוג">מעט עסקאות</span>
+                        )}
+                      </td>
+                      <td className="new-cats-table-select">
+                        <div className="selector-and-suggest">
+                          <CategorySelectOrAdd
+                            key={`category-select-${stableIndex}`}
                           categories={localCategories}
                           value={selectedCats[name]?.name || name}
                           onChange={catName => handleCategoryChange(name, catName)}
@@ -1432,8 +1445,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                       </td>
                     </tr>
                   )}
-                </React.Fragment>
-              ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

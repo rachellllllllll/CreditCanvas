@@ -6,7 +6,7 @@ const CATEGORY_RULES_FILENAME = 'category-rules.json';
 function cleanDescription(description: string): string {
   if (!description) return '';
   return description
-    .replace(/\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?/g, '') // תאריכים
+    .replace(/\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?/g, '') // תאריכים
     .replace(/\d{4,}/g, '') // מספרים ארוכים
     .replace(/[*#\-_]+/g, ' ') // סימנים מיוחדים → רווח
     .replace(/\s+/g, ' ')
@@ -81,6 +81,35 @@ export async function addCategoryRule(dirHandle: FileSystemDirectoryHandle, rule
   await saveCategoryRules(dirHandle, rules);
 }
 
+// Return type for rule add/update functions
+export type RuleChangeResult = {
+  action: 'created' | 'updated' | 'unchanged';
+  previousCategory?: string; // הקטגוריה הקודמת (רק כשעודכן)
+  ruleId?: string; // מזהה הכלל (לביטול)
+};
+
+// Helper: compare two conditions objects for equality (ignoring undefined/null values)
+function conditionsEqual(a: CategoryRule['conditions'], b: CategoryRule['conditions']): boolean {
+  const normalize = (v: unknown) => (v === undefined || v === null || v === '') ? undefined : v;
+  return (
+    normalize(a.descriptionEquals) === normalize(b.descriptionEquals) &&
+    normalize(a.descriptionContains) === normalize(b.descriptionContains) &&
+    normalize(a.descriptionRegex) === normalize(b.descriptionRegex) &&
+    normalize(a.transactionId) === normalize(b.transactionId) &&
+    normalize(a.source) === normalize(b.source) &&
+    normalize(a.direction) === normalize(b.direction) &&
+    normalize(a.dateFrom) === normalize(b.dateFrom) &&
+    normalize(a.dateTo) === normalize(b.dateTo) &&
+    Number(a.minAmount ?? -1) === Number(b.minAmount ?? -1) &&
+    Number(a.maxAmount ?? -1) === Number(b.maxAmount ?? -1)
+  );
+}
+
+// Helper: find existing rule with same conditions (upsert)
+function findRuleWithSameConditions(rules: CategoryRule[], conditions: CategoryRule['conditions']): number {
+  return rules.findIndex(r => r.active && !r.conditions.transactionId && conditionsEqual(r.conditions, conditions));
+}
+
 // Apply rules to details. First-match wins. Rules are filtered by active.
 // כללי transactionId מקבלים עדיפות על פני כללי תיאור
 export function applyCategoryRules(details: CreditDetail[], rules: CategoryRule[]): CreditDetail[] {
@@ -90,12 +119,42 @@ export function applyCategoryRules(details: CreditDetail[], rules: CategoryRule[
   const idRules = activeRules.filter(r => r.conditions.transactionId);
   const descRules = activeRules.filter(r => !r.conditions.transactionId);
   
-  // מיין כללי תיאור: כללים עם מגבלות סכום קודם (יותר ספציפיים)
+  // מיין כללי תיאור לפי ספציפיות (הכלל הספציפי ביותר קודם):
+  // 1. descriptionEquals קודם ל-descriptionContains/descriptionRegex (התאמה מדויקת > חלקית)
+  // 2. בתוך אותו סוג, תיאור ארוך יותר קודם (ספציפי יותר)
+  // 3. כללים עם מגבלות סכום קודם (יותר תנאים = ספציפי יותר)
+  // 4. כללים עם מגבלות תאריך/מקור/כיוון קודם
   const sortedDescRules = [...descRules].sort((a, b) => {
+    // עדיפות 1: descriptionEquals > descriptionContains/descriptionRegex
+    const aExact = !!a.conditions.descriptionEquals;
+    const bExact = !!b.conditions.descriptionEquals;
+    if (aExact && !bExact) return -1;
+    if (!aExact && bExact) return 1;
+    
+    // עדיפות 2: תיאור ארוך יותר (ספציפי יותר) קודם
+    const aDescLen = (a.conditions.descriptionEquals || a.conditions.descriptionContains || a.conditions.descriptionRegex || '').length;
+    const bDescLen = (b.conditions.descriptionEquals || b.conditions.descriptionContains || b.conditions.descriptionRegex || '').length;
+    if (aDescLen !== bDescLen) return bDescLen - aDescLen; // ארוך יותר קודם
+    
+    // עדיפות 3: כללים עם מגבלות סכום קודם
     const aHasAmount = a.conditions.minAmount !== undefined || a.conditions.maxAmount !== undefined;
     const bHasAmount = b.conditions.minAmount !== undefined || b.conditions.maxAmount !== undefined;
-    if (aHasAmount && !bHasAmount) return -1; // a קודם
-    if (!aHasAmount && bHasAmount) return 1;  // b קודם
+    if (aHasAmount && !bHasAmount) return -1;
+    if (!aHasAmount && bHasAmount) return 1;
+    
+    // עדיפות 4: כללים עם יותר תנאים נוספים (source, direction, dates) קודם
+    const countExtra = (c: CategoryRule['conditions']) => {
+      let n = 0;
+      if (c.source) n++;
+      if (c.direction) n++;
+      if (c.dateFrom) n++;
+      if (c.dateTo) n++;
+      return n;
+    };
+    const aExtra = countExtra(a.conditions);
+    const bExtra = countExtra(b.conditions);
+    if (aExtra !== bExtra) return bExtra - aExtra;
+    
     return 0;
   });
 
@@ -172,15 +231,27 @@ export function applyCategoryRules(details: CreditDetail[], rules: CategoryRule[
 }
 
 // Helper to add simple descriptionEquals rule (used when user applies category to all with same description)
-export async function addDescriptionEqualsRule(dirHandle: FileSystemDirectoryHandle, description: string, category: string): Promise<void> {
-  if (!dirHandle || !description || !category) return;
-  // Load existing rules to avoid duplicates
+export async function addDescriptionEqualsRule(dirHandle: FileSystemDirectoryHandle, description: string, category: string): Promise<RuleChangeResult> {
+  if (!dirHandle || !description || !category) return { action: 'unchanged' };
   const rules = await loadCategoryRules(dirHandle);
-  const exists = rules.some(r => r.conditions.descriptionEquals === description && r.category === category);
-  if (exists) return;
-  const rule = createRule({ category, conditions: { descriptionEquals: description } });
+  const conditions: CategoryRule['conditions'] = { descriptionEquals: description };
+  const existingIdx = findRuleWithSameConditions(rules, conditions);
+  
+  if (existingIdx !== -1) {
+    // כלל קיים עם אותם תנאים
+    if (rules[existingIdx].category === category) return { action: 'unchanged' }; // אותה קטגוריה - אין מה לעדכן
+    // עדכן קטגוריה בכלל קיים
+    const previousCategory = rules[existingIdx].category;
+    const ruleId = rules[existingIdx].id;
+    rules[existingIdx] = { ...rules[existingIdx], category, updatedAt: new Date().toISOString() };
+    await saveCategoryRules(dirHandle, rules);
+    return { action: 'updated', previousCategory, ruleId };
+  }
+  
+  const rule = createRule({ category, conditions });
   rules.push(rule);
   await saveCategoryRules(dirHandle, rules);
+  return { action: 'created', ruleId: rule.id };
 }
 
 // Helper to add single transaction category override rule
@@ -201,8 +272,8 @@ export async function addRuleWithAmountRange(
   category: string,
   minAmount?: number,
   maxAmount?: number
-): Promise<void> {
-  if (!dirHandle || !description || !category) return;
+): Promise<RuleChangeResult> {
+  if (!dirHandle || !description || !category) return { action: 'unchanged' };
   const rules = await loadCategoryRules(dirHandle);
   
   // Build conditions object
@@ -214,36 +285,55 @@ export async function addRuleWithAmountRange(
     conditions.maxAmount = maxAmount;
   }
   
+  const existingIdx = findRuleWithSameConditions(rules, conditions);
+  if (existingIdx !== -1) {
+    if (rules[existingIdx].category === category) return { action: 'unchanged' };
+    const previousCategory = rules[existingIdx].category;
+    const ruleId = rules[existingIdx].id;
+    rules[existingIdx] = { ...rules[existingIdx], category, updatedAt: new Date().toISOString() };
+    await saveCategoryRules(dirHandle, rules);
+    return { action: 'updated', previousCategory, ruleId };
+  }
+  
   const rule = createRule({ category, conditions });
   rules.push(rule);
   await saveCategoryRules(dirHandle, rules);
+  return { action: 'created', ruleId: rule.id };
 }
 
 // Legacy function for backwards compatibility
-export async function addRuleWithAmount(dirHandle: FileSystemDirectoryHandle, description: string, minAmount: number, category: string): Promise<void> {
+export async function addRuleWithAmount(dirHandle: FileSystemDirectoryHandle, description: string, minAmount: number, category: string): Promise<RuleChangeResult> {
   return addRuleWithAmountRange(dirHandle, description, category, minAmount, undefined);
 }
 
 // Helper to add a rule that matches descriptions CONTAINING a search term (regex-based)
-export async function addDescriptionContainsRule(dirHandle: FileSystemDirectoryHandle, searchTerm: string, category: string): Promise<void> {
-  if (!dirHandle || !searchTerm || !category) return;
+export async function addDescriptionContainsRule(dirHandle: FileSystemDirectoryHandle, searchTerm: string, category: string): Promise<RuleChangeResult> {
+  if (!dirHandle || !searchTerm || !category) return { action: 'unchanged' };
   const rules = await loadCategoryRules(dirHandle);
   
   // Escape special regex characters in the search term
   const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regexPattern = escapedTerm; // Simple contains match (case-insensitive is applied in matching)
+  const conditions: CategoryRule['conditions'] = { descriptionRegex: regexPattern };
   
-  // Check if similar rule already exists
-  const exists = rules.some(r => r.conditions.descriptionRegex === regexPattern && r.category === category);
-  if (exists) return;
+  const existingIdx = findRuleWithSameConditions(rules, conditions);
+  if (existingIdx !== -1) {
+    if (rules[existingIdx].category === category) return { action: 'unchanged' };
+    const previousCategory = rules[existingIdx].category;
+    const ruleId = rules[existingIdx].id;
+    rules[existingIdx] = { ...rules[existingIdx], category, updatedAt: new Date().toISOString() };
+    await saveCategoryRules(dirHandle, rules);
+    return { action: 'updated', previousCategory, ruleId };
+  }
   
   const rule = createRule({ 
     category, 
-    conditions: { descriptionRegex: regexPattern },
+    conditions,
     source: 'user'
   });
   rules.push(rule);
   await saveCategoryRules(dirHandle, rules);
+  return { action: 'created', ruleId: rule.id };
 }
 
 // פילטרים מחיפוש גלובלי
@@ -261,8 +351,8 @@ export async function addAdvancedRule(
   filters: SearchFiltersForRule,
   category: string,
   includeDatesInRule?: boolean
-): Promise<void> {
-  if (!dirHandle || !category) return;
+): Promise<RuleChangeResult> {
+  if (!dirHandle || !category) return { action: 'unchanged' };
   
   const rules = await loadCategoryRules(dirHandle);
   
@@ -294,7 +384,17 @@ export async function addAdvancedRule(
   }
   
   // Don't add empty rule
-  if (Object.keys(conditions).length === 0) return;
+  if (Object.keys(conditions).length === 0) return { action: 'unchanged' };
+  
+  const existingIdx = findRuleWithSameConditions(rules, conditions);
+  if (existingIdx !== -1) {
+    if (rules[existingIdx].category === category) return { action: 'unchanged' };
+    const previousCategory = rules[existingIdx].category;
+    const ruleId = rules[existingIdx].id;
+    rules[existingIdx] = { ...rules[existingIdx], category, updatedAt: new Date().toISOString() };
+    await saveCategoryRules(dirHandle, rules);
+    return { action: 'updated', previousCategory, ruleId };
+  }
   
   const rule = createRule({ 
     category, 
@@ -303,6 +403,7 @@ export async function addAdvancedRule(
   });
   rules.push(rule);
   await saveCategoryRules(dirHandle, rules);
+  return { action: 'created', ruleId: rule.id };
 }
 
 // Update an existing rule by ID

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './OnboardingTour.css';
 
 interface TourStep {
@@ -18,19 +18,19 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="date-navigation"]',
     title: '📅 ניווט בין תקופות',
-    content: 'החלף בין תצוגה חודשית לשנתית, והשתמש בחצים כדי לעבור בין חודשים',
+    content: 'החלף בין תצוגה חודשית לשנתית, והשתמש בחצים כדי לעבור בין חודשים או שנים בהתאם לתצוגה',
     position: 'bottom',
   },
   {
     target: '[data-tour="display-mode"]',
     title: '🔍 סינון לפי סוג',
-    content: 'בחר "הכנסות" כדי לראות רק הכנסות, "הוצאות" לראות רק הוצאות, או "הכל" לראות את שניהם',
+    content: 'בחר "הכנסות" כדי לראות רק הכנסות, "הוצאות" כדי לראות רק הוצאות, או "הכל" כדי לראות את שתיהן',
     position: 'bottom',
   },
   {
     target: '[data-tour="category-chart"]',
     title: '📊 גרף קטגוריות',
-    content: 'לחץ על קטגוריה בגרף כדי לראות רק את העסקאות שלה בטבלה למטה',
+    content: 'לחץ על קטגוריה בגרף כדי לראות רק את העסקאות שלה בטבלה',
     position: 'bottom',
   },
   {
@@ -51,10 +51,12 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
   const [currentStep, setCurrentStep] = useState(0);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
 
   const step = TOUR_STEPS[currentStep];
   const isLastStep = currentStep === TOUR_STEPS.length - 1;
   const isFinalTip = step.target === '';
+  const stepNumber = Math.min(TOUR_STEPS.length, Math.max(1, currentStep + 1));
 
   // Calculate tooltip and highlight positions
   const updatePositions = useCallback(() => {
@@ -66,6 +68,14 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
     const element = document.querySelector(step.target);
     if (!element) {
       console.warn(`Tour element not found: ${step.target}`);
+      setHighlightRect(null);
+      const tooltipRect = tooltipRef.current?.getBoundingClientRect();
+      const tooltipWidth = tooltipRect?.width ?? 320;
+      const tooltipHeight = tooltipRect?.height ?? 180;
+      setTooltipPosition({
+        top: Math.max(16, (window.innerHeight - tooltipHeight) / 2),
+        left: Math.max(16, (window.innerWidth - tooltipWidth) / 2),
+      });
       return;
     }
 
@@ -74,8 +84,9 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
 
     // Calculate tooltip position based on step.position
     const padding = 16;
-    const tooltipWidth = 320;
-    const tooltipHeight = 180;
+    const tooltipRect = tooltipRef.current?.getBoundingClientRect();
+    const tooltipWidth = tooltipRect?.width ?? 320;
+    const tooltipHeight = tooltipRect?.height ?? 180;
 
     let top = 0;
     let left = 0;
@@ -122,6 +133,21 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
     }
   }, [isOpen, updatePositions]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setCurrentStep(0);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || isFinalTip || !step.target) return;
+    const element = document.querySelector(step.target);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+    const rafId = window.requestAnimationFrame(() => updatePositions());
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isOpen, step.target, isFinalTip, updatePositions]);
+
   const handleNext = () => {
     if (isLastStep) {
       onComplete();
@@ -159,6 +185,7 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
 
       {/* Tooltip */}
       <div
+        ref={tooltipRef}
         className={`tour-tooltip ${isFinalTip ? 'tour-tooltip-centered' : ''}`}
         style={isFinalTip ? {} : { top: tooltipPosition.top, left: tooltipPosition.left }}
       >
@@ -191,14 +218,14 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
 
           {/* Progress and buttons */}
           <div className="tour-footer">
-            <span className="tour-progress">
-              {currentStep + 1} / {TOUR_STEPS.length}
+            <span className="tour-progress" dir="ltr" key={stepNumber}>
+              {stepNumber} / {TOUR_STEPS.length}
             </span>
             
             <div className="tour-buttons">
               {currentStep > 0 && !isFinalTip && (
                 <button className="tour-btn tour-btn-secondary" onClick={handlePrev}>
-                  הקודם ▶
+                  הקודם
                 </button>
               )}
               
@@ -209,7 +236,7 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onComplete, onS
               )}
               
               <button className="tour-btn tour-btn-primary" onClick={handleNext}>
-                {isLastStep ? 'סיים והתחל! 🚀' : '◀ הבא'}
+                {isLastStep ? 'סיים והתחל! 🚀' : 'הבא'}
               </button>
             </div>
           </div>

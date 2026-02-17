@@ -2,19 +2,22 @@
 
 /* Container */
 .onboarding {
-  min-height: 90vh;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
   background: linear-gradient(145deg, #e8f4fc 0%, #f0f4ff 50%, #faf5ff 100%);
+  box-sizing: border-box;
+  /* Negate #root padding so background fills edge-to-edge */
+  margin: -2rem -1.5rem 0;
+  padding: 20px 1.5rem;
 }
 
 .onboarding-inner {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 28px;
-  padding: 40px 52px;
+  padding: 32px 48px;
   max-width: 820px;
   width: 100%;
   box-shadow: 
@@ -22,7 +25,7 @@
     0 12px 24px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 /* Header */
@@ -265,7 +268,7 @@
 
 .prep-tip {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   background: linear-gradient(145deg, #fefce8 0%, #fef9c3 100%);
   border: 1.5px solid #facc15;
@@ -465,50 +468,6 @@
 .feature-check {
   font-size: 1.1rem;
   flex-shrink: 0;
-}
-
-/* ===== Security Badge ===== */
-.security-badge {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%);
-  border: 1.5px solid #6ee7b7;
-  border-radius: 14px;
-  padding: 14px 20px;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.12);
-}
-
-.security-icon {
-  font-size: 2.2rem;
-  flex-shrink: 0;
-  filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.2));
-}
-
-.security-content {
-  flex: 1;
-}
-
-.security-title {
-  font-weight: 700;
-  font-size: 1rem;
-  color: #047857;
-  margin-bottom: 6px;
-}
-
-.security-points {
-  font-size: 0.88rem;
-  color: #059669;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-weight: 500;
-}
-
-.security-points .dot {
-  color: #6ee7b7;
-  font-size: 1.2em;
 }
 
 /* ===== Loading State ===== */
