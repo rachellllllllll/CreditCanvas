@@ -239,16 +239,18 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
                 <td className="error-message">
                   <strong>{error.errorName || 'Unknown'}</strong>
                   <br />
-                  <span className="message-text">{error.errorMessage}</span>
+                  <span className="message-text">{error.errorMessage || 'No message'}</span>
                 </td>
-                <td className="browser-info">{error.browserInfo}</td>
+                <td className="browser-info">{error.browserInfo || 'Unknown'}</td>
                 <td className="timestamp">
-                  {new Date(error.timestamp).toLocaleString('he-IL', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {error.timestamp ? 
+                    new Date(error.timestamp).toLocaleString('he-IL', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                    : 'No date'}
                 </td>
                 <td className="expand-btn">
                   <button
@@ -270,17 +272,20 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
                       {error.componentStack && (
                         <div className="detail-section">
                           <strong>Component Stack:</strong>
-                          <pre>{error.componentStack.substring(0, 300)}</pre>
+                          <pre>{String(error.componentStack).substring(0, 300)}</pre>
                         </div>
                       )}
-                      <div className="detail-section">
-                        <strong>Full Message:</strong>
-                        <pre>{error.errorMessage}</pre>
-                      </div>
+                      {error.errorMessage && (
+                        <div className="detail-section">
+                          <strong>Full Message:</strong>
+                          <pre>{String(error.errorMessage)}</pre>
+                        </div>
+                      )}
                       <div className="detail-meta">
+                        <span>Type: {error.errorType || 'unknown'}</span>
                         <span>Recoverable: {error.isRecoverable ? '✓' : '✗'}</span>
-                        <span>Visitor: {error.visitorId.substring(0, 8)}...</span>
-                        <span>Created: {new Date(error.createdAt).toLocaleString('he-IL')}</span>
+                        <span>Visitor: {(error.visitorId || 'unknown').substring(0, 8)}...</span>
+                        {error.createdAt && <span>Created: {new Date(error.createdAt).toLocaleString('he-IL')}</span>}
                       </div>
                     </div>
                   </td>

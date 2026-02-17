@@ -110,9 +110,15 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       snapshot.forEach((doc) => {
         const data = doc.data();
         if (data.event === 'console_error') {
+          // Flatten metadata for console_error events
           loadedErrors.push({
             id: doc.id,
-            ...data
+            visitorId: data.visitorId,
+            timestamp: data.timestamp,
+            createdAt: data.createdAt,
+            event: data.event,
+            // Spread metadata fields to top level
+            ...(data.metadata || {}),
           } as ConsoleErrorEvent);
         } else {
           loadedEvents.push({

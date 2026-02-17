@@ -387,6 +387,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
   // Clean up expanded state when activeNames changes to prevent stale DOM entries
   React.useEffect(() => {
+    console.debug('[NewCategoriesTablePrompt] activeNames changed:', activeNames);
     setExpanded(prev => {
       const activeSet = new Set(activeNames);
       const cleaned: Record<string, boolean> = {};
@@ -395,7 +396,11 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           cleaned[name] = isExpanded;
         }
       }
-      return Object.keys(cleaned).length === Object.keys(prev).length ? prev : cleaned;
+      if (Object.keys(cleaned).length !== Object.keys(prev).length) {
+        console.debug('[NewCategoriesTablePrompt] Cleaned expanded state:', prev, '→', cleaned);
+        return cleaned;
+      }
+      return prev;
     });
   }, [activeNames]);
 
@@ -485,6 +490,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   };
 
   const handleConfirm = async () => {
+    console.debug('[NewCategoriesTablePrompt] handleConfirm called with activeNames:', activeNames);
     const mapping: Record<string, CategoryDef> = {};
     const activeSet = new Set(activeNames);
 
@@ -803,6 +809,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     }
     // ואז את כל היתר בשמירה על הסדר המקורי
     for (const n of names) if (!seen.has(n)) { order.push(n); seen.add(n); }
+    console.debug('[NewCategoriesTablePrompt] orderedNames computed:', order);
     return order;
   }, [names, groupsByKey, categoryTransactionCounts]);
 
@@ -896,6 +903,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
   // פונקציה לפתרון קונפליקט - בחירת קטגוריה לבית העסק
   const handleResolveConflict = (merchantName: string, targetCategory: string) => {
+    console.debug('[NewCategoriesTablePrompt] Resolving conflict:', merchantName, '→', targetCategory);
     setResolvedConflicts(prev => ({ ...prev, [merchantName]: targetCategory }));
   };
 
@@ -917,6 +925,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     names.forEach((name, index) => {
       if (!map.has(name)) map.set(name, index);
     });
+    console.debug('[NewCategoriesTablePrompt] stableIndices computed:', map);
     return map;
   }, [names]);
 
@@ -1242,12 +1251,16 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
               </tr>
             </thead>
             <tbody>
-              {orderedNames.filter(name => activeNames.includes(name)).map((name) => {
+              {orderedNames.filter(name => activeNames.includes(name)).flatMap((name) => {
                 const stableIndex = stableIndices.get(name) ?? 0;
                 const stableKey = `${name}-${stableIndex}`;
-                return (
-                  <React.Fragment key={`row-${stableKey}`}>
-                    <tr>
+                const rows: React.ReactNode[] = [];
+                
+                // Debug: log table row generation
+                console.debug('[NewCategoriesTablePrompt] Rendering row for:', name, 'stableKey:', stableKey, 'expanded:', !!expanded[name]);
+                
+                rows.push(
+                  <tr key={`row-${stableKey}`}>
                       <td className="new-cats-table-name">{name}</td>
                       <td className="new-cats-table-count">
                         <span className="transaction-count-badge">{categoryTransactionCounts[name] || 0}</span>
@@ -1402,8 +1415,11 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                         </button>
                       </td>
                     </tr>
-                    {expanded[name] && (
-                      <tr>
+                );
+                
+                if (expanded[name]) {
+                  rows.push(
+                    <tr key={`expanded-${stableKey}`}>
                         <td colSpan={4} className="new-cats-table-details-cell">
                           <div className="new-cats-table-details-wrapper">
                             <table className="new-cats-table-details">
@@ -1458,9 +1474,10 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                           </div>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
+                    );
+                }
+                
+                return rows;
               })}
             </tbody>
           </table>
