@@ -81,12 +81,17 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
     // Top שגיאות (לפי message)
     const messageCounts = new Map<string, number>();
     errors.forEach(e => {
-      messageCounts.set(e.errorMessage, (messageCounts.get(e.errorMessage) || 0) + 1);
+      // Filter out undefined or empty messages
+      const msg = e.errorMessage?.trim();
+      if (msg) {
+        messageCounts.set(msg, (messageCounts.get(msg) || 0) + 1);
+      }
     });
     stats.topErrors = Array.from(messageCounts.entries())
+      .filter(([message]) => message && message.length > 0)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([message, count]) => ({ message, count }));
+      .map(([message, count]) => ({ message: message || 'Unknown error', count }));
 
     return stats;
   }, [errors]);
@@ -162,11 +167,13 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
         <div className="top-errors">
           <h3>🔝 שגיאות תכופות</h3>
           <div className="top-errors-list">
-            {errorStats.topErrors.map((err, idx) => (
-              <div key={idx} className="top-error-item">
-                <span className="top-error-count">{err.count}×</span>
-                <span className="top-error-message">{err.message.substring(0, 80)}</span>
-              </div>
+            {errorStats.topErrors?.length > 0 && errorStats.topErrors.map((err, idx) => (
+              err && err.message ? (
+                <div key={idx} className="top-error-item">
+                  <span className="top-error-count">{err.count}×</span>
+                  <span className="top-error-message">{String(err.message).substring(0, 80)}</span>
+                </div>
+              ) : null
             ))}
           </div>
         </div>

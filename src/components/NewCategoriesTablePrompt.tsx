@@ -137,13 +137,13 @@ const findIdenticalCategories = (
 ): { filteredNames: string[]; autoMerges: AutoMergeInfo[]; mergeMapping: Record<string, string> } => {
   const autoMerges: AutoMergeInfo[] = [];
   const mergeMapping: Record<string, string> = {}; // מקור -> יעד
-  
+
   // בנה מפתח לקטגוריות קיימות (lowercase)
   const existingByLower = new Map<string, CategoryDef>();
   for (const cat of existingCategories) {
     existingByLower.set(cat.name.toLowerCase().trim(), cat);
   }
-  
+
   // קבץ קטגוריות חדשות לפי שם (lowercase)
   const newByLower = new Map<string, string[]>();
   for (const name of names) {
@@ -151,15 +151,15 @@ const findIdenticalCategories = (
     if (!newByLower.has(key)) newByLower.set(key, []);
     newByLower.get(key)!.push(name);
   }
-  
+
   const toRemove = new Set<string>();
   const alreadyMerged = new Set<string>(); // מניעת איחוד כפול
-  
+
   // שלב 1: עבור כל קבוצת שמות זהים
   for (const [lowerKey, variants] of newByLower.entries()) {
     // בדוק אם קיים ב-JSON
     const existingCat = existingByLower.get(lowerKey);
-    
+
     if (existingCat) {
       // סנן רק וריאנטים ששונים מהיעד (אין טעם לאחד קטגוריה עם עצמה)
       const sourcesToMerge = variants.filter(v => v !== existingCat.name);
@@ -208,19 +208,19 @@ const findIdenticalCategories = (
       }
     }
   }
-  
+
   // שלב 2: איחוד קטגוריות דומות לפי מילת מפתח (מזון, תחבורה וכו')
   // קבץ את הקטגוריות שנותרו לפי groupKey
   const remainingNames = names.filter(n => !alreadyMerged.has(n));
   const byGroupKey = new Map<string, string[]>();
-  
+
   for (const name of remainingNames) {
     const groupKey = getGroupKey(name);
     if (!groupKey) continue;
     if (!byGroupKey.has(groupKey)) byGroupKey.set(groupKey, []);
     byGroupKey.get(groupKey)!.push(name);
   }
-  
+
   // לכל קבוצה עם 2+ חברים או התאמה לקטגוריה קיימת
   for (const [groupKey, members] of byGroupKey.entries()) {
     // חפש קטגוריה קיימת ב-JSON שמכילה את המפתח
@@ -231,7 +231,7 @@ const findIdenticalCategories = (
         break;
       }
     }
-    
+
     if (existingTarget) {
       // אחד כל החברים לקטגוריה הקיימת
       const sources = members.filter(m => m !== existingTarget!.name);
@@ -270,7 +270,7 @@ const findIdenticalCategories = (
       }
     }
   }
-  
+
   const filteredNames = names.filter(n => !toRemove.has(n));
   return { filteredNames, autoMerges, mergeMapping };
 };
@@ -280,7 +280,7 @@ const isTransactionCoveredByRule = (tx: CreditDetail, rules: CategoryRule[]): bo
   for (const rule of rules) {
     if (!rule.active) continue;
     const c = rule.conditions;
-    
+
     // בדוק התאמה לתיאור
     if (c.descriptionEquals && tx.description === c.descriptionEquals) return true;
     if (c.descriptionRegex) {
@@ -289,11 +289,11 @@ const isTransactionCoveredByRule = (tx: CreditDetail, rules: CategoryRule[]): bo
         if (regex.test(tx.description)) return true;
       } catch { /* regex invalid */ }
     }
-    
+
     // בדוק התאמה לסכום (אם יש)
     if (c.minAmount !== undefined || c.maxAmount !== undefined) {
       const amount = Math.abs(tx.amount);
-      const matchesAmount = 
+      const matchesAmount =
         (c.minAmount === undefined || amount >= c.minAmount) &&
         (c.maxAmount === undefined || amount <= c.maxAmount);
       if (matchesAmount && (c.descriptionEquals || c.descriptionRegex)) {
@@ -319,21 +319,21 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   }, [names, allDetails]);
 
   // שלב 1: חשב איחודים אוטומטיים של קטגוריות זהות
-  const { filteredNames, autoMerges } = React.useMemo(() => 
-    findIdenticalCategories(names, categoriesList, initialTransactionCounts), 
+  const { filteredNames, autoMerges } = React.useMemo(() =>
+    findIdenticalCategories(names, categoriesList, initialTransactionCounts),
     [names, categoriesList, initialTransactionCounts]
   );
-  
+
   // State לשמירת איחודים שבוצעו (עם אפשרות ביטול)
   const [autoMergedGroups] = useState<AutoMergeInfo[]>(autoMerges);
   const [cancelledMerges, setCancelledMerges] = useState<Set<string>>(new Set());
-  
+
   // מצב תצוגה: 'summary' | 'table' | 'conflicts'
   const [viewMode, setViewMode] = useState<'summary' | 'table' | 'conflicts'>('summary');
-  
+
   // State לפתרון קונפליקטים (מוגדר כאן כדי שיהיה זמין ל-useEffect)
   const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, string>>({});
-  
+
   // שמור את הקטגוריות המקוריות משמורה בנפרד - בשביל הבדיקה אם קטגוריה כבר קיימת בקובץ JSON
   const originalCategoriesRef = React.useRef<Set<string>>(new Set(categoriesList.map(c => c.name)));
 
@@ -346,37 +346,37 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         result.push(...merge.sources);
       }
     }
-    
+
     // הסר קטגוריות חדשות שהמשתמש בחר נגדן בקונפליקטים
     // למשל: "ביגוד" מעולם לא נבחרה כיעד, וסוחרים שלה הועברו ל"אופנה" → מיותרת
     if (Object.keys(resolvedConflicts).length > 0) {
       // אילו קטגוריות נבחרו כיעד בקונפליקטים?
       const chosenTargets = new Set(Object.values(resolvedConflicts));
-      
+
       return result.filter(name => {
         // קטגוריות שכבר קיימות בקובץ — לא מסוננות
         if (originalCategoriesRef.current.has(name)) return true;
-        
+
         // אם הקטגוריה נבחרה כיעד בלפחות קונפליקט אחד — המשתמש רוצה אותה
         if (chosenTargets.has(name)) return true;
-        
+
         // בדוק אם יש סוחרים של הקטגוריה שהועברו לקטגוריות אחרות
         const txs = allDetails.filter(d => d.category === name);
         if (txs.length === 0) return true;
-        
+
         const hasResolvedAwayMerchants = txs.some(tx => {
           const merchant = extractMerchantName(tx.description);
           const resolvedTo = resolvedConflicts[merchant];
           return resolvedTo && resolvedTo !== name;
         });
-        
+
         // אם המשתמש אף פעם לא בחר קטגוריה זו, וסוחרים שלה הועברו → מיותרת
         if (hasResolvedAwayMerchants) return false;
-        
+
         return true;
       });
     }
-    
+
     return result;
   }, [filteredNames, autoMergedGroups, cancelledMerges, resolvedConflicts, allDetails]);
 
@@ -384,6 +384,20 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   const [localCategories, setLocalCategories] = useState<CategoryDef[]>([...categoriesList]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, CategoryDef | null>>(() => Object.fromEntries(names.map(n => [n, null])));
+
+  // Clean up expanded state when activeNames changes to prevent stale DOM entries
+  React.useEffect(() => {
+    setExpanded(prev => {
+      const activeSet = new Set(activeNames);
+      const cleaned: Record<string, boolean> = {};
+      for (const [name, isExpanded] of Object.entries(prev)) {
+        if (activeSet.has(name)) {
+          cleaned[name] = isExpanded;
+        }
+      }
+      return Object.keys(cleaned).length === Object.keys(prev).length ? prev : cleaned;
+    });
+  }, [activeNames]);
 
   // חשב ברירות מחדל לכל קטגוריה חדשה (פעם אחת בלבד)
   const defaultIconsAndColors = React.useMemo(() => {
@@ -410,27 +424,27 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
   // הוסף אוטומטית קטגוריות עם ברירת מחדל ל-localCategories וסמן אותן כנבחרות
   const defaultsAppliedRef = React.useRef(false);
-  
+
   React.useEffect(() => {
     if (defaultsAppliedRef.current) return; // הרץ רק פעם אחת
     defaultsAppliedRef.current = true;
-    
+
     const categoriesToAdd: CategoryDef[] = [];
     const selectionsToUpdate: Record<string, CategoryDef> = {};
-    
+
     names.forEach(name => {
       const defaults = defaultIconsAndColors[name];
       if (defaults?.icon && defaults?.color) {
         const newCat: CategoryDef = { name, icon: defaults.icon, color: defaults.color };
-        
+
         // הוסף לרשימת הקטגוריות החדשות
         categoriesToAdd.push(newCat);
-        
+
         // סמן כנבחרת
         selectionsToUpdate[name] = newCat;
       }
     });
-    
+
     if (categoriesToAdd.length > 0) {
       setLocalCategories(prev => {
         // הוסף רק קטגוריות שעדיין לא קיימות
@@ -438,7 +452,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         return [...prev, ...newCats];
       });
     }
-    
+
     if (Object.keys(selectionsToUpdate).length > 0) {
       setSelectedCats(prev => {
         // עדכן רק אם עדיין לא נבחרה קטגוריה
@@ -473,11 +487,11 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   const handleConfirm = async () => {
     const mapping: Record<string, CategoryDef> = {};
     const activeSet = new Set(activeNames);
-    
+
     names.forEach(n => {
       // דלג על קטגוריות שהוסרו (נפתרו בקונפליקטים לקטגוריה אחרת)
       if (!activeSet.has(n) && !originalCategoriesRef.current.has(n)) return;
-      
+
       const chosen = selectedCats[n] || drafts[n];
       if (chosen) {
         mapping[n] = chosen;
@@ -495,14 +509,14 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         }
       }
     });
-    
+
     // עבור קטגוריות שהוסרו כי נפתרו בקונפליקטים - מפה אותן לקטגוריה הדומיננטית (כ-alias)
     if (Object.keys(resolvedConflicts).length > 0) {
       for (const name of names) {
         if (activeSet.has(name)) continue; // עדיין פעילה בטבלה — לא לגעת
         if (originalCategoriesRef.current.has(name)) continue; // כבר קיימת בקובץ
         if (mapping[name]) continue; // כבר טופלה
-        
+
         // חפש את הקטגוריה שקיבלה הכי הרבה סוחרים מהקטגוריה הזו
         const txs = allDetails.filter(d => d.category === name);
         const targetCounts: Record<string, number> = {};
@@ -524,7 +538,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         }
       }
     }
-    
+
     // שלח את הקונפליקטים שנפתרו (בית עסק -> קטגוריה שנבחרה)
     // חשוב: ממתינים לסיום השמירה לפני סגירת הדיאלוג כדי שהכללים יישמרו לדיסק
     // סנן סוחרים שה-alias כבר מטפל בהם — אין צורך בכלל סוחר כפול
@@ -536,7 +550,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           aliasResolution[excelName] = catDef.name;
         }
       }
-      
+
       // סנן: שמור רק סוחרים שה-alias לא מכסה
       // לכל סוחר, בדוק את כל הקטגוריות שהוא מופיע בהן
       const filteredConflicts: Record<string, string> = {};
@@ -548,7 +562,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             merchantCategories.add(d.category);
           }
         }
-        
+
         // בדוק אם כל הקטגוריות של הסוחר מגיעות ליעד דרך alias או שהן כבר היעד
         let aliasCoversAll = true;
         for (const cat of merchantCategories) {
@@ -558,17 +572,17 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             break;
           }
         }
-        
+
         if (!aliasCoversAll) {
           filteredConflicts[merchant] = target; // ה-alias לא מכסה — צריך כלל סוחר
         }
       }
-      
+
       if (Object.keys(filteredConflicts).length > 0) {
         await onConflictsResolved(filteredConflicts);
       }
     }
-    
+
     onConfirm(mapping);
   };
 
@@ -600,7 +614,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       if (selectedCats[n]) return;
       // קטגוריות שכבר קיימות בקובץ לא צריכות דיפולט
       if (originalCategoriesRef.current.has(n)) return;
-      
+
       if (drafts[n]) draftCount += 1;
       const d = defaultIconsAndColors[n];
       const hasDefaults = !!(d?.icon && d?.color);
@@ -652,29 +666,29 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   const merchantOverlapSuggestions = React.useMemo(() => {
     const OVERLAP_THRESHOLD = 0.25; // סף חפיפה מינימלי (25%)
     const suggestions: Record<string, { target: string; overlap: number; sharedMerchants: string[] }> = {};
-    
+
     // בדוק כל זוג קטגוריות
     for (let i = 0; i < names.length; i++) {
       const cat1 = names[i];
       const merchants1 = merchantsByCategory[cat1];
       if (merchants1.size < 2) continue; // צריך לפחות 2 בתי עסק
-      
+
       let bestMatch: { target: string; overlap: number; sharedMerchants: string[] } | null = null;
-      
+
       // בדוק מול קטגוריות אחרות ברשימה
       for (let j = 0; j < names.length; j++) {
         if (i === j) continue;
         const cat2 = names[j];
         const merchants2 = merchantsByCategory[cat2];
         if (merchants2.size < 2) continue;
-        
+
         const { overlap, shared } = calculateMerchantOverlap(merchants1, merchants2);
-        
+
         if (overlap >= OVERLAP_THRESHOLD && shared.length >= 2) {
           // העדף את הקטגוריה עם יותר עסקאות כיעד
           const count1 = categoryTransactionCounts[cat1] || 0;
           const count2 = categoryTransactionCounts[cat2] || 0;
-          
+
           if (count2 > count1 || (count2 === count1 && cat2.length < cat1.length)) {
             if (!bestMatch || overlap > bestMatch.overlap) {
               bestMatch = { target: cat2, overlap, sharedMerchants: shared };
@@ -682,11 +696,11 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           }
         }
       }
-      
+
       // בדוק גם מול קטגוריות קיימות (מ-JSON)
       for (const existingCat of categoriesList) {
         if (names.includes(existingCat.name)) continue; // כבר בדקנו
-        
+
         // חשב בתי עסק לקטגוריה הקיימת
         const existingMerchants = new Set<string>();
         for (const tx of allDetails) {
@@ -697,23 +711,23 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             }
           }
         }
-        
+
         if (existingMerchants.size < 2) continue;
-        
+
         const { overlap, shared } = calculateMerchantOverlap(merchants1, existingMerchants);
-        
+
         if (overlap >= OVERLAP_THRESHOLD && shared.length >= 2) {
           if (!bestMatch || overlap > bestMatch.overlap) {
             bestMatch = { target: existingCat.name, overlap, sharedMerchants: shared };
           }
         }
       }
-      
+
       if (bestMatch) {
         suggestions[cat1] = bestMatch;
       }
     }
-    
+
     return suggestions;
   }, [names, merchantsByCategory, categoryTransactionCounts, categoriesList, allDetails]);
 
@@ -749,10 +763,10 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         suggestions[key] = existingCandidates[0];
         continue;
       }
-      
+
       // אם אין קטגוריה משמורת, בחר מבין החברים רק אם יש 2+ קטגוריות חדשות בקבוצה
       if (members.length < 2) continue; // רק קבוצות עם 2+ חברים חדשים
-      
+
       let best = '';
       let bestCount = -1;
       for (const m of members) {
@@ -761,7 +775,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           best = m; bestCount = cnt;
         }
       }
-      
+
       suggestions[key] = best;
     }
     return suggestions;
@@ -798,49 +812,49 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   // 2. אם העסקה מכוסה על ידי כלל קטגוריה - המשתמש החליט על הסיווג
   const merchantConflicts = React.useMemo(() => {
     const merchantToCategories = new Map<string, Map<string, number>>(); // merchant -> category -> count
-    
+
     for (const tx of allDetails) {
       // דלג על עסקאות שיש להן כלל קטגוריה - המשתמש החליט על הסיווג
       if (isTransactionCoveredByRule(tx, categoryRules)) continue;
-      
+
       const merchant = extractMerchantName(tx.description);
       const category = tx.category || '';
       if (!merchant || merchant.length <= 2 || !category) continue;
-      
+
       if (!merchantToCategories.has(merchant)) {
         merchantToCategories.set(merchant, new Map());
       }
       const catMap = merchantToCategories.get(merchant)!;
       catMap.set(category, (catMap.get(category) || 0) + 1);
     }
-    
+
     const conflicts: MerchantConflict[] = [];
     for (const [merchant, catMap] of merchantToCategories.entries()) {
       if (catMap.size <= 1) continue; // אין קונפליקט
-      
+
       const categories = Array.from(catMap.keys());
-      
+
       // בדוק אם כל הקטגוריות שייכות לאותה קבוצה (יתאחדו ממילא)
       // אבל רק אם אין קטגוריה שאוחדה אוטומטית - אחרת המשתמש צריך לראות את הקונפליקט
       const groupKeys = categories.map(c => getGroupKey(c));
       const uniqueGroups = new Set(groupKeys.filter(k => k !== null));
       if (uniqueGroups.size === 1 && groupKeys.filter(k => k !== null).length === categories.length) {
         // בדוק אם אחת הקטגוריות אוחדה אוטומטית - אם כן, הצג קונפליקט
-        const hasAutoMergedCategory = categories.some(c => 
+        const hasAutoMergedCategory = categories.some(c =>
           autoMergedGroups.some(m => !cancelledMerges.has(m.target) && m.sources.includes(c))
         );
         if (!hasAutoMergedCategory) {
           continue; // דלג - הקטגוריות יתאחדו ממילא ואין עניין
         }
       }
-      
+
       const transactionCounts: Record<string, number> = {};
       let total = 0;
       for (const [cat, count] of catMap.entries()) {
         transactionCounts[cat] = count;
         total += count;
       }
-      
+
       // רק קונפליקטים עם לפחות 3 עסקאות בסך הכל
       if (total >= 3) {
         conflicts.push({
@@ -851,7 +865,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         });
       }
     }
-    
+
     // מיין לפי סה"כ עסקאות
     conflicts.sort((a, b) => b.totalTransactions - a.totalTransactions);
     return conflicts;
@@ -864,7 +878,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     const autoMergedCount = autoMergedGroups.filter(m => !cancelledMerges.has(m.target)).length;
     const conflictsCount = merchantConflicts.filter(c => !resolvedConflicts[c.merchantName]).length;
     const newCategories = activeNames.filter(n => !originalCategoriesRef.current.has(n)).length;
-    
+
     return {
       totalTransactions,
       recognizedCategories,
@@ -894,18 +908,17 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       autoConfirmedRef.current = true;
       handleConfirm();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasNothingToShow]);
 
   // Create a stable mapping of names to consistent indices to prevent DOM reconciliation issues
   const stableIndices = React.useMemo(() => {
     const map = new Map<string, number>();
-    const orderedFiltered = orderedNames.filter(name => activeNames.includes(name));
-    orderedFiltered.forEach((name, index) => {
-      map.set(name, index);
+    names.forEach((name, index) => {
+      if (!map.has(name)) map.set(name, index);
     });
     return map;
-  }, [orderedNames, activeNames]);
+  }, [names]);
 
   if (viewMode === 'summary') {
     return (
@@ -918,7 +931,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             </div>
             <div className={`progress-line ${summaryStats.conflictsCount === 0 ? 'completed' : ''}`}></div>
             <div className="progress-step-wrapper">
-              <div 
+              <div
                 className={`progress-step ${summaryStats.conflictsCount === 0 ? 'completed' : ''}`}
                 onClick={() => summaryStats.conflictsCount > 0 && setViewMode('conflicts')}
                 style={{ cursor: summaryStats.conflictsCount > 0 ? 'pointer' : 'default' }}
@@ -930,7 +943,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             </div>
             <div className="progress-line"></div>
             <div className="progress-step-wrapper">
-              <div 
+              <div
                 className="progress-step"
                 onClick={() => activeNames.length > 0 && setViewMode('table')}
                 style={{ cursor: activeNames.length > 0 ? 'pointer' : 'default' }}
@@ -947,7 +960,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           <p className="new-cats-subtitle">
             נמצאו <strong>{summaryStats.totalTransactions}</strong> עסקאות בקבצי האשראי
           </p>
-          
+
           <div className="summary-steps">
             <div className="summary-step completed">
               <span className="step-icon">✅</span>
@@ -964,7 +977,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                 </ul>
               </div>
             </div>
-            
+
             {summaryStats.conflictsCount > 0 && (
               <div className="summary-step warning">
                 <span className="step-icon">⚠️</span>
@@ -992,7 +1005,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                     <span className="merge-sources">{merge.sources.join(', ')}</span>
                     <span className="merge-arrow">→</span>
                     <span className="merge-target">{merge.target}</span>
-                    <button 
+                    <button
                       className="undo-merge-btn"
                       onClick={() => handleUndoMerge(merge)}
                       title={merge.type === 'identical' ? 'בטל איחוד (שמות זהים)' : 'בטל איחוד (שמות דומים)'}
@@ -1007,21 +1020,21 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
           <div className="summary-actions">
             {summaryStats.conflictsCount > 0 ? (
-              <button 
+              <button
                 className="new-cats-confirm-btn"
                 onClick={() => setViewMode('conflicts')}
               >
                 המשך לפתרון {summaryStats.conflictsCount} קונפליקטים
               </button>
             ) : activeNames.length > 0 ? (
-              <button 
+              <button
                 className="new-cats-confirm-btn"
                 onClick={() => setViewMode('table')}
               >
                 המשך להגדרת {activeNames.length} קטגוריות
               </button>
             ) : (
-              <button 
+              <button
                 className="new-cats-confirm-btn"
                 onClick={handleConfirm}
               >
@@ -1030,7 +1043,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             )}
             <button className="new-cats-cancel-btn" onClick={onCancel}>דלג לעכשיו</button>
           </div>
-          
+
           <p className="summary-tip">
             ⚡ טיפ: תמיד תוכל לשנות קטגוריות אחר כך
           </p>
@@ -1042,7 +1055,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   // מסך קונפליקטים של בתי עסק
   if (viewMode === 'conflicts' && merchantConflicts.length > 0) {
     const unresolvedConflicts = merchantConflicts.filter(c => !resolvedConflicts[c.merchantName]);
-    
+
     // אם כל הקונפליקטים נפתרו - הצג הודעה וכפתור המשך
     if (unresolvedConflicts.length === 0) {
       return (
@@ -1051,14 +1064,14 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             <h3 className="new-cats-title">✅ כל הקונפליקטים נפתרו!</h3>
             <div className="summary-actions">
               {activeNames.length > 0 ? (
-                <button 
+                <button
                   className="new-cats-confirm-btn"
                   onClick={() => setViewMode('table')}
                 >
                   המשך להגדרת {activeNames.length} קטגוריות
                 </button>
               ) : (
-                <button 
+                <button
                   className="new-cats-confirm-btn"
                   onClick={handleConfirm}
                 >
@@ -1070,13 +1083,13 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         </div>
       );
     }
-    
+
     return (
       <div className="new-cats-overlay">
         <div className="new-cats-dialog new-cats-conflicts">
           <div className="progress-indicator">
             <div className="progress-step-wrapper">
-              <div 
+              <div
                 className="progress-step completed"
                 onClick={() => setViewMode('summary')}
                 style={{ cursor: 'pointer' }}
@@ -1091,7 +1104,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             </div>
             <div className="progress-line"></div>
             <div className="progress-step-wrapper">
-              <div 
+              <div
                 className="progress-step"
                 onClick={() => setViewMode('table')}
                 style={{ cursor: 'pointer' }}
@@ -1106,7 +1119,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           <p className="new-cats-subtitle">
             בתי העסק הבאים מופיעים בקטגוריות שונות. בחר לאיזו קטגוריה לשייך כל אחד:
           </p>
-          
+
           <div className="conflicts-list">
             {unresolvedConflicts.map((conflict) => (
               <div key={conflict.merchantName} className="conflict-card">
@@ -1123,7 +1136,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                       <button
                         key={cat}
                         className="conflict-option-btn"
-                        style={{ 
+                        style={{
                           backgroundColor: catDef?.color || '#e5e7eb',
                           color: textColor
                         }}
@@ -1142,14 +1155,14 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           <div className="new-cats-btns-row">
             <button className="new-cats-cancel-btn" onClick={() => setViewMode('summary')}>חזור</button>
             {activeNames.length > 0 ? (
-              <button 
+              <button
                 className="new-cats-confirm-btn"
                 onClick={() => setViewMode('table')}
               >
                 המשך להגדרת קטגוריות ({activeNames.length})
               </button>
             ) : (
-              <button 
+              <button
                 className="new-cats-confirm-btn"
                 onClick={handleConfirm}
               >
@@ -1170,7 +1183,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         <div className="new-cats-dialog">
           <h3 className="new-cats-title">✅ אין קטגוריות חדשות להגדרה</h3>
           <div className="summary-actions">
-            <button 
+            <button
               className="new-cats-confirm-btn"
               onClick={handleConfirm}
             >
@@ -1187,7 +1200,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       <div className="new-cats-dialog">
         <div className="progress-indicator">
           <div className="progress-step-wrapper">
-            <div 
+            <div
               className="progress-step completed"
               onClick={() => setViewMode('summary')}
               style={{ cursor: 'pointer' }}
@@ -1197,7 +1210,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           </div>
           <div className="progress-line completed"></div>
           <div className="progress-step-wrapper">
-            <div 
+            <div
               className="progress-step completed"
               onClick={() => summaryStats.conflictsCount > 0 && setViewMode('conflicts')}
               style={{ cursor: summaryStats.conflictsCount > 0 ? 'pointer' : 'default' }}
@@ -1231,8 +1244,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             <tbody>
               {orderedNames.filter(name => activeNames.includes(name)).map((name) => {
                 const stableIndex = stableIndices.get(name) ?? 0;
+                const stableKey = `${name}-${stableIndex}`;
                 return (
-                  <React.Fragment key={`row-${stableIndex}`}>
+                  <React.Fragment key={`row-${stableKey}`}>
                     <tr>
                       <td className="new-cats-table-name">{name}</td>
                       <td className="new-cats-table-count">
@@ -1244,207 +1258,207 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                       <td className="new-cats-table-select">
                         <div className="selector-and-suggest">
                           <CategorySelectOrAdd
-                            key={`category-select-${stableIndex}`}
-                          categories={localCategories}
-                          value={selectedCats[name]?.name || name}
-                          onChange={catName => handleCategoryChange(name, catName)}
-                          onAddCategory={cat => handleAddCategory(name, cat)}
-                          allowAdd={true}
-                          placeholder={name}
-                          defaultIcon={defaultIconsAndColors[name]?.icon}
-                          defaultColor={defaultIconsAndColors[name]?.color}
-                          recommendedIcons={defaultIconsAndColors[name]?.recommendedIcons}
-                          previewVisibility="afterAdd"
-                          showDefaultChipIfProvided={Boolean(defaultIconsAndColors[name]?.icon || defaultIconsAndColors[name]?.color)}
-                          onDraftChange={d => setDrafts(prev => ({ ...prev, [name]: d ? { name: d.name, icon: d.icon, color: d.color } : null }))}
-                        />
-                        {(() => {
-                          const key = nameGroupKeyMap[name];
-                          const members = key ? groupsByKey[key] : undefined;
-                          // הצג הצעה גם אם יש רק חבר אחד, כאשר קיימת התאמה לקטגוריה משמורת (JSON)
-                          if (!key || !members) return null;
-                          const suggested = groupSuggestedTargets[key];
-                          if (!suggested) return null;
-                          // אל תציע מיזוג לעצמו
-                          if (suggested === name) return null;
-                          const isFromOriginalJson = originalCategoriesRef.current.has(suggested);
-                          // אם אין התאמה לקטגוריה משמורת, דרוש לפחות 2 חברים בקבוצה כדי להציע יצירה/איחוד
-                          if (!isFromOriginalJson && members.length < 2) return null;
-                          const alreadySelected = selectedCats[name]?.name === suggested;
-                          
-                          // אם הציעור קטגוריה משמורת (מ-JSON) - הציע מיזוג
-                          // אם הציעור קטגוריה חדשה - הציע יצירה וברירה
-                          return (
-                            <div className="merge-suggestion" aria-live="polite">
-                              <span className="merge-label">דומה ל:</span>
-                              {(() => {
-                                // מצא הגדרה להצגת שבב של היעד המוצע
-                                // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך ב-categoriesList, ורק בסוף השתמש ב-defaults
-                                const existingInLocal = localCategories.find(c => c.name === suggested);
-                                const existingInOriginal = categoriesList.find(c => c.name === suggested);
-                                const defaults = defaultIconsAndColors[suggested];
-                                const srcCat = existingInLocal 
-                                  || existingInOriginal 
-                                  || (defaults?.icon ? { name: suggested, icon: defaults.icon, color: defaults.color } : { name: suggested, icon: '📁', color: '#e5e7eb' });
-                                const textColor = getReadableTextColor(srcCat.color || '#e5e7eb');
-                                return (
-                                  <span
-                                    className="CategorySelectOrAdd-chip final disabled"
-                                    style={{ backgroundColor: srcCat.color, color: textColor }}
-                                    title={`יעד מוצע: ${suggested}`}
-                                    aria-disabled="true"
-                                  >
-                                    <span className="CategorySelectOrAdd-chip-icon">{srcCat.icon}</span>
-                                    <span className="CategorySelectOrAdd-chip-label">{suggested}</span>
-                                  </span>
-                                );
-                              })()}
-                              <button
-                                className="merge-btn"
-                                disabled={alreadySelected}
-                                onClick={() => {
-                                  if (isFromOriginalJson) {
-                                    handleCategoryChange(name, suggested);
-                                  } else {
-                                    // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך השתמש ב-defaults
-                                    const existingInLocal = localCategories.find(c => c.name === suggested);
-                                    const defaults = defaultIconsAndColors[suggested];
-                                    const icon = existingInLocal?.icon || defaults?.icon || '';
-                                    const color = existingInLocal?.color || defaults?.color || '';
-                                    handleAddCategory(name, { name: suggested, icon, color });
-                                  }
-                                }}
-                                title={isFromOriginalJson ? `מזג ל־"${suggested}" (קיימת בקובץ)` : `צור את "${suggested}" ובחר`}
-                                aria-label={isFromOriginalJson ? `מזג ל־${suggested}` : `צור ${suggested} ובחר`}
-                              >
-                                {isFromOriginalJson ? 'אחד' : 'צור ובחר'}
-                              </button>
-                            </div>
-                          );
-                        })()}
-                        {/* הצעת איחוד מבוססת חפיפת בתי עסק */}
-                        {(() => {
-                          const merchantSuggestion = merchantOverlapSuggestions[name];
-                          if (!merchantSuggestion) return null;
-                          // אל תציג אם כבר יש הצעה מבוססת שם זהה
-                          const nameSuggested = nameGroupKeyMap[name] ? groupSuggestedTargets[nameGroupKeyMap[name]!] : null;
-                          if (nameSuggested === merchantSuggestion.target) return null;
-                          // אל תציג אם כבר נבחרה הקטגוריה המוצעת
-                          if (selectedCats[name]?.name === merchantSuggestion.target) return null;
-                          
-                          const isFromOriginalJson = originalCategoriesRef.current.has(merchantSuggestion.target);
-                          const overlapPercent = Math.round(merchantSuggestion.overlap * 100);
-                          
-                          // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך ב-categoriesList, ורק בסוף השתמש ב-defaults
-                          const existingInLocal = localCategories.find(c => c.name === merchantSuggestion.target);
-                          const existingInOriginal = categoriesList.find(c => c.name === merchantSuggestion.target);
-                          const defaults = defaultIconsAndColors[merchantSuggestion.target];
-                          const srcCat = existingInLocal 
-                            || existingInOriginal 
-                            || (defaults?.icon 
-                              ? { name: merchantSuggestion.target, icon: defaults.icon, color: defaults.color } 
-                              : { name: merchantSuggestion.target, icon: '📁', color: '#e5e7eb' });
-                          const textColor = getReadableTextColor(srcCat.color || '#e5e7eb');
-                          
-                          return (
-                            <div className="merge-suggestion merchant-based" aria-live="polite">
-                              <span className="merge-label" title={`בתי עסק משותפים: ${merchantSuggestion.sharedMerchants.slice(0, 5).join(', ')}`}>
-                                🏪 {overlapPercent}% חפיפה:
-                              </span>
-                              <span
-                                className="CategorySelectOrAdd-chip final disabled"
-                                style={{ backgroundColor: srcCat.color, color: textColor }}
-                                title={`יעד מוצע: ${merchantSuggestion.target} (${merchantSuggestion.sharedMerchants.length} בתי עסק משותפים)`}
-                                aria-disabled="true"
-                              >
-                                <span className="CategorySelectOrAdd-chip-icon">{srcCat.icon}</span>
-                                <span className="CategorySelectOrAdd-chip-label">{merchantSuggestion.target}</span>
-                              </span>
-                              <button
-                                className="merge-btn"
-                                onClick={() => {
-                                  if (isFromOriginalJson) {
-                                    handleCategoryChange(name, merchantSuggestion.target);
-                                  } else {
-                                    // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך השתמש ב-defaults
-                                    const icon = existingInLocal?.icon || defaults?.icon || '';
-                                    const color = existingInLocal?.color || defaults?.color || '';
-                                    handleAddCategory(name, { name: merchantSuggestion.target, icon, color });
-                                  }
-                                }}
-                                title={`${merchantSuggestion.sharedMerchants.slice(0, 5).join(', ')}${merchantSuggestion.sharedMerchants.length > 5 ? '...' : ''}`}
-                                aria-label={`מזג ל־${merchantSuggestion.target} (${overlapPercent}% חפיפה בבתי עסק)`}
-                              >
-                                אחד
-                              </button>
-                            </div>
-                          );
-                        })()}
-                        </div>
-                    </td>
-                    <td className="new-cats-table-expand">
-                      <button className="new-cats-table-expand-btn" onClick={() => setExpanded(e => ({ ...e, [name]: !e[name] }))}>
-                        {expanded[name] ? '▲' : '▼'}
-                      </button>
-                    </td>
-                  </tr>
-                  {expanded[name] && (
-                    <tr>
-                      <td colSpan={4} className="new-cats-table-details-cell">
-                        <div className="new-cats-table-details-wrapper">
-                          <table className="new-cats-table-details">
-                            <thead>
-                              <tr>
-                                <th>תאריך</th>
-                                <th>תיאור</th>
-                                <th>סכום</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {((detailsByName[name] || []).slice(0, 10)).map((tx, idx) => (
-                                <tr key={tx.id + idx}>
-                                  <td>{tx.date}</td>
-                                  <td>{tx.description}</td>
-                                  <td>₪{tx.amount.toLocaleString()}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                            key={`category-select-${stableKey}`}
+                            categories={localCategories}
+                            value={selectedCats[name]?.name || name}
+                            onChange={catName => handleCategoryChange(name, catName)}
+                            onAddCategory={cat => handleAddCategory(name, cat)}
+                            allowAdd={true}
+                            placeholder={name}
+                            defaultIcon={defaultIconsAndColors[name]?.icon}
+                            defaultColor={defaultIconsAndColors[name]?.color}
+                            recommendedIcons={defaultIconsAndColors[name]?.recommendedIcons}
+                            previewVisibility="afterAdd"
+                            showDefaultChipIfProvided={Boolean(defaultIconsAndColors[name]?.icon || defaultIconsAndColors[name]?.color)}
+                            onDraftChange={d => setDrafts(prev => ({ ...prev, [name]: d ? { name: d.name, icon: d.icon, color: d.color } : null }))}
+                          />
                           {(() => {
                             const key = nameGroupKeyMap[name];
                             const members = key ? groupsByKey[key] : undefined;
-                            if (!key || !members || members.length < 2) return null;
-                            const cols = members.slice(0, 3); // הגבלה ל-3 עמודות להשוואה מהירה
+                            // הצג הצעה גם אם יש רק חבר אחד, כאשר קיימת התאמה לקטגוריה משמורת (JSON)
+                            if (!key || !members) return null;
+                            const suggested = groupSuggestedTargets[key];
+                            if (!suggested) return null;
+                            // אל תציע מיזוג לעצמו
+                            if (suggested === name) return null;
+                            const isFromOriginalJson = originalCategoriesRef.current.has(suggested);
+                            // אם אין התאמה לקטגוריה משמורת, דרוש לפחות 2 חברים בקבוצה כדי להציע יצירה/איחוד
+                            if (!isFromOriginalJson && members.length < 2) return null;
+                            const alreadySelected = selectedCats[name]?.name === suggested;
+
+                            // אם הציעור קטגוריה משמורת (מ-JSON) - הציע מיזוג
+                            // אם הציעור קטגוריה חדשה - הציע יצירה וברירה
                             return (
-                              <div className="group-compare" aria-label="השוואת עסקאות בקבוצה">
-                                {cols.map(colName => (
-                                  <div key={colName} className="group-compare-col">
-                                    <div className="group-compare-title">
-                                      {colName} <span className="group-compare-count">({categoryTransactionCounts[colName] || 0})</span>
-                                    </div>
-                                    <ul className="group-compare-list">
-                                      {(detailsByName[colName] || []).slice(0,5).map((tx, idx) => (
-                                        <li key={tx.id + idx}>
-                                          <span className="date">{tx.date}</span>
-                                          <span className="desc">{tx.description}</span>
-                                          <span className="amt">₪{tx.amount.toLocaleString()}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ))}
+                              <div className="merge-suggestion" aria-live="polite">
+                                <span className="merge-label">דומה ל:</span>
+                                {(() => {
+                                  // מצא הגדרה להצגת שבב של היעד המוצע
+                                  // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך ב-categoriesList, ורק בסוף השתמש ב-defaults
+                                  const existingInLocal = localCategories.find(c => c.name === suggested);
+                                  const existingInOriginal = categoriesList.find(c => c.name === suggested);
+                                  const defaults = defaultIconsAndColors[suggested];
+                                  const srcCat = existingInLocal
+                                    || existingInOriginal
+                                    || (defaults?.icon ? { name: suggested, icon: defaults.icon, color: defaults.color } : { name: suggested, icon: '📁', color: '#e5e7eb' });
+                                  const textColor = getReadableTextColor(srcCat.color || '#e5e7eb');
+                                  return (
+                                    <span
+                                      className="CategorySelectOrAdd-chip final disabled"
+                                      style={{ backgroundColor: srcCat.color, color: textColor }}
+                                      title={`יעד מוצע: ${suggested}`}
+                                      aria-disabled="true"
+                                    >
+                                      <span className="CategorySelectOrAdd-chip-icon">{srcCat.icon}</span>
+                                      <span className="CategorySelectOrAdd-chip-label">{suggested}</span>
+                                    </span>
+                                  );
+                                })()}
+                                <button
+                                  className="merge-btn"
+                                  disabled={alreadySelected}
+                                  onClick={() => {
+                                    if (isFromOriginalJson) {
+                                      handleCategoryChange(name, suggested);
+                                    } else {
+                                      // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך השתמש ב-defaults
+                                      const existingInLocal = localCategories.find(c => c.name === suggested);
+                                      const defaults = defaultIconsAndColors[suggested];
+                                      const icon = existingInLocal?.icon || defaults?.icon || '';
+                                      const color = existingInLocal?.color || defaults?.color || '';
+                                      handleAddCategory(name, { name: suggested, icon, color });
+                                    }
+                                  }}
+                                  title={isFromOriginalJson ? `מזג ל־"${suggested}" (קיימת בקובץ)` : `צור את "${suggested}" ובחר`}
+                                  aria-label={isFromOriginalJson ? `מזג ל־${suggested}` : `צור ${suggested} ובחר`}
+                                >
+                                  {isFromOriginalJson ? 'אחד' : 'צור ובחר'}
+                                </button>
                               </div>
                             );
                           })()}
-                          {categoryTransactionCounts[name] > 10 && (
-                            <div className="details-more">
-                              ועוד {categoryTransactionCounts[name] - 10} עסקאות...
-                            </div>
-                          )}
+                          {/* הצעת איחוד מבוססת חפיפת בתי עסק */}
+                          {(() => {
+                            const merchantSuggestion = merchantOverlapSuggestions[name];
+                            if (!merchantSuggestion) return null;
+                            // אל תציג אם כבר יש הצעה מבוססת שם זהה
+                            const nameSuggested = nameGroupKeyMap[name] ? groupSuggestedTargets[nameGroupKeyMap[name]!] : null;
+                            if (nameSuggested === merchantSuggestion.target) return null;
+                            // אל תציג אם כבר נבחרה הקטגוריה המוצעת
+                            if (selectedCats[name]?.name === merchantSuggestion.target) return null;
+
+                            const isFromOriginalJson = originalCategoriesRef.current.has(merchantSuggestion.target);
+                            const overlapPercent = Math.round(merchantSuggestion.overlap * 100);
+
+                            // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך ב-categoriesList, ורק בסוף השתמש ב-defaults
+                            const existingInLocal = localCategories.find(c => c.name === merchantSuggestion.target);
+                            const existingInOriginal = categoriesList.find(c => c.name === merchantSuggestion.target);
+                            const defaults = defaultIconsAndColors[merchantSuggestion.target];
+                            const srcCat = existingInLocal
+                              || existingInOriginal
+                              || (defaults?.icon
+                                ? { name: merchantSuggestion.target, icon: defaults.icon, color: defaults.color }
+                                : { name: merchantSuggestion.target, icon: '📁', color: '#e5e7eb' });
+                            const textColor = getReadableTextColor(srcCat.color || '#e5e7eb');
+
+                            return (
+                              <div className="merge-suggestion merchant-based" aria-live="polite">
+                                <span className="merge-label" title={`בתי עסק משותפים: ${merchantSuggestion.sharedMerchants.slice(0, 5).join(', ')}`}>
+                                  🏪 {overlapPercent}% חפיפה:
+                                </span>
+                                <span
+                                  className="CategorySelectOrAdd-chip final disabled"
+                                  style={{ backgroundColor: srcCat.color, color: textColor }}
+                                  title={`יעד מוצע: ${merchantSuggestion.target} (${merchantSuggestion.sharedMerchants.length} בתי עסק משותפים)`}
+                                  aria-disabled="true"
+                                >
+                                  <span className="CategorySelectOrAdd-chip-icon">{srcCat.icon}</span>
+                                  <span className="CategorySelectOrAdd-chip-label">{merchantSuggestion.target}</span>
+                                </span>
+                                <button
+                                  className="merge-btn"
+                                  onClick={() => {
+                                    if (isFromOriginalJson) {
+                                      handleCategoryChange(name, merchantSuggestion.target);
+                                    } else {
+                                      // קודם חפש ב-localCategories (שמכילה עדכונים שהמשתמש עשה), אחר כך השתמש ב-defaults
+                                      const icon = existingInLocal?.icon || defaults?.icon || '';
+                                      const color = existingInLocal?.color || defaults?.color || '';
+                                      handleAddCategory(name, { name: merchantSuggestion.target, icon, color });
+                                    }
+                                  }}
+                                  title={`${merchantSuggestion.sharedMerchants.slice(0, 5).join(', ')}${merchantSuggestion.sharedMerchants.length > 5 ? '...' : ''}`}
+                                  aria-label={`מזג ל־${merchantSuggestion.target} (${overlapPercent}% חפיפה בבתי עסק)`}
+                                >
+                                  אחד
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
+                      <td className="new-cats-table-expand">
+                        <button className="new-cats-table-expand-btn" onClick={() => setExpanded(e => ({ ...e, [name]: !e[name] }))}>
+                          {expanded[name] ? '▲' : '▼'}
+                        </button>
+                      </td>
                     </tr>
-                  )}
+                    {expanded[name] && (
+                      <tr>
+                        <td colSpan={4} className="new-cats-table-details-cell">
+                          <div className="new-cats-table-details-wrapper">
+                            <table className="new-cats-table-details">
+                              <thead>
+                                <tr>
+                                  <th>תאריך</th>
+                                  <th>תיאור</th>
+                                  <th>סכום</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {((detailsByName[name] || []).slice(0, 10)).map((tx, idx) => (
+                                  <tr key={tx.id + idx}>
+                                    <td>{tx.date}</td>
+                                    <td>{tx.description}</td>
+                                    <td>₪{tx.amount.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {(() => {
+                              const key = nameGroupKeyMap[name];
+                              const members = key ? groupsByKey[key] : undefined;
+                              if (!key || !members || members.length < 2) return null;
+                              const cols = members.slice(0, 3); // הגבלה ל-3 עמודות להשוואה מהירה
+                              return (
+                                <div className="group-compare" aria-label="השוואת עסקאות בקבוצה">
+                                  {cols.map(colName => (
+                                    <div key={colName} className="group-compare-col">
+                                      <div className="group-compare-title">
+                                        {colName} <span className="group-compare-count">({categoryTransactionCounts[colName] || 0})</span>
+                                      </div>
+                                      <ul className="group-compare-list">
+                                        {(detailsByName[colName] || []).slice(0, 5).map((tx, idx) => (
+                                          <li key={tx.id + idx}>
+                                            <span className="date">{tx.date}</span>
+                                            <span className="desc">{tx.description}</span>
+                                            <span className="amt">₪{tx.amount.toLocaleString()}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                            {categoryTransactionCounts[name] > 10 && (
+                              <div className="details-more">
+                                ועוד {categoryTransactionCounts[name] - 10} עסקאות...
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                   </React.Fragment>
                 );
               })}
