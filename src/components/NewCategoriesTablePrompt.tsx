@@ -1205,7 +1205,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   }
 
   return (
-    <div className="new-cats-overlay">
+    <div className="new-cats-overlay" key={`dialog-${viewMode}-${activeNames.length}`}>
       <div className="new-cats-dialog">
         <div className="progress-indicator">
           <div className="progress-step-wrapper">
@@ -1241,7 +1241,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
         </p>
 
         <div className="new-cats-table-outer-wrapper">
-          <table className="new-cats-table">
+          <table className="new-cats-table" key={`table-${activeNames.join('-')}`}>
             <thead>
               <tr>
                 <th>קטגוריה מ-Excel</th>
