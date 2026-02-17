@@ -96,7 +96,7 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
     return stats;
   }, [errors]);
 
-  const getErrorTypeColor = (type: string): string => {
+  const getErrorTypeColor = (type: string | undefined): string => {
     const colors: Record<string, string> = {
       react_error: '#ef4444',        // red
       global_error: '#f97316',       // orange
@@ -106,10 +106,11 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
       network_error: '#06b6d4',      // cyan
       other: '#8b5cf6',              // violet
     };
-    return colors[type] || '#808080';
+    const safeType = type || 'other';
+    return colors[safeType] || '#808080';
   };
 
-  const getErrorTypeLabel = (type: string): string => {
+  const getErrorTypeLabel = (type: string | undefined): string => {
     const labels: Record<string, string> = {
       react_error: '⚛️ React Error',
       global_error: '🌐 Global Error',
@@ -119,7 +120,8 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
       network_error: '🔗 Network Error',
       other: '❓ Other',
     };
-    return labels[type] || type;
+    const safeType = type || 'other';
+    return labels[safeType] || '❓ Unknown';
   };
 
   if (loading) {
@@ -189,7 +191,7 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
             className="filter-select"
           >
             <option value="">הכל</option>
-            {Object.keys(errorStats.errorsByType).map(type => (
+            {Object.keys(errorStats.errorsByType).filter(Boolean).map(type => (
               <option key={type} value={type}>
                 {getErrorTypeLabel(type)} ({errorStats.errorsByType[type]})
               </option>
@@ -229,9 +231,9 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
                   <span 
                     className="error-badge"
                     style={{ backgroundColor: getErrorTypeColor(error.errorType) }}
-                    title={error.errorType}
+                    title={error.errorType || 'unknown'}
                   >
-                    {getErrorTypeLabel(error.errorType).split(' ')[0]}
+                    {(getErrorTypeLabel(error.errorType) || '❓').split(' ')[0]}
                   </span>
                 </td>
                 <td className="error-message">
