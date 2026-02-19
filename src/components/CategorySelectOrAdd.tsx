@@ -374,10 +374,14 @@ const CategorySelectOrAdd: React.FC<CategorySelectOrAddProps> = ({ categories, v
           type="text"
           value={input}
           onChange={e => {
-            setInput(e.target.value);
+            const newValue = e.target.value;
+            setInput(newValue);
             setUserTyped(true); // סמן שהמשתמש הקליד
             setHighlightIndex(-1);
-            onChange('');
+            // אם הקלדת בדיוק שם קטגוריה קיימת, קרא onChange עם הערך הנכון (לא ריק)
+            const trimmed = newValue.trim();
+            const categoryExists = categories.some(c => c.name === trimmed);
+            onChange(categoryExists ? trimmed : '');
             setShowDropdown(true);
           }}
           placeholder={placeholder || "בחר או הוסף קטגוריה..."}
