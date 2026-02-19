@@ -12,7 +12,7 @@ interface SourceFilterProps {
   allSelected: boolean;
   onSelectAll: () => void;
   onClearSelection: () => void;
-  dirHandle?: any; // לשמירת כינויים בתיקיה שנבחרה (File System Access API)
+  dirHandle?: FileSystemDirectoryHandle; // לשמירת כינויים בתיקיה שנבחרה (File System Access API)
   inline?: boolean; // מצב inline - להציג ישירות את התוכן ללא כפתור
   onCardNameChange?: (last4: string, newName: string) => void; // callback לעדכון שם כרטיס
 }
@@ -39,7 +39,7 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
       setCardNamesError(null);
       try {
         const fileName = 'cards-aliases.json';
-        let data: Record<string,string> = {};
+        let data: Record<string, string> = {};
         try {
           const fh = await dirHandle.getFileHandle(fileName);
           const f = await fh.getFile();
@@ -161,161 +161,163 @@ const SourceFilter: React.FC<SourceFilterProps> = ({ availableCards, lastDateByC
             <div className="sf-title">כרטיסי אשראי</div>
             {availableCards.length === 0 && <div className="sf-empty">לא נמצאו כרטיסים</div>}
 
-            {recentCards.length > 0 && (
-              <div className="sf-subtitle">כרטיסים בשימוש לאחרונה</div>
-            )}
-            {recentCards.map(last4 => {
-              const isEditing = editingCard === last4;
-              const isSaving = savingCard === last4;
-              const wasSaved = savedCard === last4;
-              const displayName = cardNames[last4] || 'שם כרטיס';
-              const lastTs = lastDateByCard[last4];
-              const lastDateLabel = lastTs
-                ? new Date(lastTs).toLocaleDateString('he-IL')
-                : null;
+            <div className="sf-cards-scroll-area">
+              {recentCards.length > 0 && (
+                <div className="sf-subtitle">כרטיסים בשימוש לאחרונה</div>
+              )}
+              {recentCards.map(last4 => {
+                const isEditing = editingCard === last4;
+                const isSaving = savingCard === last4;
+                const wasSaved = savedCard === last4;
+                const displayName = cardNames[last4] || 'שם כרטיס';
+                const lastTs = lastDateByCard[last4];
+                const lastDateLabel = lastTs
+                  ? new Date(lastTs).toLocaleDateString('he-IL')
+                  : null;
 
-              return (
-                <div key={last4} className={`sf-item sf-card-line ${wasSaved ? 'saved-flash' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={selectedCards.includes(last4)}
-                    onChange={() => onToggleCard(last4)}
-                    aria-label={`הצג כרטיס ${last4}`}
-                  />
-                  <div className="sf-card-main">
-                    <div className="sf-card-top-row">
-                      <span className="sf-card-digits" aria-hidden="true">••••{last4}</span>
+                return (
+                  <div key={last4} className={`sf-item sf-card-line ${wasSaved ? 'saved-flash' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCards.includes(last4)}
+                      onChange={() => onToggleCard(last4)}
+                      aria-label={`הצג כרטיס ${last4}`}
+                    />
+                    <div className="sf-card-main">
+                      <div className="sf-card-top-row">
+                        <span className="sf-card-digits" aria-hidden="true">••••{last4}</span>
 
-                      {!isEditing ? (
-                        <>
-                          <span
-                            className="sf-card-alias-display"
-                            onClick={() => startEditingCard(last4)}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`עריכת שם לכרטיס ••••${last4}`}
-                          >
-                            {displayName}
-                          </span>
-                          <button
-                            type="button"
-                            className="sf-edit-btn"
-                            onClick={() => startEditingCard(last4)}
-                            aria-label={`עריכת שם לכרטיס ••••${last4}`}
-                          >✏️</button>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            className="sf-card-alias-input"
-                            value={tempAlias}
-                            onChange={e => setTempAlias(e.target.value)}
-                            onBlur={() => saveCardAlias(last4, tempAlias)}
-                            onKeyDown={e => handleAliasKeyDown(e, last4)}
-                            placeholder="שם כרטיס"
-                            autoFocus
-                            disabled={isSaving}
-                            aria-label={`שם לכרטיס ••••${last4}`}
-                          />
-                          {isSaving && <span className="sf-saving-indicator">💾</span>}
-                        </>
+                        {!isEditing ? (
+                          <>
+                            <span
+                              className="sf-card-alias-display"
+                              onClick={() => startEditingCard(last4)}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`עריכת שם לכרטיס ••••${last4}`}
+                            >
+                              {displayName}
+                            </span>
+                            <button
+                              type="button"
+                              className="sf-edit-btn"
+                              onClick={() => startEditingCard(last4)}
+                              aria-label={`עריכת שם לכרטיס ••••${last4}`}
+                            >✏️</button>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="sf-card-alias-input"
+                              value={tempAlias}
+                              onChange={e => setTempAlias(e.target.value)}
+                              onBlur={() => saveCardAlias(last4, tempAlias)}
+                              onKeyDown={e => handleAliasKeyDown(e, last4)}
+                              placeholder="שם כרטיס"
+                              autoFocus
+                              disabled={isSaving}
+                              aria-label={`שם לכרטיס ••••${last4}`}
+                            />
+                            {isSaving && <span className="sf-saving-indicator">💾</span>}
+                          </>
+                        )}
+                      </div>
+                      {lastDateLabel && (
+                        <div className="sf-card-lastdate-row">
+                          <span className="sf-card-lastdate">פעיל עד {lastDateLabel}</span>
+                        </div>
                       )}
                     </div>
-                    {lastDateLabel && (
-                      <div className="sf-card-lastdate-row">
-                        <span className="sf-card-lastdate">פעיל עד {lastDateLabel}</span>
-                      </div>
-                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
-            {oldCards.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="sf-old-cards-toggle"
-                  onClick={() => setShowOldCards(v => !v)}
-                >
-                  {showOldCards ? 'הסתר כרטיסים ישנים' : `הצג כרטיסים ישנים (${oldCards.length})`}
-                </button>
-                {showOldCards && (
-                  <div className="sf-old-cards-group">
-                    <div className="sf-subtitle sf-old-title">כרטיסים ישנים (לא בשימוש בחודשים האחרונים)</div>
-                    {oldCards.map(last4 => {
-                      const isEditing = editingCard === last4;
-                      const isSaving = savingCard === last4;
-                      const wasSaved = savedCard === last4;
-                      const displayName = cardNames[last4] || 'שם כרטיס';
-                      const lastTs = lastDateByCard[last4];
-                      const lastDateLabel = lastTs
-                        ? new Date(lastTs).toLocaleDateString('he-IL')
-                        : null;
+              {oldCards.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    className="sf-old-cards-toggle"
+                    onClick={() => setShowOldCards(v => !v)}
+                  >
+                    {showOldCards ? 'הסתר כרטיסים ישנים' : `הצג כרטיסים ישנים (${oldCards.length})`}
+                  </button>
+                  {showOldCards && (
+                    <div className="sf-old-cards-group">
+                      <div className="sf-subtitle sf-old-title">כרטיסים ישנים (לא בשימוש בחודשים האחרונים)</div>
+                      {oldCards.map(last4 => {
+                        const isEditing = editingCard === last4;
+                        const isSaving = savingCard === last4;
+                        const wasSaved = savedCard === last4;
+                        const displayName = cardNames[last4] || 'שם כרטיס';
+                        const lastTs = lastDateByCard[last4];
+                        const lastDateLabel = lastTs
+                          ? new Date(lastTs).toLocaleDateString('he-IL')
+                          : null;
 
-                      return (
-                        <div key={last4} className={`sf-item sf-card-line sf-card-old ${wasSaved ? 'saved-flash' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedCards.includes(last4)}
-                            onChange={() => onToggleCard(last4)}
-                            aria-label={`הצג כרטיס ישן ${last4}`}
-                          />
-                          <div className="sf-card-main">
-                            <div className="sf-card-top-row">
-                              <span className="sf-card-digits" aria-hidden="true">••••{last4}</span>
-                              {/* <span className="sf-old-chip">היסטורי</span> */}
+                        return (
+                          <div key={last4} className={`sf-item sf-card-line sf-card-old ${wasSaved ? 'saved-flash' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={selectedCards.includes(last4)}
+                              onChange={() => onToggleCard(last4)}
+                              aria-label={`הצג כרטיס ישן ${last4}`}
+                            />
+                            <div className="sf-card-main">
+                              <div className="sf-card-top-row">
+                                <span className="sf-card-digits" aria-hidden="true">••••{last4}</span>
+                                {/* <span className="sf-old-chip">היסטורי</span> */}
 
-                              {!isEditing ? (
-                                <>
-                                  <span
-                                    className="sf-card-alias-display"
-                                    onClick={() => startEditingCard(last4)}
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-label={`עריכת שם לכרטיס היסטורי ••••${last4}`}
-                                  >
-                                    {displayName}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="sf-edit-btn"
-                                    onClick={() => startEditingCard(last4)}
-                                    aria-label={`עריכת שם לכרטיס היסטורי ••••${last4}`}
-                                  >✏️</button>
-                                </>
-                              ) : (
-                                <>
-                                  <input
-                                    type="text"
-                                    className="sf-card-alias-input"
-                                    value={tempAlias}
-                                    onChange={e => setTempAlias(e.target.value)}
-                                    onBlur={() => saveCardAlias(last4, tempAlias)}
-                                    onKeyDown={e => handleAliasKeyDown(e, last4)}
-                                    placeholder="שם כרטיס"
-                                    autoFocus
-                                    disabled={isSaving}
-                                    aria-label={`שם לכרטיס היסטורי ••••${last4}`}
-                                  />
-                                  {isSaving && <span className="sf-saving-indicator">💾</span>}
-                                </>
+                                {!isEditing ? (
+                                  <>
+                                    <span
+                                      className="sf-card-alias-display"
+                                      onClick={() => startEditingCard(last4)}
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label={`עריכת שם לכרטיס היסטורי ••••${last4}`}
+                                    >
+                                      {displayName}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="sf-edit-btn"
+                                      onClick={() => startEditingCard(last4)}
+                                      aria-label={`עריכת שם לכרטיס היסטורי ••••${last4}`}
+                                    >✏️</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <input
+                                      type="text"
+                                      className="sf-card-alias-input"
+                                      value={tempAlias}
+                                      onChange={e => setTempAlias(e.target.value)}
+                                      onBlur={() => saveCardAlias(last4, tempAlias)}
+                                      onKeyDown={e => handleAliasKeyDown(e, last4)}
+                                      placeholder="שם כרטיס"
+                                      autoFocus
+                                      disabled={isSaving}
+                                      aria-label={`שם לכרטיס היסטורי ••••${last4}`}
+                                    />
+                                    {isSaving && <span className="sf-saving-indicator">💾</span>}
+                                  </>
+                                )}
+                              </div>
+                              {lastDateLabel && (
+                                <div className="sf-card-lastdate-row">
+                                  <span className="sf-card-lastdate sf-card-lastdate-old">עד {lastDateLabel}</span>
+                                </div>
                               )}
                             </div>
-                            {lastDateLabel && (
-                              <div className="sf-card-lastdate-row">
-                                <span className="sf-card-lastdate sf-card-lastdate-old">עד {lastDateLabel}</span>
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>{/* סוף sf-cards-scroll-area */}
             <div className="sf-actions">
               <button type="button" onClick={onSelectAll} disabled={availableCards.length === 0 || allSelected}>בחר כל</button>
               <button type="button" onClick={onClearSelection} disabled={selectedCards.length === 0}>נקה</button>

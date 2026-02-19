@@ -585,6 +585,26 @@ export async function trackCategoryStats(
   await trackEvent('category_stats', profile, { categories: filteredStats });
 }
 
+/**
+ * שולח לFirebase תיאורים של חיובי אשראי שזוהו ע"י סכום+תאריך
+ * אבל לא נמצאים ברשימת התיאורים הידועה.
+ * מאפשר לנו לעדכן את הרשימה הקבועה בקוד בגרסאות עתידיות.
+ * נשלח מידע אנונימי בלבד (תיאור בלבד, ללא סכום/תאריך).
+ */
+export async function trackUnknownCreditChargeDescriptions(
+  profile: UserProfile | null,
+  descriptions: string[]
+): Promise<void> {
+  if (!descriptions.length) return;
+  // שלח רק תיאורים ייחודיים, מנוקים
+  const unique = Array.from(new Set(descriptions.map(d => d.trim()))).filter(Boolean);
+  if (!unique.length) return;
+  await trackEvent('unknown_credit_charge_descriptions', profile, {
+    descriptions: unique,
+    count: unique.length,
+  });
+}
+
 // ============================================
 // Session Duration Tracking - מעקב זמן שהייה
 // ============================================

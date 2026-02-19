@@ -158,7 +158,15 @@
   transition:all .2s ease;
 }
 .sf-old-cards-toggle:hover { background:#eef2ff; border-color:#c7d2fe; color:#4f46e5; }
-.sf-old-cards-group { margin-top:8px; padding-top:8px; border-top:1px dashed #e5e7eb; }
+.sf-old-cards-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px;
+}
 .sf-card-old { opacity:0.7; }
 .sf-card-old:hover { opacity:1; }
 .sf-old-chip { font-size:11px; color:#94a3b8; border:1px solid #e5e7eb; border-radius:999px; padding:3px 8px; margin-inline-start:auto; background:#f8fafc; }
@@ -211,7 +219,7 @@
   border-radius: 0;
   padding: 4px 0 8px;
   animation: none;
-  width: auto;
+  /* width: auto; */
   background: transparent;
 }
 
@@ -226,6 +234,13 @@
 .source-filter-popover-inline .sf-actions {
   margin-top: 8px;
   padding-top: 12px;
+}
+
+/* אזור הגלילה - base styling */
+.sf-cards-scroll-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* Saved flash animation */

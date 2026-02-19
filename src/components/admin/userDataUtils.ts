@@ -48,7 +48,10 @@ export interface TimelineEvent {
 // Aggregate events into user summaries
 // ============================================
 
-export function aggregateUsers(events: AnalyticsEvent[]): UserSummary[] {
+export function aggregateUsers(
+  events: AnalyticsEvent[], 
+  userRealDates?: Map<string, { firstSeen: number; lastSeen: number }>
+): UserSummary[] {
   const usersMap = new Map<string, AnalyticsEvent[]>();
 
   // קיבוץ לפי visitorId
@@ -103,6 +106,11 @@ export function aggregateUsers(events: AnalyticsEvent[]): UserSummary[] {
       }
     }
 
+    // שימוש בתאריכים האמיתיים אם קיימים (מכל ההיסטוריה), אחרת שימוש באירועים המסוננים
+    const realDates = userRealDates?.get(visitorId);
+    const firstSeenTimestamp = realDates?.firstSeen ?? sorted[0]?.timestamp ?? 0;
+    const lastSeenTimestamp = realDates?.lastSeen ?? sorted[sorted.length - 1]?.timestamp ?? 0;
+
     users.push({
       visitorId,
       deviceType,
@@ -111,8 +119,8 @@ export function aggregateUsers(events: AnalyticsEvent[]): UserSummary[] {
       feedbackRating: feedbackCount > 0 ? Math.round((totalRating / feedbackCount) * 10) / 10 : null,
       feedbackCount,
       errorCount,
-      firstSeen: sorted[0]?.timestamp || 0,
-      lastSeen: sorted[sorted.length - 1]?.timestamp || 0,
+      firstSeen: firstSeenTimestamp,
+      lastSeen: lastSeenTimestamp,
       totalDuration,
       referrer,
       featuresUsed: Array.from(featuresUsed),

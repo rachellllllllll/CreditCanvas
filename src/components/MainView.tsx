@@ -5,6 +5,8 @@ import CategoryDonutChart from './CategoryDonutChart';
 import MiniMonthsChart from './MiniMonthsChart';
 import YearlyMonthsChart from './YearlyMonthsChart';
 import MissingDataAlert from './MissingDataAlert';
+import MissingCreditDetailAlert from './MissingCreditDetailAlert';
+import type { UnmatchedCreditCharge } from '../utils/creditChargePatterns';
 import { GlobalSearchModal, type SearchFiltersForRule } from './GlobalSearch';
 import type { CreditDetail, AnalysisResult, CategoryRule } from '../types';
 import type { CategoryDef } from './CategoryManager';
@@ -76,6 +78,8 @@ interface MainViewProps {
   // כלל לעריכה (נפתח מחוץ ל-MainView, למשל מ-SettingsMenu)
   externalRuleToEdit?: CategoryRule | null;
   onClearExternalRuleToEdit?: () => void;
+  // חיובי אשראי ללא פירוט (שזוהו לפי תיאור בלבד)
+  unmatchedCreditCharges?: UnmatchedCreditCharge[];
 }
 
 const MainView: React.FC<MainViewProps> = ({
@@ -97,7 +101,8 @@ const MainView: React.FC<MainViewProps> = ({
   onAddCategory,
   onUpdateRule,
   externalRuleToEdit,
-  onClearExternalRuleToEdit
+  onClearExternalRuleToEdit,
+  unmatchedCreditCharges
 }) => {
   // State לניהול סינון קטגוריה (מגרף הדונאט)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -838,6 +843,15 @@ const MainView: React.FC<MainViewProps> = ({
         onPickFolder={onPickDirectory}
         folderName={selectedFolder || undefined}
       />
+
+      {/* התראה על חיובי אשראי ללא פירוט */}
+      {unmatchedCreditCharges && unmatchedCreditCharges.length > 0 && (
+        <MissingCreditDetailAlert
+          unmatchedCharges={unmatchedCreditCharges}
+          onRefresh={onRefreshDirectory}
+          folderName={selectedFolder || undefined}
+        />
+      )}
 
       {/* מדדים מאוחדים (Pattern A) */}
       <div className="metrics-cards" role="group" aria-label="מדדי מצב">

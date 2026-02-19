@@ -1,6 +1,57 @@
 import type { CreditDetail, CreditChargeCycleSummary } from '../types';
 import { computeCreditChargeCycles } from './creditCycles';
 
+// --- רשימת תיאורים ידועים של חיובי אשראי בדפי חשבון בנק ---
+// כל ערך הוא מחרוזת שמחפשים ב-includes (case-insensitive) בתיאור עסקת הבנק
+const KNOWN_CREDIT_CHARGE_DESCRIPTIONS: string[] = [
+  'מקס',
+];
+
+/**
+ * בודק אם תיאור עסקת בנק הוא חיוב אשראי ידוע
+ */
+export function isKnownCreditChargeDescription(description: string): boolean {
+  const desc = description.trim().toLowerCase();
+  if (!desc) return false;
+  return KNOWN_CREDIT_CHARGE_DESCRIPTIONS.some(known => desc.includes(known.toLowerCase()));
+}
+
+/**
+ * מידע על חיובי אשראי שזוהו לפי תיאור בלבד (ללא מחזור תואם)
+ */
+export interface UnmatchedCreditCharge {
+  description: string;
+  amount: number;
+  date: string;
+  isKnownDescription: boolean; // האם התיאור ברשימה הידועה
+}
+
+/**
+ * מזהה חיובי אשראי בבנק שאין להם פירוט אשראי תואם.
+ * משמש להצגת הודעה למשתמש ולשליחת analytics.
+ * לא משנה את העסקאות עצמן (הן ממשיכות להיספר כהוצאה רגילה).
+ */
+export function detectUnmatchedCreditCharges(details: CreditDetail[]): UnmatchedCreditCharge[] {
+  const unmatched: UnmatchedCreditCharge[] = [];
+  
+  for (const d of details) {
+    // רק עסקאות בנק שלא סומנו כ-credit_charge
+    if (d.source !== 'bank' || d.direction !== 'expense') continue;
+    if (d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') continue;
+    if (d.neutral) continue;
+    
+    if (isKnownCreditChargeDescription(d.description)) {
+      unmatched.push({
+        description: d.description,
+        amount: d.amount,
+        date: d.date,
+        isKnownDescription: true,
+      });
+    }
+  }
+  
+  return unmatched;
+}
 
 // MatchOptions: פרמטרים פעילים בלבד (צמצום – הסרת שדות חלקיים היסטוריים)
 interface MatchOptions {
@@ -139,47 +190,72 @@ export async function markBankCreditChargesExactWithPatterns(
   const cycleAgg: Record<string, { amt: number; bankIds: string[] }> = {};
   perCardCycles.forEach(c => { cycleAgg[c.cycleKey!] = { amt: 0, bankIds: [] }; });
 
-  const updatedDetails: CreditDetail[] = details.map(d => {
-    if (d.source !== 'bank' || d.direction !== 'expense') return d;
+  // מעקב אחרי מחזורים שכבר הותאמו - כל מחזור יכול להתאים רק לעסקת בנק אחת
+  const matchedCycleKeys = new Set<string>();
+
+  // שלב ראשון: אסוף את כל ההתאמות האפשריות עם ציון המרחק (הפרש סכום)
+  type CandidateMatch = {
+    detailIndex: number;
+    cycle: CreditChargeCycleSummary;
+    diff: number;
+    patternMatched: boolean;
+  };
+  const candidates: CandidateMatch[] = [];
+
+  details.forEach((d, idx) => {
+    if (d.source !== 'bank' || d.direction !== 'expense') return;
     const desc = d.description || '';
 
     // רשימת מחזורים בטווח ימים עבור העסקה הזו
     const windowCycles = perCardCycles.filter(c => c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, { daysBeforeCharge, daysAfterCharge }));
+    if (!windowCycles.length) return;
 
-    let matched: CreditChargeCycleSummary | null = null;
     const patternMatched = regexes.some(r => r.test(desc));
 
-    // שלב 1: אם התיאור מתאים לתבנית – נדרש גם סכום (טולרנס) למחזור בטווח
-    if (patternMatched && windowCycles.length) {
-      matched = windowCycles.find(c => {
-        const diff = Math.abs(d.amount - c.netCharge);
-        const allowed = Math.max(c.netCharge * toleranceRatio, minToleranceAmount);
-        return diff <= allowed;
-      }) || null;
+    for (const c of windowCycles) {
+      const diff = Math.abs(d.amount - c.netCharge);
+      const allowed = Math.max(c.netCharge * toleranceRatio, minToleranceAmount);
+      if (diff <= allowed) {
+        candidates.push({ detailIndex: idx, cycle: c, diff, patternMatched });
+      }
     }
+  });
 
-    // שלב 2: אם לא נמצא (או לא הייתה תבנית) – נסה התאמת סכום בלבד למחזורי בטווח
-    if (!matched && windowCycles.length) {
-      matched = windowCycles.find(c => {
-        const diff = Math.abs(d.amount - c.netCharge);
-        const allowed = Math.max(c.netCharge * toleranceRatio, minToleranceAmount);
-        return diff <= allowed;
-      }) || null;
-    }
+  // מיין לפי: 1) תבנית תואמת קודם 2) הפרש סכום קטן קודם (התאמה מדויקת יותר)
+  candidates.sort((a, b) => {
+    if (a.patternMatched !== b.patternMatched) return a.patternMatched ? -1 : 1;
+    return a.diff - b.diff;
+  });
 
-    if (matched) {
-      cycleAgg[matched.cycleKey!].amt += d.amount;
-      cycleAgg[matched.cycleKey!].bankIds.push(d.id);
-      return {
-        ...d,
-        transactionType: 'credit_charge',
-        neutral: true,
-        relatedTransactionIds: matched.transactionIds,
-        matchReason: patternMatched ? 'pattern+amount' : 'amount',
-        matchedCardLast4: matched.cardLast4 // הכרטיס שהותאם
-      };
-    }
-    return d;
+  // שלב שני: הקצה כל מחזור לעסקת הבנק הכי מתאימה (1:1)
+  const detailMatchMap = new Map<number, { cycle: CreditChargeCycleSummary; patternMatched: boolean }>();
+
+  for (const cand of candidates) {
+    // מחזור כבר הותאם? דלג
+    if (matchedCycleKeys.has(cand.cycle.cycleKey!)) continue;
+    // עסקת בנק כבר הותאמה? דלג
+    if (detailMatchMap.has(cand.detailIndex)) continue;
+
+    matchedCycleKeys.add(cand.cycle.cycleKey!);
+    detailMatchMap.set(cand.detailIndex, { cycle: cand.cycle, patternMatched: cand.patternMatched });
+  }
+
+  // שלב שלישי: בנה את מערך העסקאות המעודכן
+  const updatedDetails: CreditDetail[] = details.map((d, idx) => {
+    const match = detailMatchMap.get(idx);
+    if (!match) return d;
+
+    const { cycle: matched, patternMatched } = match;
+    cycleAgg[matched.cycleKey!].amt += d.amount;
+    cycleAgg[matched.cycleKey!].bankIds.push(d.id);
+    return {
+      ...d,
+      transactionType: 'credit_charge',
+      neutral: true,
+      relatedTransactionIds: matched.transactionIds,
+      matchReason: patternMatched ? 'pattern+amount' : 'amount',
+      matchedCardLast4: matched.cardLast4 // הכרטיס שהותאם
+    };
   });
 
   // חישוב סטטוס מחזורי כרטיס (רק למחזורי כרטיס, לא מאוחדים)

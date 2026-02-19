@@ -11,12 +11,13 @@ import UserTimeline from './UserTimeline';
 interface UsersTableProps {
   events: AnalyticsEvent[];
   loadUserFullHistory?: (visitorId: string) => Promise<AnalyticsEvent[]>;
+  userRealDates?: Map<string, { firstSeen: number; lastSeen: number }>;
 }
 
 type SortKey = 'visits' | 'files' | 'lastSeen' | 'duration' | 'errors';
 type FilterKey = 'all' | 'withFeedback' | 'withErrors' | 'new' | 'powerUsers';
 
-export default function UsersTable({ events, loadUserFullHistory }: UsersTableProps) {
+export default function UsersTable({ events, loadUserFullHistory, userRealDates }: UsersTableProps) {
   const [sortBy, setSortBy] = useState<SortKey>('lastSeen');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterBy, setFilterBy] = useState<FilterKey>('all');
@@ -28,7 +29,7 @@ export default function UsersTable({ events, loadUserFullHistory }: UsersTablePr
   const pageSize = 20;
 
   // Aggregate events into user summaries
-  const users = useMemo(() => aggregateUsers(events), [events]);
+  const users = useMemo(() => aggregateUsers(events, userRealDates), [events, userRealDates]);
 
   // Filter
   const filtered = useMemo(() => {

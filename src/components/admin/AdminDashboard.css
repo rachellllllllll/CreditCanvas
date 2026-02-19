@@ -1614,3 +1614,258 @@
   color: var(--admin-text-muted);
   max-width: 300px;
 }
+
+/* ============================================
+   Tab Navigation
+   ============================================ */
+
+.admin-tabbed .admin-header {
+  margin-bottom: 0;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.admin-tab:hover {
+  color: #e2e8f0;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.admin-tab-active {
+  color: #a78bfa;
+  border-bottom-color: #8b5cf6;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.admin-tab-active:hover {
+  color: #a78bfa;
+}
+
+.admin-tab-icon {
+  font-size: 1.05rem;
+}
+
+.admin-tab-label {
+  font-family: inherit;
+}
+
+.admin-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(99, 102, 241, 0.2);
+  color: #a78bfa;
+}
+
+.admin-tab-active .admin-tab-badge {
+  background: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+/* Tab Content Area */
+.admin-tab-content {
+  padding: 20px 0;
+  min-height: 400px;
+  animation: tabFadeIn 0.2s ease;
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Empty tab state */
+.admin-empty-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.admin-empty-tab-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.admin-empty-tab p {
+  color: #94a3b8;
+  font-size: 1rem;
+}
+
+/* ===== Tab Responsive ===== */
+@media (max-width: 768px) {
+  .admin-tabs {
+    padding: 0 12px;
+    gap: 2px;
+  }
+
+  .admin-tab {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    gap: 6px;
+  }
+
+  .admin-tab-label {
+    display: none;
+  }
+
+  .admin-tab-icon {
+    font-size: 1.2rem;
+  }
+
+  .admin-tab-badge {
+    font-size: 0.65rem;
+    min-width: 18px;
+    height: 18px;
+  }
+
+  .admin-tab-content {
+    padding: 12px 0;
+  }
+}
+
+/* ============================================
+   File Errors Table
+   ============================================ */
+
+.file-errors-section {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.file-errors-section h2 {
+  font-size: 1.2rem;
+  color: #f8fafc;
+  margin: 0 0 4px 0;
+}
+
+.file-errors-subtitle {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+
+.file-errors-table-wrapper {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.file-errors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.file-errors-table th {
+  padding: 10px 14px;
+  text-align: right;
+  background: rgba(30, 41, 59, 0.8);
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.file-errors-table td {
+  padding: 10px 14px;
+  color: #cbd5e1;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.file-errors-table tbody tr {
+  transition: background 0.15s;
+}
+
+.file-errors-table tbody tr:hover {
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.error-msg-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: #f87171;
+}
+
+.browser-cell {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.file-errors-more {
+  text-align: center;
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-top: 12px;
+}
+
+/* ============================================
+   Event Original Name (in EventsTable)
+   ============================================ */
+
+.event-original-name {
+  display: block;
+  font-size: 0.7rem;
+  color: #475569;
+  margin-top: 2px;
+  font-family: monospace;
+  direction: ltr;
+  text-align: right;
+}

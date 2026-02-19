@@ -37,12 +37,14 @@ import {
   trackFileError,
   trackConsoleError,
   trackPreviousSessionDuration,
+  trackUnknownCreditChargeDescriptions,
   markConsentAsked,
   updateLastActivity,
   saveSessionDurationForLater
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
-import { processCreditChargeMatching } from './utils/creditChargePatterns';
+import { processCreditChargeMatching, detectUnmatchedCreditCharges, isKnownCreditChargeDescription } from './utils/creditChargePatterns';
+import type { UnmatchedCreditCharge } from './utils/creditChargePatterns';
 import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule, type RuleChangeResult } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
@@ -129,16 +131,19 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
   let chargeDateFromHeader = '';
   let cardLast4FromHeader = '';
   for (let i = 0; i < json.length; i++) {
-    const row = json[i].map((cell) => (cell != null ? String(cell) : '').trim());
-    // Support Poalim format: header with '\r\n' or '\n' in header names
-    // const normalizedRow = row.map((c: string) => c.replace(/"/g, '').replace(/\r?\n/g, '').trim());
+    // נרמל שבירות שורה (Alt+Enter באקסל) לרווח - חשוב לפורמט כאל ופועלים
+    const row = json[i].map((cell) => (cell != null ? String(cell) : '').replace(/\r?\n/g, ' ').trim());
     // --- extract charge date and card last 4 from header lines if present ---
     if (!chargeDateFromHeader) {
       const match = row.join(' ').match(/עסקאות לחיוב ב-(\d{2}\/\d{2}\/\d{4})/);
       if (match) chargeDateFromHeader = match[1];
     }
     if (!cardLast4FromHeader) {
-      const match = row.join(' ').match(/המסתיים ב-(\d{4})/);
+      const joined = row.join(' ');
+      // פורמט ישראכרט/מקס: "המסתיים ב-1234"
+      // פורמט כאל: "לכרטיס ויזה 1234" או "כאל 123456 לכרטיס ויזה 1234"
+      const match = joined.match(/המסתיים ב-(\d{4})/) ||
+                    joined.match(/לכרטיס\s+\S+\s+(\d{4})\b/);
       if (match) cardLast4FromHeader = match[1];
     }
     // Look for a row with at least 2 of the expected columns (for Poalim format)
@@ -163,7 +168,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
   // Map the rest of the rows to CreditDetail
   const details: CreditDetail[] = [];
   // Normalize headers for mapping
-  const normalizedHeaders = headers.map(h => h.replace(/"/g, '').replace(/\r?\n/g, '').trim());
+  const normalizedHeaders = headers.map(h => h.replace(/"/g, '').replace(/\r?\n/g, ' ').trim());
   for (let i = headerIdx + 1; i < json.length; i++) {
     const row = json[i];
     if (!row || row.length < 3) continue;
@@ -177,7 +182,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     const description = rowObj['שם בית העסק'] || rowObj['שם בית עסק'] || rowObj['בית עסק'] || '';
     // העדפה לסכום חיוב - זה מה שבאמת יורד מהחשבון
     // סכום עסקה נשמר בנפרד להצגה (תשלומים, מט"ח וכו')
-    const chargeAmountRaw = rowObj['סכום חיוב'] || rowObj['סכוםחיוב'] || '';
+    const chargeAmountRaw = rowObj['סכום חיוב'] || rowObj['סכוםחיוב'] || rowObj['סכום בשח'] || '';
     const transactionAmountRaw = rowObj['סכום עסקה'] || rowObj['סכוםעסקה'] || '';
     const transactionCurrency = rowObj['מטבע עסקה'] || rowObj['מטבעעסקה'] || '';
     
@@ -195,7 +200,7 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     }
     const category = rowObj['ענף'] || rowObj['קטגוריה'] || '';
     // --- extract charge date and card last 4 ---
-    let chargeDate = rowObj['תאריך חיוב'] || chargeDateFromHeader || '';
+    let chargeDate = rowObj['תאריך חיוב'] || rowObj['מועד חיוב'] || chargeDateFromHeader || '';
     const cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || cardLast4FromHeader || '';
     
     // --- זיהוי עסקאות בחיוב מיידי (משיכת מזומן וכד') ---
@@ -381,6 +386,9 @@ const App: React.FC = () => {
   // שמור את קבצי האקסל המקוריים בזיכרון (Map fileName -> ArrayBuffer)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [excelFiles, setExcelFiles] = useState<Map<string, ArrayBuffer>>(new Map());
+
+  // --- חיובי אשראי ללא פירוט (לא neutral, עדיין נספרים כהוצאה) ---
+  const [unmatchedCreditCharges, setUnmatchedCreditCharges] = useState<UnmatchedCreditCharge[]>([]);
 
   // --- מצב אנליטיקס ---
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -744,6 +752,19 @@ const App: React.FC = () => {
       const { details: finalDetails, creditChargeCycles: finalCycles } = await processCreditChargeMatching(allDetails, dir);
       allDetails = finalDetails;
 
+      // --- זיהוי חיובי אשראי ללא פירוט (לפי תיאור ידוע, לא סומנו neutral) ---
+      const unmatched = detectUnmatchedCreditCharges(allDetails);
+      setUnmatchedCreditCharges(unmatched);
+      
+      // --- Firebase: שלח תיאורים חדשים שזוהו ע"י סכום אבל לא ברשימה הידועה ---
+      // מחפש עסקאות שסומנו credit_charge (ע"י סכום+תאריך) אבל התיאור שלהן לא ברשימה
+      const unknownDescriptions = allDetails
+        .filter(d => d.source === 'bank' && 
+          (d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') &&
+          d.neutral === true &&
+          !isKnownCreditChargeDescription(d.description))
+        .map(d => d.description);
+
       setLoadingState({ 
         step: 'categories', 
         message: '🏷️ מזהה קטגוריות ומקורות הכנסה...'
@@ -881,6 +902,11 @@ const App: React.FC = () => {
             sessionId,
             unknownCategories: unknownCategories.length > 0 ? unknownCategories : undefined
           });
+          
+          // שלח תיאורי חיובי אשראי שזוהו ע"י סכום אבל לא ברשימה הידועה
+          if (unknownDescriptions.length > 0) {
+            await trackUnknownCreditChargeDescriptions(profile, unknownDescriptions);
+          }
         }
       } catch (analyticsError) {
         // אנליטיקס נכשל - לא משפיע על האפליקציה
@@ -2235,6 +2261,7 @@ const App: React.FC = () => {
             onAddCategory={upsertCategory}
             externalRuleToEdit={ruleToEditFromSettings}
             onClearExternalRuleToEdit={() => setRuleToEditFromSettings(null)}
+            unmatchedCreditCharges={unmatchedCreditCharges}
           />
         </>
       )}

@@ -18,7 +18,6 @@ import {
   Stats, 
   DateRange, 
   TrendDataPoint,
-  DailyStats,
   HourlyActivity,
   DeviceBreakdown,
   ConsoleErrorEvent
@@ -30,7 +29,6 @@ interface UseAnalyticsDataReturn {
   errors: ConsoleErrorEvent[];
   stats: Stats | null;
   trendData: TrendDataPoint[];
-  dailyStats: DailyStats[];
   hourlyActivity: HourlyActivity[];
   deviceBreakdown: DeviceBreakdown;
   referrerBreakdown: Record<string, number>;
@@ -42,6 +40,7 @@ interface UseAnalyticsDataReturn {
   setDateRange: (range: DateRange) => void;
   refresh: () => Promise<void>;
   loadUserFullHistory: (visitorId: string) => Promise<AnalyticsEvent[]>;
+  userRealDates: Map<string, { firstSeen: number; lastSeen: number }>;
 }
 
 export function useAnalyticsData(): UseAnalyticsDataReturn {
@@ -50,6 +49,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>('week');
+  const [userRealDates, setUserRealDates] = useState<Map<string, { firstSeen: number; lastSeen: number }>>(new Map());
 
   // Calculate date boundaries based on range
   const getDateBoundary = useCallback((range: DateRange): number => {
@@ -243,20 +243,6 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     return Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [events]);
 
-  // Calculate daily stats
-  const dailyStats = useMemo((): DailyStats[] => {
-    return trendData.map(d => ({
-      date: d.date,
-      visitors: d.visitors,
-      events: d.events,
-      fileUploads: d.fileUploads,
-      errors: events.filter(e => 
-        new Date(e.timestamp).toISOString().split('T')[0] === d.date && 
-        (e.event === 'file_error')
-      ).length
-    }));
-  }, [trendData, events]);
-
   // Calculate hourly activity
   const hourlyActivity = useMemo((): HourlyActivity[] => {
     const hourMap = new Map<number, number>();
@@ -341,6 +327,70 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     loadData();
   }, [loadData]);
 
+  // Load real first/last seen dates for all users (from full history)
+  const loadUserRealDates = useCallback(async () => {
+    if (events.length === 0) return;
+    
+    try {
+      const app = getFirebaseApp();
+      if (!app) return;
+      const db = getFirestore(app);
+      
+      // קבלת רשימת visitorIds ייחודיים
+      const visitorIds = Array.from(new Set(events.map(e => e.visitorId)));
+      const datesMap = new Map<string, { firstSeen: number; lastSeen: number }>();
+
+      // טעינת תאריכים אמיתיים לכל משתמש - במקביל לשיפור ביצועים
+      const eventsRef = collection(db, 'analytics_events');
+      
+      // יצירת כל השאילתות במקביל
+      const datePromises = visitorIds.map(async (visitorId) => {
+        // שאילתה לאירוע הראשון
+        const firstQuery = query(
+          eventsRef,
+          where('visitorId', '==', visitorId),
+          orderBy('timestamp', 'asc'),
+          limit(1)
+        );
+        
+        // שאילתה לאירוע האחרון
+        const lastQuery = query(
+          eventsRef,
+          where('visitorId', '==', visitorId),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+
+        const [firstSnapshot, lastSnapshot] = await Promise.all([
+          getDocs(firstQuery),
+          getDocs(lastQuery)
+        ]);
+
+        const firstSeen = firstSnapshot.docs[0]?.data()?.timestamp || 0;
+        const lastSeen = lastSnapshot.docs[0]?.data()?.timestamp || 0;
+
+        return { visitorId, firstSeen, lastSeen };
+      });
+
+      // המתן לכל השאילתות
+      const results = await Promise.all(datePromises);
+      
+      // בנה את המפה מהתוצאות
+      results.forEach(({ visitorId, firstSeen, lastSeen }) => {
+        datesMap.set(visitorId, { firstSeen, lastSeen });
+      });
+
+      setUserRealDates(datesMap);
+    } catch (err) {
+      console.error('[Admin] Error loading user real dates:', err);
+    }
+  }, [events]);
+
+  // Load real dates when events change
+  useEffect(() => {
+    loadUserRealDates();
+  }, [loadUserRealDates]);
+
   // Load full history for a specific user (ignores date filter)
   const loadUserFullHistory = useCallback(async (visitorId: string): Promise<AnalyticsEvent[]> => {
     try {
@@ -371,7 +421,6 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     errors,
     stats,
     trendData,
-    dailyStats,
     hourlyActivity,
     deviceBreakdown,
     referrerBreakdown,
@@ -382,6 +431,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     dateRange,
     setDateRange,
     refresh: loadData,
-    loadUserFullHistory
+    loadUserFullHistory,
+    userRealDates
   };
 }
