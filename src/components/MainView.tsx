@@ -844,14 +844,26 @@ const MainView: React.FC<MainViewProps> = ({
         folderName={selectedFolder || undefined}
       />
 
-      {/* התראה על חיובי אשראי ללא פירוט */}
-      {unmatchedCreditCharges && unmatchedCreditCharges.length > 0 && (
-        <MissingCreditDetailAlert
-          unmatchedCharges={unmatchedCreditCharges}
-          onRefresh={onRefreshDirectory}
-          folderName={selectedFolder || undefined}
-        />
-      )}
+      {/* התראה על חיובי אשראי ללא פירוט – מסוננת לחודש הנוכחי בתצוגה חודשית */}
+      {unmatchedCreditCharges && unmatchedCreditCharges.length > 0 && (() => {
+        const filtered = view === 'monthly' && selectedMonth
+          ? unmatchedCreditCharges.filter(c => {
+              // date format: dd/mm/yy or dd/mm/yyyy  →  selectedMonth format: MM/YYYY
+              const parts = c.date.split('/');
+              if (parts.length < 3) return false;
+              let mm = parts[1].padStart(2, '0');
+              let yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+              return `${mm}/${yyyy}` === selectedMonth;
+            })
+          : unmatchedCreditCharges;
+        return filtered.length > 0 ? (
+          <MissingCreditDetailAlert
+            unmatchedCharges={filtered}
+            onRefresh={onRefreshDirectory}
+            folderName={selectedFolder || undefined}
+          />
+        ) : null;
+      })()}
 
       {/* מדדים מאוחדים (Pattern A) */}
       <div className="metrics-cards" role="group" aria-label="מדדי מצב">

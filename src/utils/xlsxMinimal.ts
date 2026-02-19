@@ -379,3 +379,96 @@ export function getFirstSheetAsArray(workbook: Workbook): (string | number)[][] 
   }
   return sheetToArray(workbook.sheets[0]);
 }
+
+/**
+ * בדיקה אם קובץ הוא XLS (פורמט בינארי ישן)
+ */
+export function isXLSFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.xls') && !lower.endsWith('.xlsx');
+}
+
+/**
+ * קורא קובץ XLS (פורמט בינארי ישן) באמצעות dynamic import של SheetJS
+ * נטען רק כשצריך - לא נכנס ל-bundle הראשי
+ */
+export async function readXLS(arrayBuffer: ArrayBuffer, fileName: string = ''): Promise<Workbook> {
+  console.log(`[XLS] התחלת קריאת קובץ XLS: ${fileName}`);
+  console.log(`[XLS] גודל הקובץ: ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB`);
+  
+  try {
+    // שלב 1: טעינה דינמית של SheetJS
+    console.log('[XLS] טוען את ספריית SheetJS (dynamic import)...');
+    const startLoad = performance.now();
+    const XLSX = await import('xlsx');
+    const loadTime = (performance.now() - startLoad).toFixed(0);
+    console.log(`[XLS] SheetJS נטען בהצלחה (${loadTime}ms)`);
+
+    // שלב 2: קריאת הקובץ
+    console.log('[XLS] מפענח את קובץ ה-XLS...');
+    const startParse = performance.now();
+    const data = new Uint8Array(arrayBuffer);
+    const wb = XLSX.read(data, { type: 'array' });
+    const parseTime = (performance.now() - startParse).toFixed(0);
+    console.log(`[XLS] הקובץ פוענח בהצלחה (${parseTime}ms)`);
+    console.log(`[XLS] נמצאו ${wb.SheetNames.length} גיליונות: ${wb.SheetNames.join(', ')}`);
+
+    // שלב 3: המרה למבנה Workbook שלנו
+    console.log('[XLS] ממיר למבנה פנימי...');
+    const sheets: Sheet[] = [];
+
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      if (!ws) {
+        console.warn(`[XLS] גיליון "${sheetName}" ריק, דילוג...`);
+        continue;
+      }
+
+      // המרה למערך דו-ממדי
+      const rawRows: unknown[][] = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        defval: '',
+        raw: true,
+      });
+
+      console.log(`[XLS] גיליון "${sheetName}": ${rawRows.length} שורות`);
+
+      // המרה ל-Row[] (המבנה הפנימי שלנו)
+      const rows: Row[] = [];
+      for (const rawRow of rawRows) {
+        const row: Row = {};
+        for (let col = 0; col < (rawRow as unknown[]).length; col++) {
+          const val = (rawRow as unknown[])[col];
+          if (val !== null && val !== undefined && val !== '') {
+            const colLetter = colNumToLetter(col);
+            row[colLetter] = {
+              v: typeof val === 'number' ? val : String(val),
+              t: typeof val === 'number' ? 'n' : 's',
+            };
+          }
+        }
+        if (Object.keys(row).length > 0) {
+          rows.push(row);
+        }
+      }
+
+      sheets.push({ name: sheetName, rows });
+    }
+
+    console.log(`[XLS] סיום מוצלח - ${sheets.length} גיליונות מוכנים`);
+    return { sheets };
+
+  } catch (err) {
+    console.error('[XLS] שגיאה בקריאת קובץ XLS:', err);
+    console.error(`[XLS] שם קובץ: ${fileName}`);
+    console.error('[XLS] סוג שגיאה:', err instanceof Error ? err.constructor.name : typeof err);
+    console.error('[XLS] הודעת שגיאה:', err instanceof Error ? err.message : String(err));
+    
+    // בדיקה אם זו בעיית dynamic import
+    if (err instanceof Error && (err.message.includes('import') || err.message.includes('module'))) {
+      console.error('[XLS] נראה שיש בעיה בטעינת ספריית SheetJS. ודא ש-xlsx מותקנת: npm install xlsx');
+    }
+    
+    throw new Error(`שגיאה בקריאת קובץ XLS "${fileName}": ${err instanceof Error ? err.message : String(err)}`);
+  }
+}

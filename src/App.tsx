@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { readXLSX, sheetToArray } from './utils/xlsxMinimal';
+import { readXLSX, readXLS, isXLSFile, sheetToArray } from './utils/xlsxMinimal';
 import { 
   getSheetType, 
   askUserSheetType, 
@@ -669,8 +669,15 @@ const App: React.FC = () => {
           // שמור את קובץ האקסל המקורי בזיכרון (עם נתיב יחסי)
           setExcelFiles((prev: Map<string, ArrayBuffer>) => new Map(prev).set(relativePath, arrayBuffer));
           
-          // קרא את הקובץ עם Parser המינימלי
-          const workbook = await readXLSX(arrayBuffer);
+          // קרא את הקובץ עם Parser המתאים לסוג הקובץ
+          let workbook;
+          if (isXLSFile(fileHandle.name)) {
+            console.log(`[App] קובץ XLS זוהה: ${fileHandle.name}, משתמש ב-readXLS (SheetJS dynamic import)`);
+            workbook = await readXLS(arrayBuffer, fileHandle.name);
+          } else {
+            console.log(`[App] קובץ XLSX זוהה: ${fileHandle.name}, משתמש ב-readXLSX (parser מינימלי)`);
+            workbook = await readXLSX(arrayBuffer);
+          }
           
           // עבור על כל הגיליונות
           for (const sheet of workbook.sheets) {

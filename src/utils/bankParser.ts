@@ -3,17 +3,20 @@ import type { CreditDetail } from '../types';
 function normalizeDate(input: string | number): string {
   let date = String(input ?? '').trim();
   if (!date) return '';
-  if (/^\d{1,5}$/.test(date)) {
+  
+  // בדיקת תאריך סריאלי של Excel (מספר שלם או עשרוני, טווח 1-60000)
+  // מטפל גם ב-"46023" וגם ב-"46023.00046296296" (XLS עם raw: true)
+  const numVal = parseFloat(date);
+  if (!isNaN(numVal) && numVal > 1 && numVal < 60000 && /^\d+(\.\d+)?$/.test(date)) {
     const excelEpoch = Date.UTC(1899, 11, 30);
-    const serial = parseInt(date, 10);
-    if (!isNaN(serial)) {
-      const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(d.getUTCDate()).padStart(2, '0');
-      return `${dd}/${mm}/${String(yyyy).slice(-2)}`; // dd/mm/yy
-    }
+    const serial = Math.floor(numVal); // קח רק את החלק השלם (היום)
+    const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${dd}/${mm}/${String(yyyy).slice(-2)}`; // dd/mm/yy
   }
+  
   date = date.replace(/\./g, '/').replace(/-/g, '/');
   return date;
 }
@@ -50,8 +53,8 @@ export function parseBankStatementFromSheet(sheetData: (string | number)[][], fi
   for (let i = 0; i < Math.min(json.length, 30); i++) {
     const row = (json[i] || []).map((c: string | number) => String(c ?? '').replace(/"/g, '').replace(/\r?\n/g, '').trim());
     const hasDate = row.some((h: string) => /תאריך/.test(h) || /Date/i.test(h));
-    // הרחבת זיהוי שדה תיאור: תיאור/תאור/פירוט/פרטים/הפעולה/תיאור פעולה
-    const hasDesc = row.some((h: string) => /(תיאור פעולה|הפעולה|תיאור|תאור|פירוט|פרטים|Description)/i.test(h));
+    // הרחבת זיהוי שדה תיאור: תיאור/תאור/פירוט/פרטים/הפעולה/תיאור פעולה/סוג תנועה
+    const hasDesc = row.some((h: string) => /(תיאור פעולה|הפעולה|תיאור|תאור|פירוט|פרטים|סוג תנועה|Description)/i.test(h));
     const hasDebitCredit = row.some((h: string) => /חובה\/זכות/.test(h)) || (row.some((h: string) => /חובה|Debit/i.test(h)) && row.some((h: string) => /זכות|Credit/i.test(h)));
     const hasAmount = row.some((h: string) => /סכום|Amount/i.test(h));
     if ((hasDate && hasDesc && (hasDebitCredit || hasAmount))) {
@@ -70,8 +73,8 @@ export function parseBankStatementFromSheet(sheetData: (string | number)[][], fi
   };
 
   const dateIdx = idxOf(['תאריך', 'Date']);
-  // הרחבת מועמדים לשדה תיאור
-  const descIdx = idxOf(['תיאור פעולה', 'הפעולה', 'תיאור', 'תאור', 'פירוט', 'פרטים', 'Description']);
+  // הרחבת מועמדים לשדה תיאור (כולל "סוג תנועה" הנפוץ בקבצי XLS מבנקים)
+  const descIdx = idxOf(['תיאור פעולה', 'הפעולה', 'תיאור', 'תאור', 'פירוט', 'פרטים', 'סוג תנועה', 'Description']);
   const actionIdx = idxOf(['הפעולה']);
   const detailsIdx = idxOf(['פרטים', 'פירוט', 'תיאור פעולה']);
   const debitIdx = idxOf(['חובה', 'Debit']);
@@ -159,7 +162,7 @@ export function parseBankStatementFromCSV(rows: string[][], fileName: string): C
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const row = (rows[i] || []).map((c: string) => String(c ?? '').replace(/"/g, '').replace(/\r?\n/g, '').trim());
     const hasDate = row.some((h: string) => /תאריך/.test(h) || /Date/i.test(h));
-    const hasDesc = row.some((h: string) => /(תיאור פעולה|הפעולה|תיאור|תאור|פירוט|פרטים|Description)/i.test(h));
+    const hasDesc = row.some((h: string) => /(תיאור פעולה|הפעולה|תיאור|תאור|פירוט|פרטים|סוג תנועה|Description)/i.test(h));
     const hasDebitCredit = row.some((h: string) => /חובה\/זכות/.test(h)) || (row.some((h: string) => /חובה|Debit/i.test(h)) && row.some((h: string) => /זכות|Credit/i.test(h)));
     const hasAmount = row.some((h: string) => /סכום|Amount/i.test(h));
     if ((hasDate && hasDesc && (hasDebitCredit || hasAmount))) { headerIdx = i; headers = row; break; }
@@ -176,7 +179,7 @@ export function parseBankStatementFromCSV(rows: string[][], fileName: string): C
   };
 
   const dateIdx = idxOf(['תאריך', 'Date']);
-  const descIdx = idxOf(['תיאור פעולה', 'הפעולה', 'תיאור', 'תאור', 'פירוט', 'פרטים', 'Description']);
+  const descIdx = idxOf(['תיאור פעולה', 'הפעולה', 'תיאור', 'תאור', 'פירוט', 'פרטים', 'סוג תנועה', 'Description']);
   const actionIdx = idxOf(['הפעולה']);
   const detailsIdx = idxOf(['פרטים', 'פירוט', 'תיאור פעולה']);
   const debitIdx = idxOf(['חובה', 'Debit']);
