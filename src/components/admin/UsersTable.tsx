@@ -3,7 +3,7 @@
  * טבלת משתמשים — כל שורה = משתמש ייחודי, עם Timeline נפתח
  */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { AnalyticsEvent } from './types';
 import { aggregateUsers, deviceIcon, formatShortDuration } from './userDataUtils';
 import UserTimeline from './UserTimeline';

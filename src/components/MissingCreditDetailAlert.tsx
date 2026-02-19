@@ -75,9 +75,9 @@ const MissingCreditDetailAlert: React.FC<MissingCreditDetailAlertProps> = ({
         <span className="mcda-icon">💳</span>
         <div className="mcda-text-wrapper">
           <span className="mcda-text">
-            {groups.length === 1
+            {unmatchedCharges.length === 1
               ? `זוהה חיוב אשראי של ${groups[0].company} (${totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪) ללא פירוט עסקאות`
-              : `זוהו ${groups.length} חיובי אשראי (${totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪) ללא פירוט עסקאות`
+              : `זוהו ${unmatchedCharges.length} חיובי אשראי ללא פירוט עסקאות: ${groups.map(g => g.count > 1 ? `${g.company} (×${g.count})` : g.company).join(', ')} (סה״כ ${totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪)`
             }
           </span>
           <span className="mcda-hint">

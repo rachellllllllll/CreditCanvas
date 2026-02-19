@@ -379,3 +379,81 @@ export function getFirstSheetAsArray(workbook: Workbook): (string | number)[][] 
   }
   return sheetToArray(workbook.sheets[0]);
 }
+
+/**
+ * בדיקה אם קובץ הוא XLS (פורמט בינארי ישן)
+ */
+export function isXLSFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.xls') && !lower.endsWith('.xlsx');
+}
+
+/**
+ * קורא קובץ XLS (פורמט בינארי ישן) באמצעות dynamic import של SheetJS
+ * נטען רק כשצריך - לא נכנס ל-bundle הראשי
+ */
+export async function readXLS(arrayBuffer: ArrayBuffer, fileName: string = ''): Promise<Workbook> {
+  
+  try {
+    // שלב 1: טעינה דינמית של SheetJS
+    const startLoad = performance.now();
+    const XLSX = await import('xlsx');
+    const loadTime = (performance.now() - startLoad).toFixed(0);
+
+    // שלב 2: קריאת הקובץ
+    const startParse = performance.now();
+    const data = new Uint8Array(arrayBuffer);
+    const wb = XLSX.read(data, { type: 'array' });
+    const parseTime = (performance.now() - startParse).toFixed(0);
+
+    // שלב 3: המרה למבנה Workbook שלנו
+    const sheets: Sheet[] = [];
+
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      if (!ws) {
+        continue;
+      }
+
+      // המרה למערך דו-ממדי
+      const rawRows: unknown[][] = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        defval: '',
+        raw: true,
+      });
+
+
+      // המרה ל-Row[] (המבנה הפנימי שלנו)
+      const rows: Row[] = [];
+      for (const rawRow of rawRows) {
+        const row: Row = {};
+        for (let col = 0; col < (rawRow as unknown[]).length; col++) {
+          const val = (rawRow as unknown[])[col];
+          if (val !== null && val !== undefined && val !== '') {
+            const colLetter = colNumToLetter(col);
+            row[colLetter] = {
+              v: typeof val === 'number' ? val : String(val),
+              t: typeof val === 'number' ? 'n' : 's',
+            };
+          }
+        }
+        if (Object.keys(row).length > 0) {
+          rows.push(row);
+        }
+      }
+
+      sheets.push({ name: sheetName, rows });
+    }
+
+    return { sheets };
+
+  } catch (err) {
+
+    
+    // בדיקה אם זו בעיית dynamic import
+    if (err instanceof Error && (err.message.includes('import') || err.message.includes('module'))) {
+    }
+    
+    throw new Error(`שגיאה בקריאת קובץ XLS "${fileName}": ${err instanceof Error ? err.message : String(err)}`);
+  }
+}

@@ -28,7 +28,7 @@ export function detectSheetTypeFromSheet(sheetData: unknown[][]): SheetType {
 
   const hasToken = (needle: string) => Array.from(tokens).some(t => t.includes(needle));
 
-  const bankHints = ['חובה/זכות', 'חובה', 'זכות', 'Debit', 'Credit', 'יתרה', 'אסמכתא', 'תיאור פעולה'];
+  const bankHints = ['חובה/זכות', 'חובה', 'זכות', 'Debit', 'Credit', 'יתרה', 'אסמכתא', 'תיאור פעולה', 'סוג תנועה'];
   const creditHints = ['תאריך עסקה', 'שם בית העסק', 'שם בית עסק', 'סכום חיוב', 'סכום עסקה', 'תאריך חיוב', 'סכום בשח', 'מועד חיוב'];
 
   const isBank = bankHints.some(hasToken);
@@ -56,7 +56,7 @@ export function detectSheetTypeFromCSV(rows: string[][]): SheetType {
 
   const hasToken = (needle: string) => Array.from(tokens).some(t => t.includes(needle));
 
-  const bankHints = ['חובה/זכות', 'חובה', 'זכות', 'Debit', 'Credit', 'יתרה', 'אסמכתא', 'תיאור פעולה'];
+  const bankHints = ['חובה/זכות', 'חובה', 'זכות', 'Debit', 'Credit', 'יתרה', 'אסמכתא', 'תיאור פעולה', 'סוג תנועה'];
   const creditHints = ['תאריך עסקה', 'שם בית העסק', 'שם בית עסק', 'סכום חיוב', 'סכום עסקה', 'תאריך חיוב', 'סכום בשח', 'מועד חיוב'];
 
   const isBank = bankHints.some(hasToken);
