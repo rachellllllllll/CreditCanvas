@@ -1,0 +1,216 @@
+/* Missing Credit Detail Alert - התראה על חיובי אשראי ללא פירוט */
+
+.missing-credit-detail-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  margin: 8px 0;
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  border: 1px solid #8b5cf6;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15);
+  animation: mcda-slide-in 0.3s ease-out;
+  direction: rtl;
+}
+
+@keyframes mcda-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mcda-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mcda-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.mcda-text-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcda-text {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #5b21b6;
+}
+
+.mcda-hint {
+  font-size: 0.78rem;
+  color: #6d28d9;
+  opacity: 0.8;
+}
+
+.mcda-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mcda-btn {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.mcda-btn-primary {
+  padding: 6px 14px;
+  background: #8b5cf6;
+  color: white;
+}
+
+.mcda-btn-primary:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+}
+
+.mcda-btn-details {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #8b5cf6;
+  color: #5b21b6;
+}
+
+.mcda-btn-details:hover {
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.mcda-btn-dismiss {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: #5b21b6;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mcda-btn-dismiss:hover {
+  background: rgba(91, 33, 182, 0.1);
+}
+
+/* פירוט חיובים */
+.mcda-details {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.mcda-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: #5b21b6;
+  padding: 2px 0;
+}
+
+.mcda-detail-company {
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.mcda-detail-amount {
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: bidi-override;
+}
+
+.mcda-detail-count {
+  opacity: 0.7;
+  font-size: 0.78rem;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .missing-credit-detail-alert {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .mcda-content {
+    justify-content: center;
+  }
+  
+  .mcda-actions {
+    justify-content: center;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .missing-credit-detail-alert {
+    background: linear-gradient(135deg, #2e1065 0%, #4c1d95 100%);
+    border-color: #7c3aed;
+  }
+  
+  .mcda-text {
+    color: #ddd6fe;
+  }
+  
+  .mcda-hint {
+    color: #c4b5fd;
+  }
+  
+  .mcda-btn-primary {
+    background: #7c3aed;
+  }
+  
+  .mcda-btn-primary:hover {
+    background: #8b5cf6;
+  }
+  
+  .mcda-btn-details {
+    border-color: #7c3aed;
+    color: #ddd6fe;
+  }
+  
+  .mcda-btn-details:hover {
+    background: rgba(124, 58, 237, 0.2);
+  }
+  
+  .mcda-btn-dismiss {
+    color: #ddd6fe;
+  }
+  
+  .mcda-btn-dismiss:hover {
+    background: rgba(221, 214, 254, 0.1);
+  }
+  
+  .mcda-details {
+    border-top-color: rgba(124, 58, 237, 0.3);
+  }
+  
+  .mcda-detail-row {
+    color: #c4b5fd;
+  }
+}
