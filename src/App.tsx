@@ -507,6 +507,8 @@ const App: React.FC = () => {
       return;
     }
     try {
+      // אפס דגלים כדי לאפשר זיהוי קטגוריות מחדש
+      setInitialPromptShown(false);
       await handlePickDirectory_Internal(dirHandle);
     } catch (err) {
       console.error('שגיאה ברענון תיקיה:', err);
@@ -623,6 +625,9 @@ const App: React.FC = () => {
     setExcelFiles(new Map());
     // אפס לתצוגה חודשית כדי שה-Tour יעבוד נכון
     setView('monthly');
+    
+    // אפס את דגל ה-auto-merge כדי שה-useEffect של הקטגוריות יוכל לרוץ מחדש
+    autoMergeRunRef.current = false;
     
     // התחל להציג מצב טעינה
     setLoadingState({ step: 'scanning', message: '🔍 סורק תיקיות...' });
@@ -904,6 +909,7 @@ const App: React.FC = () => {
       // סמן מיד שאנחנו בודקים Tour - לחסום דיאלוגים אחרים עד שנדע
       setTourPending(true);
       const shouldShowTour = await checkShouldShowTour(dir);
+      console.log('[Tour] shouldShowTour:', shouldShowTour);
       if (shouldShowTour) {
         setTimeout(() => setShowTour(true), 500);
       } else {
@@ -1540,6 +1546,7 @@ const App: React.FC = () => {
   
   React.useEffect(() => {
     if (!categoriesLoading && dirHandle) {
+      console.log('[CatLoadedOnce] Setting categoriesLoadedOnce=true');
       setCategoriesLoadedOnce(true);
     }
   }, [categoriesLoading, dirHandle]);
@@ -1617,18 +1624,35 @@ const App: React.FC = () => {
   });
 
   React.useEffect(() => {
+    // === DEBUG: trace category effect ===
+    console.log('[CatEffect] Running. analysis:', !!analysis, 'categoriesLoadedOnce:', categoriesLoadedOnce, 
+      'initialPromptShown:', initialPromptShown, 'autoMergeRunRef:', autoMergeRunRef.current, 
+      'tourPending:', tourPending, 'categoriesList.length:', categoriesList.length);
+    
     // חכה שהקטגוריות יטענו לפחות פעם אחת
-    if (!analysis || !categoriesLoadedOnce) return;
+    if (!analysis || !categoriesLoadedOnce) {
+      console.log('[CatEffect] ⏳ Waiting: analysis=', !!analysis, 'categoriesLoadedOnce=', categoriesLoadedOnce);
+      return;
+    }
     
     // אם הדיאלוג כבר הוצג בסשן הזה - לא מציגים שוב (למנוע הצגה אחרי מחיקת קטגוריה)
-    if (initialPromptShown) return;
+    if (initialPromptShown) {
+      console.log('[CatEffect] ⏭️ Skipped: initialPromptShown=true');
+      return;
+    }
     
     // אם auto-merge כבר רץ — לא לרוץ שוב (כדי למנוע לולאה מ-setAnalysis/setCategoryAliases)
-    if (autoMergeRunRef.current) return;
+    if (autoMergeRunRef.current) {
+      console.log('[CatEffect] ⏭️ Skipped: autoMergeRunRef=true');
+      return;
+    }
     
     // 🆕 חכה שה-Tour יסתיים/ידולג לפני הצגת דיאלוג קטגוריות/קונפליקטים
     // אם יש Tour בהמתנה (לפני או במהלך התצוגה) - לא להציג דיאלוג נוסף במקביל
-    if (tourPending) return;
+    if (tourPending) {
+      console.log('[CatEffect] ⏭️ Skipped: tourPending=true');
+      return;
+    }
     
     // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList וגם לא ב-categoryAliases (כבר מופו)
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
@@ -1641,8 +1665,13 @@ const App: React.FC = () => {
     // בדוק גם קונפליקטים בין בתי עסק (גם אם אין קטגוריות חדשות)
     let conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
     
+    console.log('[CatEffect] ✅ Guards passed! excelCats:', excelCats.length, 'missingCats:', missingCats.length, 
+      'conflictCount:', conflictCount, 'excelCats:', excelCats, 'categoriesList:', categoriesList.map(c => c.name));
     // אם אין קטגוריות חדשות ואין קונפליקטים - אין צורך בדיאלוג
-    if (missingCats.length === 0 && conflictCount === 0) return;
+    if (missingCats.length === 0 && conflictCount === 0) {
+      console.log('[CatEffect] 🟢 No missing cats and no conflicts — nothing to do');
+      return;
+    }
     
     // אם יש רק קונפליקטים (ללא קטגוריות חדשות) והמשתמש כבר דילג עליהם - אל תציג שוב
     // (אלא אם מספר הקונפליקטים השתנה, מה שמעיד על שינוי בנתונים)
@@ -1661,6 +1690,8 @@ const App: React.FC = () => {
         catsWithoutDefaults.push(cat);
       }
     }
+    
+    console.log('[CatEffect] 📋 catsWithDefaults:', catsWithDefaults, 'catsWithoutDefaults:', catsWithoutDefaults);
     
     // --- שלב א: איחוד אוטומטי של קטגוריות מאותה קבוצה (תמיד, גם כשיש קונפליקטים) ---
     const getGroupKeyForCat = (catName: string): string | null => {
@@ -1714,6 +1745,7 @@ const App: React.FC = () => {
     }
     
     // שמור aliases ועדכן עסקאות
+    console.log('[CatEffect] 🔀 autoMergedAliases:', autoMergedAliases);
     if (Object.keys(autoMergedAliases).length > 0) {
       autoMergeRunRef.current = true; // מנע הרצה חוזרת כש-setAnalysis/setCategoryAliases מעדכנים
       const newAliases = { ...categoryAliases, ...autoMergedAliases };
@@ -1753,9 +1785,13 @@ const App: React.FC = () => {
     }
     
     // אם אחרי האיחוד אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
-    if (missingCats.length === 0 && conflictCount === 0) return;
+    if (missingCats.length === 0 && conflictCount === 0) {
+      console.log('[CatEffect] 🟢 After merge: no missing cats and no conflicts — nothing to do');
+      return;
+    }
     
     // --- שלב ב: אישור אוטומטי של קטגוריות עם דיפולט (תמיד, לא תלוי בקונפליקטים) ---
+    console.log('[CatEffect] 📦 Auto-approve step: catsWithDefaults:', catsWithDefaults, 'missingCats remaining:', missingCats.length);
     // קונפליקטים הם בין בתי עסק, לא בין קיומן של קטגוריות — לכן אפשר לאשר קטגוריות במקביל
     if (catsWithDefaults.length > 0) {
       const autoApprovedMapping: Record<string, CategoryDef> = {};
@@ -1773,6 +1809,7 @@ const App: React.FC = () => {
       );
       
       if (newCatsToAdd.length > 0) {
+        console.log('[CatEffect] ✨ Auto-approving', newCatsToAdd.length, 'categories:', newCatsToAdd.map(c => c.name));
         const merged = [...categoriesList, ...newCatsToAdd];
         setCategoriesList(merged);
         if (dirHandle) {
@@ -1972,8 +2009,10 @@ const App: React.FC = () => {
   React.useEffect(() => {
     if (!dirHandle) return;
     (async () => {
+      console.log('[LoadCats] Loading categories from dir...');
       setCategoriesLoading(true);
       const loaded = await loadCategoriesFromDir(dirHandle);
+      console.log('[LoadCats] Loaded:', loaded ? loaded.length + ' categories' : 'null (no file)');
       if (loaded) setCategoriesList(loaded);
       setCategoriesLoading(false);
     })();
