@@ -168,7 +168,8 @@ export type CreditChargePattern = {
 
 const PATTERNS_JSON_FILENAME = 'creditChargePatterns.json';
 // (בוטל שימוש בקובץ עבור חלון ימים – ערכי ברירת מחדל קבועים בקוד)
-const DEFAULT_WINDOW_CONFIG: WindowConfig = { daysBeforeCharge: 1, daysAfterCharge: 6 };
+// daysBeforeCharge=7: בנקים מחייבים חשבון כמה ימים לפני תאריך החיוב הרשמי של המחזור
+const DEFAULT_WINDOW_CONFIG: WindowConfig = { daysBeforeCharge: 7, daysAfterCharge: 6 };
 
 // Base patterns (seed) – כרגע ריק כדי לא להכניס רעש אוטומטי
 const BASE_FALLBACK_PATTERN_STRINGS: string[] = [];
@@ -435,7 +436,9 @@ export async function markBankCreditChargesExactWithPatterns(
   return { updatedDetails, updatedCycles };
 }
 
-// markBankCombinedCreditCharges: זיהוי מצב בו חיוב בנק יחיד מכסה כמה מחזורי כרטיס שונים (לדוגמה שני כרטיסים). עובד רק על עסקאות שלא סומנו עדיין.
+// markBankCombinedCreditCharges: זיהוי מצב בו חיוב בנק יחיד מכסה כמה מחזורי כרטיס (גם מתאריכי חיוב שונים).
+// שיפור מרכזי: אוסף את *כל* המחזורים הפנויים שבחלון הימים של עסקת הבנק (לא רק באותו chargeDate)
+// ואז מנסה קומבינציות על כולם.
 export function markBankCombinedCreditCharges(
   details: CreditDetail[],
   cycles: CreditChargeCycleSummary[],
@@ -450,21 +453,18 @@ export function markBankCombinedCreditCharges(
   } = opts;
   if (!cycles?.length) return { updatedDetails: details, updatedCycles: cycles || [] };
 
-  // נשתמש רק במחזורים לפי כרטיס שעדיין לא קיבלו התאמה מלאה (full/multi/grouped)
-  const perCardCycles = cycles.filter(c => c.cardLast4);
-  const eligibleCycles = perCardCycles.filter(c => !c.bankMatchStatus || c.bankMatchStatus === 'none');
-
-  // קיבוץ מחזורים לפי תאריך חיוב כדי לבדוק קומבינציות באותו תאריך
-  const cyclesByDate: Record<string, CreditChargeCycleSummary[]> = {};
-  eligibleCycles.forEach(c => {
-    if (!c.chargeDate) return;
-    if (!cyclesByDate[c.chargeDate]) cyclesByDate[c.chargeDate] = [];
-    cyclesByDate[c.chargeDate].push(c);
-  });
+  // מחזורים פנויים (per-card, לא מאוחדים, לא כאלה שכבר הותאמו)
+  const eligibleCycles = cycles.filter(c => c.cardLast4 && (!c.bankMatchStatus || c.bankMatchStatus === 'none'));
 
   // העתק למחזורי פלט
   const cycleMap: Record<string, CreditChargeCycleSummary> = {};
   cycles.forEach(c => { cycleMap[c.cycleKey!] = { ...c }; });
+
+  // מעקב אחרי מחזורים שכבר נתפסו בשלב השילובים
+  const consumedCycleKeys = new Set<string>();
+
+  // מפת company→cards
+  const companyToCards = buildCompanyToCardsMap(cardCompanyMappings);
 
   // עזר ליצירת קומבינציות באורך k
   function combinations<T>(arr: T[], k: number): T[][] {
@@ -481,58 +481,84 @@ export function markBankCombinedCreditCharges(
     return res;
   }
 
-  const updatedDetails = details.map(d => {
-    if (d.source !== 'bank' || d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') return d;
-    if (d.neutral) return d;
+  // שלב 1: אסוף כל ההתאמות האפשריות ודרג לפי דיוק סכום (exact first)
+  type CombinedCandidate = {
+    detailIndex: number;
+    combo: CreditChargeCycleSummary[];
+    diff: number;
+    isKnownDescription: boolean;
+  };
+  const allCandidates: CombinedCandidate[] = [];
 
-    // סינון לפי מיפוי כרטיס↔חברה: אם ידוע ששם החברה שייך לכרטיסים מסוימים
+  details.forEach((d, idx) => {
+    if (d.source !== 'bank' || d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') return;
+    if (d.neutral) return;
+
     const descLower = (d.description || '').trim().toLowerCase();
-    const companyToCards = buildCompanyToCardsMap(cardCompanyMappings);
     const allowedCards = companyToCards.get(descLower);
+    const isKnownDesc = isKnownCreditChargeDescription(d.description || '');
 
-    // מצא מחזורי כרטיס בטווח ימים ובאותו תאריך חיוב
-    let matchedCombo: CreditChargeCycleSummary[] | null = null;
-    let matchedChargeDate: string | null = null;
+    // אסוף את כל המחזורים הפנויים שתאריך החיוב שלהם בחלון של עסקת הבנק – ללא תלות בתאריך חיוב
+    let windowCycles = eligibleCycles.filter(c =>
+      c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, { daysBeforeCharge, daysAfterCharge })
+    );
+    if (!windowCycles.length) return;
 
-    for (const [chargeDate, cyclesArr] of Object.entries(cyclesByDate)) {
-      // סנן לפי חלון ימים (התאריך של העסקה מול תאריך החיוב של הקבוצה)
-      if (!isBankChargeInWindow(d.date, chargeDate, { daysBeforeCharge, daysAfterCharge })) continue;
-
-      // סנן מחזורים לפי מיפוי כרטיס↔חברה אם קיים
-      let filteredCyclesArr = cyclesArr;
-      if (allowedCards && allowedCards.length > 0) {
-        const filtered = cyclesArr.filter(c => allowedCards.includes(c.cardLast4!));
-        if (filtered.length > 0) filteredCyclesArr = filtered;
-      }
-
-      // סדר עדיפויות: קודם כל כל המחזורים ביחד, אח"כ 4, 3, 2
-      const sizesToTry = [filteredCyclesArr.length, 4, 3, 2].filter((s, i, arr) => s >= 2 && s <= filteredCyclesArr.length && arr.indexOf(s) === i);
-      for (const size of sizesToTry) {
-        if (filteredCyclesArr.length < size) continue;
-        const combos = combinations(filteredCyclesArr, size);
-        for (const combo of combos) {
-          const comboNet = combo.reduce((sum, c) => sum + c.netCharge, 0);
-          // בדיקת כיוון: חיוב רגיל → expense בבנק; זיכוי → income
-          const expectedDirection = comboNet >= 0 ? 'expense' : 'income';
-          if (d.direction !== expectedDirection) continue;
-          const diff = Math.abs(d.amount - Math.abs(comboNet));
-          const allowed = Math.max(Math.abs(comboNet) * toleranceRatio, minToleranceAmount);
-          if (diff <= allowed) {
-            matchedCombo = combo;
-            matchedChargeDate = chargeDate;
-            break;
-          }
-        }
-        if (matchedCombo) break;
-      }
-      if (matchedCombo) break;
+    // סינון לפי מיפוי כרטיס↔חברה
+    if (allowedCards && allowedCards.length > 0) {
+      const filtered = windowCycles.filter(c => allowedCards.includes(c.cardLast4!));
+      if (filtered.length > 0) windowCycles = filtered;
     }
 
-  if (!matchedCombo) return d;
+    // הגבל ל-8 מחזורים כדי למנוע קומבינטוריקה מתפוצצת
+    if (windowCycles.length > 8) windowCycles = windowCycles.slice(0, 8);
 
-    // שמור את הכרטיס הראשון שהותאם (לצורך לימוד מיפוי כרטיס↔חברה)
-    const firstCard = matchedCombo[0]?.cardLast4;
-    matchedCombo.forEach(c => {
+    // נסה קומבינציות בגדלים 2..min(windowCycles.length, 5)
+    const maxSize = Math.min(windowCycles.length, 5);
+    for (let size = 2; size <= maxSize; size++) {
+      const combos = combinations(windowCycles, size);
+      for (const combo of combos) {
+        const comboNet = combo.reduce((sum, c) => sum + c.netCharge, 0);
+        const expectedDirection = comboNet >= 0 ? 'expense' : 'income';
+        if (d.direction !== expectedDirection) continue;
+        const diff = Math.abs(d.amount - Math.abs(comboNet));
+        const allowed = Math.max(Math.abs(comboNet) * toleranceRatio, minToleranceAmount);
+        if (diff <= allowed) {
+          allCandidates.push({ detailIndex: idx, combo, diff, isKnownDescription: isKnownDesc });
+        }
+      }
+    }
+  });
+
+  // סדר לפי: 1) תיאור מוכר קודם 2) הפרש סכום קטן קודם (exact match קודם) 3) קומבו קטן קודם
+  allCandidates.sort((a, b) => {
+    if (a.isKnownDescription !== b.isKnownDescription) return a.isKnownDescription ? -1 : 1;
+    if (a.diff !== b.diff) return a.diff - b.diff;
+    return a.combo.length - b.combo.length;
+  });
+
+  // שלב 2: הקצה greedy – כל מחזור וכל עסקת בנק יכולים להתאים רק פעם אחת
+  const matchedDetailIndices = new Set<number>();
+  const assignedMatches = new Map<number, { combo: CreditChargeCycleSummary[] }>();
+
+  for (const cand of allCandidates) {
+    if (matchedDetailIndices.has(cand.detailIndex)) continue;
+    // בדוק שאף מחזור בקומבו לא נתפס
+    if (cand.combo.some(c => consumedCycleKeys.has(c.cycleKey!))) continue;
+
+    matchedDetailIndices.add(cand.detailIndex);
+    cand.combo.forEach(c => consumedCycleKeys.add(c.cycleKey!));
+    assignedMatches.set(cand.detailIndex, { combo: cand.combo });
+  }
+
+  // שלב 3: בנה מערך עסקאות מעודכן
+  const updatedDetails = details.map((d, idx) => {
+    const match = assignedMatches.get(idx);
+    if (!match) return d;
+
+    const { combo } = match;
+    const firstCard = combo[0]?.cardLast4;
+    combo.forEach(c => {
       const existing = cycleMap[c.cycleKey!];
       const bankIds = existing.bankTransactionIds ? [...existing.bankTransactionIds, d.id] : [d.id];
       cycleMap[c.cycleKey!] = {
@@ -543,14 +569,13 @@ export function markBankCombinedCreditCharges(
       };
     });
 
-    const comboSize = matchedCombo.length;
+    const comboSize = combo.length;
     return {
       ...d,
       transactionType: 'credit_charge_combined',
       neutral: true,
-      relatedTransactionIds: matchedCombo.flatMap(c => c.transactionIds),
-      matchedCycleKeys: matchedCombo.map(c => c.cycleKey!),
-      matchedChargeDate: matchedChargeDate || undefined,
+      relatedTransactionIds: combo.flatMap(c => c.transactionIds),
+      matchedCycleKeys: combo.map(c => c.cycleKey!),
       matchedComboSize: comboSize,
       matchReason: `combined_${comboSize}`,
       matchedCardLast4: firstCard,
