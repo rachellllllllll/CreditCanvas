@@ -352,6 +352,9 @@ const App: React.FC = () => {
   const [showTour, setShowTour] = useState(false);
   const [tourPending, setTourPending] = useState(false); // מסמן שיש Tour שממתין להיות מוצג (לפני או במהלך)
   
+  // ref למניעת הרצה כפולה של auto-merge (מוגדר כאן כדי שיהיה זמין ל-callbacks של Tour)
+  const autoMergeRunRef = React.useRef(false);
+  
   // בדוק אם המשתמש כבר סיים את הטור - מבוסס תיקייה
   // אם יש קבצי הגדרות (כמו categories.json) - זה משתמש קיים
   const checkShouldShowTour = useCallback(async (dir: FileSystemDirectoryHandle): Promise<boolean> => {
@@ -462,6 +465,7 @@ const App: React.FC = () => {
   const handleTourComplete = useCallback(() => {
     setShowTour(false);
     setTourPending(false); // ה-Tour הסתיים - עכשיו אפשר להציג דיאלוגים אחרים
+    autoMergeRunRef.current = false; // אפשר ל-useEffect של הקטגוריות לרוץ אחרי שה-Tour הסתיים
     // שמור את שם התיקייה כדי לא להציג שוב באותה תיקייה
     if (dirHandle) {
       try {
@@ -479,6 +483,7 @@ const App: React.FC = () => {
   const handleTourSkip = useCallback(() => {
     setShowTour(false);
     setTourPending(false); // ה-Tour דולג - עכשיו אפשר להציג דיאלוגים אחרים
+    autoMergeRunRef.current = false; // אפשר ל-useEffect של הקטגוריות לרוץ אחרי שה-Tour דולג
     // שמור את שם התיקייה גם בדילוג
     if (dirHandle) {
       try {
@@ -904,6 +909,7 @@ const App: React.FC = () => {
       } else {
         // אין צורך ב-Tour - שחרר את החסימה
         setTourPending(false);
+        autoMergeRunRef.current = false; // וודא שה-useEffect של הקטגוריות יכול לרוץ
       }
 
       // --- Analytics: טיפול בפרופיל משתמש ---
@@ -1610,7 +1616,6 @@ const App: React.FC = () => {
     }
   });
 
-  const autoMergeRunRef = React.useRef(false);
   React.useEffect(() => {
     // חכה שהקטגוריות יטענו לפחות פעם אחת
     if (!analysis || !categoriesLoadedOnce) return;
@@ -1883,7 +1888,7 @@ const App: React.FC = () => {
             })
           }) : a);
           
-          // --- Analytics: שלח את כל המיפויים עם סיווג לפי סוג ---
+          // --- Analytics: שלח רק מיפויים חדשים/ידניים ל-Firebase (לא auto_matched) ---
           const newMappings = Object.entries(mapping).map(([excelName, catDef]) => {
             const wasExisting = categoriesList.find(c => c.name === catDef.name);
             const isSameName = excelName === catDef.name;
@@ -1900,7 +1905,10 @@ const App: React.FC = () => {
             return { excelName, catDef, mappingType };
           });
           
-          if (newMappings.length > 0 && (userProfile?.analyticsConsent === true || termsAccepted)) {
+          // סנן: שלח ל-Firebase רק קטגוריות חדשות ומיפויים ידניים — לא auto_matched
+          const analyticsRelevantMappings = newMappings.filter(m => m.mappingType !== 'auto_matched');
+          
+          if (analyticsRelevantMappings.length > 0 && (userProfile?.analyticsConsent === true || termsAccepted)) {
             try {
               // אם אין sessionId, צור אחד חדש
               let sessionIdToUse = analyticsSessionId;
@@ -1918,7 +1926,7 @@ const App: React.FC = () => {
               }
               
               // בנה את רשימת המיפויים עם תיאורי עסקאות
-              const categoryMappings: CategoryMapping[] = newMappings.map(({ excelName, catDef, mappingType }) => {
+              const categoryMappings: CategoryMapping[] = analyticsRelevantMappings.map(({ excelName, catDef, mappingType }) => {
                 // מצא את העסקאות עם הקטגוריה הזו
                 const transactionsWithCategory = analysis?.details.filter(d => d.category === excelName) || [];
                 // קבץ תיאורים וספור
