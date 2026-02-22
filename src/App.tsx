@@ -1359,6 +1359,10 @@ const App: React.FC = () => {
 
   const [categoriesList, setCategoriesList] = useState<CategoryDef[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  
+  // ref שתמיד מחזיק את הערך העדכני של categoriesList — לשימוש בתוך closures (כמו onConfirm)
+  const categoriesListRef = React.useRef(categoriesList);
+  React.useEffect(() => { categoriesListRef.current = categoriesList; }, [categoriesList]);
 
   // פונקציה אחידה להוספה/עדכון קטגוריה - מונעת כפילויות
   const upsertCategory = React.useCallback((cat: CategoryDef) => {
@@ -1399,6 +1403,9 @@ const App: React.FC = () => {
   });
 
   const [categoryAliases, setCategoryAliases] = useState<Record<string, string>>({});
+  // ref שתמיד מחזיק את הערך העדכני של categoryAliases — לשימוש בתוך closures
+  const categoryAliasesRef = React.useRef(categoryAliases);
+  React.useEffect(() => { categoryAliasesRef.current = categoryAliases; }, [categoryAliases]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_descriptionAliases, _setDescriptionAliases] = useState<Record<string, string>>({});
 
@@ -1886,8 +1893,9 @@ const App: React.FC = () => {
           
         },
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
-          const merged = [...categoriesList];
-          const newAliases = { ...categoryAliases };
+          // חשוב: להשתמש ב-ref ולא ב-closure כי categoriesList ו-categoryAliases יכולים להיות לא מעודכנים
+          const merged = [...categoriesListRef.current];
+          const newAliases = { ...categoryAliasesRef.current };
           
           Object.entries(mapping).forEach(([excelName, catDef]) => {
             // אם שם הקטגוריה שונה משם המקור - זה מיפוי/איחוד
@@ -1927,7 +1935,7 @@ const App: React.FC = () => {
           
           // --- Analytics: שלח רק מיפויים חדשים/ידניים ל-Firebase (לא auto_matched) ---
           const newMappings = Object.entries(mapping).map(([excelName, catDef]) => {
-            const wasExisting = categoriesList.find(c => c.name === catDef.name);
+            const wasExisting = categoriesListRef.current.find(c => c.name === catDef.name);
             const isSameName = excelName === catDef.name;
             
             let mappingType: 'manual_mapping' | 'auto_matched' | 'new_category';
