@@ -393,18 +393,13 @@ export function isXLSFile(fileName: string): boolean {
  * נטען רק כשצריך - לא נכנס ל-bundle הראשי
  */
 export async function readXLS(arrayBuffer: ArrayBuffer, fileName: string = ''): Promise<Workbook> {
-  
   try {
     // שלב 1: טעינה דינמית של SheetJS
-    const startLoad = performance.now();
     const XLSX = await import('xlsx');
-    const loadTime = (performance.now() - startLoad).toFixed(0);
 
     // שלב 2: קריאת הקובץ
-    const startParse = performance.now();
     const data = new Uint8Array(arrayBuffer);
-    const wb = XLSX.read(data, { type: 'array' });
-    const parseTime = (performance.now() - startParse).toFixed(0);
+    const wb = XLSX.read(data, { type: 'array', cellDates: false });
 
     // שלב 3: המרה למבנה Workbook שלנו
     const sheets: Sheet[] = [];
@@ -422,7 +417,6 @@ export async function readXLS(arrayBuffer: ArrayBuffer, fileName: string = ''): 
         raw: true,
       });
 
-
       // המרה ל-Row[] (המבנה הפנימי שלנו)
       const rows: Row[] = [];
       for (const rawRow of rawRows) {
@@ -431,10 +425,18 @@ export async function readXLS(arrayBuffer: ArrayBuffer, fileName: string = ''): 
           const val = (rawRow as unknown[])[col];
           if (val !== null && val !== undefined && val !== '') {
             const colLetter = colNumToLetter(col);
-            row[colLetter] = {
-              v: typeof val === 'number' ? val : String(val),
-              t: typeof val === 'number' ? 'n' : 's',
-            };
+            // הגנה: אם SheetJS מחזיר אובייקט Date, המר לפורמט dd/mm/yyyy
+            if (val instanceof Date) {
+              const dd = String(val.getDate()).padStart(2, '0');
+              const mm = String(val.getMonth() + 1).padStart(2, '0');
+              const yyyy = val.getFullYear();
+              row[colLetter] = { v: `${dd}/${mm}/${yyyy}`, t: 's' };
+            } else {
+              row[colLetter] = {
+                v: typeof val === 'number' ? val : String(val),
+                t: typeof val === 'number' ? 'n' : 's',
+              };
+            }
           }
         }
         if (Object.keys(row).length > 0) {
@@ -448,11 +450,7 @@ export async function readXLS(arrayBuffer: ArrayBuffer, fileName: string = ''): 
     return { sheets };
 
   } catch (err) {
-
-    
-    // בדיקה אם זו בעיית dynamic import
-    if (err instanceof Error && (err.message.includes('import') || err.message.includes('module'))) {
-    }
+    console.error(`[XLS] שגיאה בקריאת קובץ XLS "${fileName}":`, err instanceof Error ? err.message : err);
     
     throw new Error(`שגיאה בקריאת קובץ XLS "${fileName}": ${err instanceof Error ? err.message : String(err)}`);
   }

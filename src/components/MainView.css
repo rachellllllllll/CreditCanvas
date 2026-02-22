@@ -1435,6 +1435,10 @@
 @keyframes dnPop { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:translateY(0);} }
 .dn-pop-header { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:600; }
 .dn-pop-year { font-weight:700; letter-spacing:.5px; }
+.dn-year-nav { display:flex; align-items:center; gap:6px; }
+.dn-year-arrow { background:transparent; border:1px solid #e2e8f0; cursor:pointer; font-size:11px; line-height:1; padding:3px 7px; border-radius:8px; color:#475569; transition:.18s; }
+.dn-year-arrow:hover:not(:disabled) { background:#e2e8f0; }
+.dn-year-arrow:disabled { opacity:.35; cursor:not-allowed; }
 .dn-close { background:transparent; border:none; cursor:pointer; font-size:18px; line-height:1; padding:2px 6px; border-radius:8px; color:#475569; }
 .dn-close:hover { background:#f1f5f9; }
 .dn-months, .dn-years { display:grid; gap:8px; }

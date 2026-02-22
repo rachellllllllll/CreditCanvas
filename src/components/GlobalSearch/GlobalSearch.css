@@ -547,6 +547,39 @@
   font-size: 12px;
 }
 
+.GlobalSearch-credit-charge-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #d1fae5;
+  color: #065f46;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.GlobalSearch-credit-combined-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #ede9fe;
+  color: #5b21b6;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.GlobalSearch-not-counted {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-right: 4px;
+}
+
+.GlobalSearch-td-amount.neutral {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
 .GlobalSearch-td-desc {
   color: #1f2937;
 }

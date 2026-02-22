@@ -28,7 +28,7 @@ import CategoryMappingsTable from './CategoryMappingsTable';
 import ErrorsTable from './ErrorsTable';
 import UnknownCreditDescriptionsTable from './UnknownCreditDescriptionsTable';
 import { extractFeedbackEntries, calculateFeedbackStats } from './feedbackUtils';
-import CategoryStatsChart from './CategoryStatsChart';
+import CategoryStatsChart from './CategoryStatsChart.tsx';
 import './AdminDashboard.css';
 
 // ============================================
@@ -48,8 +48,6 @@ interface TabConfig {
 // ============================================
 
 export default function AdminDashboardV2() {
-  console.log('[Admin] AdminDashboard V2 rendering');
-
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -72,17 +70,16 @@ export default function AdminDashboardV2() {
     setDateRange,
     refresh,
     loadUserFullHistory,
-    userRealDates
+    userRealDates,
+    userFullEvents
   } = useAnalyticsData();
 
   // Auth state management
   useEffect(() => {
-    console.log('[Admin] Setting up auth...');
-
     checkRedirectResult()
       .then((redirectUser) => {
         if (redirectUser) {
-          console.log('[Admin] User from redirect:', redirectUser.email);
+          // user authenticated via redirect
         }
       })
       .catch((err) => {
@@ -91,7 +88,6 @@ export default function AdminDashboardV2() {
       });
 
     const unsubscribe = onAuthChange((authUser) => {
-      console.log('[Admin] Auth state changed:', authUser?.email || 'no user');
       setUser(authUser);
       setAuthLoading(false);
     });
@@ -435,6 +431,7 @@ export default function AdminDashboardV2() {
                 events={events}
                 loadUserFullHistory={loadUserFullHistory}
                 userRealDates={userRealDates}
+                userFullEvents={userFullEvents}
               />
             </>
           )}

@@ -35,8 +35,7 @@ const ADMIN_EMAILS_ENV = import.meta.env.VITE_ADMIN_EMAILS || '';
 const ADMIN_EMAILS: string[] = ADMIN_EMAILS_ENV 
   ? ADMIN_EMAILS_ENV.split(',').map((e: string) => e.trim().toLowerCase())
   : [
-      // הוסף את המייל שלך כאן:
-      // 'your-email@gmail.com',
+      'r0527124976@gmail.com',
     ];
 
 // ============================================
@@ -56,7 +55,6 @@ export function getFirebaseApp(): FirebaseApp | null {
       } else {
         firebaseApp = initializeApp(firebaseConfig);
       }
-      console.log('[Auth] Firebase app initialized successfully');
     } catch (err) {
       console.error('[Auth] Failed to initialize Firebase:', err);
       return null;
@@ -91,19 +89,14 @@ function getFirebaseAuth(): Auth | null {
  * התחברות עם Google (popup - יותר אמין מ-redirect)
  */
 export async function signInWithGoogle(): Promise<User> {
-  console.log('[Auth] signInWithGoogle called');
-  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
     console.error('[Auth] No auth instance for sign in');
     throw new Error('Firebase Auth לא זמין');
   }
 
-  console.log('[Auth] Opening Google sign-in popup...');
-  
   try {
     const result = await signInWithPopup(authInstance, googleProvider);
-    console.log('[Auth] Sign-in successful:', result.user.email);
     return result.user;
   } catch (error: unknown) {
     console.error('[Auth] Sign-in error:', error);
@@ -124,7 +117,6 @@ export async function signInWithGoogle(): Promise<User> {
  * בדיקת תוצאת redirect - לא בשימוש יותר (נשאר לתאימות)
  */
 export async function checkRedirectResult(): Promise<User | null> {
-  console.log('[Auth] checkRedirectResult called (no-op with popup auth)');
   return null;
 }
 
@@ -142,8 +134,6 @@ export async function logOut(): Promise<void> {
  * האזנה לשינויי authentication
  */
 export function onAuthChange(callback: (user: User | null) => void): () => void {
-  console.log('[Auth] onAuthChange listener registered');
-  
   const authInstance = getFirebaseAuth();
   if (!authInstance) {
     console.error('[Auth] No auth instance for listener');
@@ -151,10 +141,7 @@ export function onAuthChange(callback: (user: User | null) => void): () => void 
     return () => {};
   }
   
-  return onAuthStateChanged(authInstance, (user) => {
-    console.log('[Auth] Auth state changed:', user ? `User: ${user.email}` : 'No user');
-    callback(user);
-  });
+  return onAuthStateChanged(authInstance, callback);
 }
 
 /**

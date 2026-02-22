@@ -137,16 +137,13 @@ export default function UnknownCreditDescriptionsTable({
       const q = query(eventsRef, where('event', '==', 'unknown_credit_charge_descriptions'));
       const snapshot = await getDocs(q);
 
-      let deletedCount = 0;
       for (const docSnap of snapshot.docs) {
         try {
           await deleteDoc(doc(db, 'analytics_events', docSnap.id));
-          deletedCount++;
         } catch (err) {
           console.error(`[Admin] Error deleting event ${docSnap.id}:`, err);
         }
       }
-      console.log(`[Admin] Deleted ${deletedCount} unknown_credit_charge_descriptions events`);
       onDeleted?.();
     } catch (err) {
       console.error('[Admin] Error deleting all:', err);

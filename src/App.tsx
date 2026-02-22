@@ -43,8 +43,9 @@ import {
   saveSessionDurationForLater
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
-import { processCreditChargeMatching, detectUnmatchedCreditCharges, isKnownCreditChargeDescription } from './utils/creditChargePatterns';
-import type { UnmatchedCreditCharge } from './utils/creditChargePatterns';
+import { processCreditChargeMatching, detectUnmatchedCreditCharges, detectMissingBankStatements, isKnownCreditChargeDescription } from './utils/creditChargePatterns';
+import type { UnmatchedCreditCharge, UnmatchedBankStatement } from './utils/creditChargePatterns';
+import { findOverlappingDateRanges, type DuplicateFilesInfo } from './utils/duplicateDetection';
 import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule, type RuleChangeResult } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
@@ -220,17 +221,17 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
     // Remove currency symbols and spaces
     amount = amount.replace(/[^\d.,-]/g, '').replace(',', '.');
     // Normalize date (support both dd-mm-yyyy and dd/mm/yy and Excel serial numbers)
-    if (/^\d{1,5}$/.test(date)) {
-      // Excel serial date
-      const excelEpoch = Date.UTC(1899, 11, 30);
-      const serial = parseInt(date, 10);
-      if (!isNaN(serial)) {
+    // תומך גם בסריאלים עשרוניים מ-XLS (כגון 46059.0004...)
+    {
+      const numVal = parseFloat(date);
+      if (!isNaN(numVal) && numVal > 1 && numVal < 60000 && /^\d+(\.\d+)?$/.test(date)) {
+        const excelEpoch = Date.UTC(1899, 11, 30);
+        const serial = Math.floor(numVal);
         const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
-        // Format as dd/m/yy
-        date = `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear().toString().slice(-2)}`;
+        date = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCFullYear()).slice(-2)}`;
+      } else {
+        date = date.replace(/\./g, '/').replace(/-/g, '/');
       }
-    } else {
-      date = date.replace(/\./g, '/').replace(/-/g, '/');
     }
 
     /**
@@ -256,14 +257,12 @@ const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: str
      */
     // --- normalize chargeDate ---
     if (chargeDate) {
-      if (/^\d{1,5}$/.test(chargeDate)) {
+      const numVal = parseFloat(chargeDate);
+      if (!isNaN(numVal) && numVal > 1 && numVal < 60000 && /^\d+(\.\d+)?$/.test(chargeDate)) {
         const excelEpoch = Date.UTC(1899, 11, 30);
-        const serial = parseInt(chargeDate, 10);
-        //if (!isNaN(serial) && serial > 0 && serial < 60000) {
-        if (!isNaN(serial)) {
-          const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
-          chargeDate = `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear().toString().slice(-2)}`;
-        }
+        const serial = Math.floor(numVal);
+        const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
+        chargeDate = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCFullYear()).slice(-2)}`;
       } else {
         chargeDate = chargeDate.replace(/\./g, '/').replace(/-/g, '/');
       }
@@ -389,6 +388,10 @@ const App: React.FC = () => {
 
   // --- חיובי אשראי ללא פירוט (לא neutral, עדיין נספרים כהוצאה) ---
   const [unmatchedCreditCharges, setUnmatchedCreditCharges] = useState<UnmatchedCreditCharge[]>([]);
+  // --- מחזורי אשראי ללא עסקת בנק תואמת (חסר דף בנק) ---
+  const [unmatchedBankStatements, setUnmatchedBankStatements] = useState<UnmatchedBankStatement[]>([]);
+  // --- קבצים כפולים / חופפים ---
+  const [duplicateFilesInfo, setDuplicateFilesInfo] = useState<DuplicateFilesInfo | null>(null);
 
   // --- מצב אנליטיקס ---
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -643,10 +646,44 @@ const App: React.FC = () => {
       const sheetTypeOverrides: SheetTypeOverrides = await loadSheetTypeOverridesFromDir(dir);
       let overridesChanged = false;
 
+      // ===== רמה 1: זיהוי קבצים בינאריים זהים =====
+      // קרא את כל הקבצים, חשב hash, ודלג על כפולים
+      const fileBuffers: Map<string, ArrayBuffer> = new Map();
+      const hashToFirstPath: Map<string, string> = new Map(); // hash → first relativePath
+      const pathToHash: Map<string, string> = new Map(); // כל path (כולל כפולים) → hash שלו
+      const skippedDuplicateFiles: Set<string> = new Set();
+      
+      for (const { handle, relativePath } of excelFileEntries) {
+        try {
+          const { arrayBuffer } = await readFileWithRetry(handle);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+          const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+          pathToHash.set(relativePath, hash);
+          
+          if (hashToFirstPath.has(hash)) {
+            // קובץ כפול – דלג
+            skippedDuplicateFiles.add(relativePath);
+            console.info(`⏭️ קובץ כפול (זהה ל-${hashToFirstPath.get(hash)}): ${relativePath}`);
+          } else {
+            hashToFirstPath.set(hash, relativePath);
+            fileBuffers.set(relativePath, arrayBuffer);
+          }
+        } catch {
+          // אם הקריאה נכשלה, נטפל בזה בלולאת העיבוד
+          fileBuffers.set(relativePath, new ArrayBuffer(0));
+        }
+      }
+
       // עבור על כל הקבצים שנמצאו
       let fileIndex = 0;
       for (const { handle: fileHandle, relativePath } of excelFileEntries) {
         fileIndex++;
+        
+        // דלג על קבצים כפולים שכבר זוהו (רמה 1)
+        if (skippedDuplicateFiles.has(relativePath)) {
+          continue;
+        }
+        
         setLoadingState({ 
           step: 'reading', 
           message: `📄 קורא: ${fileHandle.name}`,
@@ -654,16 +691,13 @@ const App: React.FC = () => {
         });
         // הוצא את הסיומת מהקובץ
         const fileExtension = fileHandle.name.substring(fileHandle.name.lastIndexOf('.')).toLowerCase();
-        let retryCount = 0;
+        const retryCount = 0;
         
         try {
-          // קרא את הקובץ עם retry mechanism
-          const { arrayBuffer, retryCount: attempts } = await readFileWithRetry(fileHandle);
-          retryCount = attempts;
-          
-          // אם הצלחנו אחרי retry - רשום ללוג
-          if (retryCount > 0) {
-            console.info(`קובץ ${fileHandle.name} נקרא בהצלחה אחרי ${retryCount + 1} ניסיונות`);
+          // השתמש ב-buffer שכבר נקרא בשלב ה-hash
+          const arrayBuffer = fileBuffers.get(relativePath);
+          if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+            throw new Error('Empty or missing buffer');
           }
           
           // שמור את קובץ האקסל המקורי בזיכרון (עם נתיב יחסי)
@@ -672,10 +706,8 @@ const App: React.FC = () => {
           // קרא את הקובץ עם Parser המתאים לסוג הקובץ
           let workbook;
           if (isXLSFile(fileHandle.name)) {
-            console.log(`[App] קובץ XLS זוהה: ${fileHandle.name}, משתמש ב-readXLS (SheetJS dynamic import)`);
             workbook = await readXLS(arrayBuffer, fileHandle.name);
           } else {
-            console.log(`[App] קובץ XLSX זוהה: ${fileHandle.name}, משתמש ב-readXLSX (parser מינימלי)`);
             workbook = await readXLSX(arrayBuffer);
           }
           
@@ -762,6 +794,40 @@ const App: React.FC = () => {
       // --- זיהוי חיובי אשראי ללא פירוט (לפי תיאור ידוע, לא סומנו neutral) ---
       const unmatched = detectUnmatchedCreditCharges(allDetails);
       setUnmatchedCreditCharges(unmatched);
+      
+      // --- זיהוי מחזורי אשראי ללא עסקת בנק תואמת (חסר דף בנק) ---
+      const missingBank = detectMissingBankStatements(finalCycles, allDetails);
+      setUnmatchedBankStatements(missingBank);
+
+      // --- רמה 1+3: בניית מידע כפילויות ---
+      {
+        // רמה 1: בנה קבוצות קבצים זהים מה-hash pass
+        const hashToAllPaths: Map<string, string[]> = new Map();
+        for (const [path, hash] of pathToHash) {
+          const existing = hashToAllPaths.get(hash);
+          if (existing) {
+            existing.push(path);
+          } else {
+            hashToAllPaths.set(hash, [path]);
+          }
+        }
+        const identicalGroups = Array.from(hashToAllPaths.entries())
+          .filter(([, paths]) => paths.length > 1)
+          .map(([hash, paths]) => ({
+            hash,
+            paths,
+            fileSize: fileBuffers.get(paths[0])?.byteLength ?? 0
+          }));
+
+        // רמה 3: זיהוי חפיפת תאריכים
+        const overlappingRanges = findOverlappingDateRanges(allDetails, skippedDuplicateFiles);
+
+        setDuplicateFilesInfo({
+          identicalFiles: identicalGroups,
+          overlappingRanges,
+          skippedFiles: Array.from(skippedDuplicateFiles)
+        });
+      }
       
       // --- Firebase: שלח תיאורים חדשים שזוהו ע"י סכום אבל לא ברשימה הידועה ---
       // מחפש עסקאות שסומנו credit_charge (ע"י סכום+תאריך) אבל התיאור שלהן לא ברשימה
@@ -1659,8 +1725,6 @@ const App: React.FC = () => {
           return d;
         })
       }) : a);
-      console.log(`🔄 אוחדו אוטומטית ${Object.keys(autoMergedAliases).length} קטגוריות:`,
-        Object.entries(autoMergedAliases).map(([from, to]) => `${from} → ${to}`).join(', '));
       
       // סנן קטגוריות שאוחדו מ-missingCats
       const mergedAwayNames = new Set(Object.keys(autoMergedAliases));
@@ -1709,7 +1773,6 @@ const App: React.FC = () => {
         if (dirHandle) {
           saveCategoriesToDir(dirHandle, merged);
         }
-        console.log(`✅ נוספו אוטומטית ${newCatsToAdd.length} קטגוריות:`, newCatsToAdd.map(c => c.name).join(', '));
       }
       
       // סנן קטגוריות שאושרו מ-missingCats — הן כבר לא "חסרות"
@@ -1721,13 +1784,6 @@ const App: React.FC = () => {
     
     // אחרי אישור אוטומטי — אם אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
     if (missingCats.length === 0 && conflictCount === 0) return;
-    
-    console.log('📋 סטטוס דיאלוג:', {
-      missingCats: missingCats.length,
-      catsWithoutDefaults: catsWithoutDefaults.length,
-      conflictCount,
-      catsWithDefaults: catsWithDefaults.length,
-    });
     
     // הצג דיאלוג אם יש קטגוריות חדשות (ללא דיפולט) או קונפליקטים
     // קטגוריות עם דיפולט כבר אושרו אוטומטית למעלה
@@ -1786,7 +1842,6 @@ const App: React.FC = () => {
             setDismissedConflictCount(0);
           } catch { /* ignore */ }
           
-          console.log(`✅ נשמרו ${Object.keys(resolved).length} כללי קטגוריה לקונפליקטים שנפתרו`);
         },
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
           const merged = [...categoriesList];
@@ -2269,6 +2324,8 @@ const App: React.FC = () => {
             externalRuleToEdit={ruleToEditFromSettings}
             onClearExternalRuleToEdit={() => setRuleToEditFromSettings(null)}
             unmatchedCreditCharges={unmatchedCreditCharges}
+            unmatchedBankStatements={unmatchedBankStatements}
+            duplicateFilesInfo={duplicateFilesInfo}
           />
         </>
       )}

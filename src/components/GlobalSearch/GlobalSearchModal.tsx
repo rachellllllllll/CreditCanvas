@@ -691,6 +691,16 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       <span className={`GlobalSearch-source-badge ${tx.source === 'bank' ? 'bank' : 'credit'}`}>
                         {tx.source === 'bank' ? '🏦' : '💳'}
                       </span>
+                      {tx.transactionType === 'credit_charge' && (
+                        <span className="GlobalSearch-credit-charge-badge" title={`חיוב אשראי${tx.matchedCardLast4 ? ` (••••${tx.matchedCardLast4})` : ''}`}>
+                          💳 חיוב אשראי{tx.matchedCardLast4 ? ` (${tx.matchedCardLast4})` : ''}
+                        </span>
+                      )}
+                      {tx.transactionType === 'credit_charge_combined' && (
+                        <span className="GlobalSearch-credit-combined-badge" title="חיוב בנק מאוחד">
+                          🔗 חיוב מאוחד
+                        </span>
+                      )}
                     </td>
                     <td className="GlobalSearch-td GlobalSearch-td-desc">
                       {highlightText(tx.description)}
@@ -710,8 +720,11 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         </span>
                       )}
                     </td>
-                    <td className={`GlobalSearch-td GlobalSearch-td-amount ${tx.direction === 'income' ? 'income' : 'expense'}`}>
+                    <td className={`GlobalSearch-td GlobalSearch-td-amount ${tx.direction === 'income' ? 'income' : 'expense'}${tx.neutral || (tx.transactionType === 'credit_charge' && (tx.relatedTransactionIds?.length || 0) > 0) || tx.transactionType === 'credit_charge_combined' ? ' neutral' : ''}`}>
                       {tx.direction === 'income' ? '+' : '-'}{Math.abs(tx.amount).toLocaleString()} ₪
+                      {(tx.neutral || (tx.transactionType === 'credit_charge' && (tx.relatedTransactionIds?.length || 0) > 0) || tx.transactionType === 'credit_charge_combined') && (
+                        <span className="GlobalSearch-not-counted" title="לא נספר – מפורט בעסקאות האשראי">(לא נספר)</span>
+                      )}
                     </td>
                     <td className="GlobalSearch-td GlobalSearch-td-action">
                       <span className="GlobalSearch-navigate-icon" title="נווט לעסקה">→</span>

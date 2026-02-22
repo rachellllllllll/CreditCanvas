@@ -5,6 +5,8 @@ import { computeCreditChargeCycles } from './creditCycles';
 // כל ערך הוא מחרוזת שמחפשים ב-includes (case-insensitive) בתיאור עסקת הבנק
 const KNOWN_CREDIT_CHARGE_DESCRIPTIONS: string[] = [
   'מקס',
+  'כרטיסי אשראי ל',
+  'דיינרס קלוב יש'
 ];
 
 /**
@@ -35,8 +37,8 @@ export function detectUnmatchedCreditCharges(details: CreditDetail[]): Unmatched
   const unmatched: UnmatchedCreditCharge[] = [];
   
   for (const d of details) {
-    // רק עסקאות בנק שלא סומנו כ-credit_charge
-    if (d.source !== 'bank' || d.direction !== 'expense') continue;
+    // עסקאות בנק שלא סומנו כ-credit_charge (גם expense וגם income/זיכוי מאשראי)
+    if (d.source !== 'bank') continue;
     if (d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') continue;
     if (d.neutral) continue;
     
@@ -50,6 +52,64 @@ export function detectUnmatchedCreditCharges(details: CreditDetail[]): Unmatched
     }
   }
   
+  return unmatched;
+}
+
+/**
+ * מידע על מחזורי אשראי שלא נמצאה להם עסקת בנק תואמת
+ * (פירוט אשראי קיים אך חסר דף חשבון בנק)
+ */
+export interface UnmatchedBankStatement {
+  chargeDate: string;
+  cardLast4: string;
+  netCharge: number;
+  transactionCount: number;
+}
+
+/**
+ * מזהה מחזורי אשראי שלא נמצאה להם עסקת בנק תואמת (bankMatchStatus === 'none').
+ * משמש להצגת התראה למשתמש: "פירוט אשראי נטען אך חסר דף חשבון בנק".
+ * 
+ * מסנן:
+ * - רק מחזורים per-card (לא ALL)
+ * - רק מחזורים שתאריך החיוב שלהם כבר עבר
+ * - לא מציג אם אין בכלל עסקאות בנק (= המשתמש טען רק אשראי)
+ */
+export function detectMissingBankStatements(
+  cycles: CreditChargeCycleSummary[],
+  details: CreditDetail[]
+): UnmatchedBankStatement[] {
+  // אם אין בכלל עסקאות בנק, לא מציגים התראה (חסר *כל* דף הבנק)
+  const hasBankTransactions = details.some(d => d.source === 'bank');
+  if (!hasBankTransactions) return [];
+
+  const now = new Date();
+  const unmatched: UnmatchedBankStatement[] = [];
+
+  for (const cycle of cycles) {
+    // רק מחזורים per-card (לא ALL/משולבים)
+    if (!cycle.cardLast4 || cycle.cardLast4 === 'ALL') continue;
+    // רק מחזורים שלא נמצאה להם התאמת בנק
+    if (cycle.bankMatchStatus !== 'none') continue;
+    // דלג על מחזורים עם חיוב נטו 0 – הבנק לא מחייב סכום אפס
+    if (cycle.netCharge === 0) continue;
+    // רק מחזורים שתאריך החיוב  כבר עבר
+    const parsed = parseDayMonthYear(cycle.chargeDate);
+    if (parsed) {
+      const chargeDate = new Date(parsed.year, parsed.month - 1, parsed.day);
+      // נותנים מרווח של 7 ימים אחרי תאריך החיוב (עיכוב עיבוד בבנק)
+      chargeDate.setDate(chargeDate.getDate() + 7);
+      if (chargeDate > now) continue;
+    }
+
+    unmatched.push({
+      chargeDate: cycle.chargeDate,
+      cardLast4: cycle.cardLast4,
+      netCharge: cycle.netCharge,
+      transactionCount: cycle.transactionIds.length,
+    });
+  }
+
   return unmatched;
 }
 
@@ -203,7 +263,7 @@ export async function markBankCreditChargesExactWithPatterns(
   const candidates: CandidateMatch[] = [];
 
   details.forEach((d, idx) => {
-    if (d.source !== 'bank' || d.direction !== 'expense') return;
+    if (d.source !== 'bank') return;
     const desc = d.description || '';
 
     // רשימת מחזורים בטווח ימים עבור העסקה הזו
@@ -213,8 +273,12 @@ export async function markBankCreditChargesExactWithPatterns(
     const patternMatched = regexes.some(r => r.test(desc));
 
     for (const c of windowCycles) {
-      const diff = Math.abs(d.amount - c.netCharge);
-      const allowed = Math.max(c.netCharge * toleranceRatio, minToleranceAmount);
+      // בדיקת כיוון: חיוב רגיל (netCharge >= 0) → expense בבנק; זיכוי (netCharge < 0) → income בבנק
+      const expectedDirection = c.netCharge >= 0 ? 'expense' : 'income';
+      if (d.direction !== expectedDirection) continue;
+
+      const diff = Math.abs(d.amount - Math.abs(c.netCharge));
+      const allowed = Math.max(Math.abs(c.netCharge) * toleranceRatio, minToleranceAmount);
       if (diff <= allowed) {
         candidates.push({ detailIndex: idx, cycle: c, diff, patternMatched });
       }
@@ -268,8 +332,8 @@ export async function markBankCreditChargesExactWithPatterns(
     if (!agg || agg.amt === 0) {
       return { ...c, bankMatchStatus: 'none', bankMatchedAmount: 0, bankTransactionIds: [] };
     }
-    const diff = Math.abs(agg.amt - c.netCharge);
-    const allowed = Math.max(c.netCharge * toleranceRatio, minToleranceAmount);
+    const diff = Math.abs(agg.amt - Math.abs(c.netCharge));
+    const allowed = Math.max(Math.abs(c.netCharge) * toleranceRatio, minToleranceAmount);
     let status: 'full' | 'multi' = 'full';
     if (diff <= allowed) {
       status = agg.bankIds.length > 1 ? 'multi' : 'full';
@@ -329,7 +393,7 @@ export function markBankCombinedCreditCharges(
   }
 
   const updatedDetails = details.map(d => {
-    if (d.source !== 'bank' || d.direction !== 'expense' || d.transactionType === 'credit_charge') return d;
+    if (d.source !== 'bank' || d.transactionType === 'credit_charge') return d;
 
     // מצא מחזורי כרטיס בטווח ימים ובאותו תאריך חיוב
     let matchedCombo: CreditChargeCycleSummary[] | null = null;
@@ -344,8 +408,11 @@ export function markBankCombinedCreditCharges(
         const combos = combinations(cyclesArr, size);
         for (const combo of combos) {
           const comboNet = combo.reduce((sum, c) => sum + c.netCharge, 0);
-          const diff = Math.abs(d.amount - comboNet);
-          const allowed = Math.max(comboNet * toleranceRatio, minToleranceAmount);
+          // בדיקת כיוון: חיוב רגיל → expense בבנק; זיכוי → income
+          const expectedDirection = comboNet >= 0 ? 'expense' : 'income';
+          if (d.direction !== expectedDirection) continue;
+          const diff = Math.abs(d.amount - Math.abs(comboNet));
+          const allowed = Math.max(Math.abs(comboNet) * toleranceRatio, minToleranceAmount);
           if (diff <= allowed) {
             matchedCombo = combo;
             matchedChargeDate = chargeDate;

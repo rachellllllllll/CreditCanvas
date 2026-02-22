@@ -9,6 +9,8 @@ interface MissingCreditDetailAlertProps {
   onRefresh: () => void;
   /** שם התיקייה הנוכחית (לזכירת dismiss) */
   folderName?: string;
+  /** חיפוש עסקאות לפי שם חברת אשראי בטבלה */
+  onSearchCompany?: (companyName: string) => void;
 }
 
 const DISMISS_KEY = 'missingCreditDetailAlert_dismissed';
@@ -33,6 +35,7 @@ const MissingCreditDetailAlert: React.FC<MissingCreditDetailAlertProps> = ({
   unmatchedCharges,
   onRefresh,
   folderName = 'default',
+  onSearchCompany,
 }) => {
   const [isDismissed, setIsDismissed] = useState(() => {
     try {
@@ -76,8 +79,31 @@ const MissingCreditDetailAlert: React.FC<MissingCreditDetailAlertProps> = ({
         <div className="mcda-text-wrapper">
           <span className="mcda-text">
             {unmatchedCharges.length === 1
-              ? `זוהה חיוב אשראי של ${groups[0].company} (${totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪) ללא פירוט עסקאות`
-              : `זוהו ${unmatchedCharges.length} חיובי אשראי ללא פירוט עסקאות: ${groups.map(g => g.count > 1 ? `${g.company} (×${g.count})` : g.company).join(', ')} (סה״כ ${totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪)`
+              ? <>זוהה חיוב אשראי של {onSearchCompany ? (
+                  <button
+                    type="button"
+                    className="mcda-company-link"
+                    onClick={() => onSearchCompany(groups[0].company)}
+                    title="הצג עסקאות בטבלה"
+                  >{groups[0].company}</button>
+                ) : groups[0].company} ({totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪) ללא פירוט עסקאות</>
+              : <>זוהו {unmatchedCharges.length} חיובי אשראי ללא פירוט עסקאות:{' '}
+                {groups.map((g, i) => (
+                  <span key={g.company}>
+                    {i > 0 && ', '}
+                    {onSearchCompany ? (
+                      <button
+                        type="button"
+                        className="mcda-company-link"
+                        onClick={() => onSearchCompany(g.company)}
+                        title="הצג עסקאות בטבלה"
+                      >{g.company}{g.count > 1 ? ` (×${g.count})` : ''}</button>
+                    ) : (
+                      <>{g.company}{g.count > 1 ? ` (×${g.count})` : ''}</>
+                    )}
+                  </span>
+                ))}
+                {' '}(סה״כ {totalAmount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₪)</>
             }
           </span>
           <span className="mcda-hint">

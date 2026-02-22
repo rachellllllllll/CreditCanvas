@@ -36,14 +36,14 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
     try {
       const saved = localStorage.getItem(CHAT_HISTORY_KEY);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch { /* ignore localStorage errors */ }
     return [];
   });
   // שמור היסטוריית צ'אט בכל שינוי
   React.useEffect(() => {
     try {
       localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
-    } catch {}
+    } catch { /* ignore localStorage errors */ }
   }, [messages]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,15 +53,25 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
   const API_URL = '/api/llm-chat';
 
   // Helper: apply advanced filter condition to details
-  const applyAdvancedFilter = (details: CreditDetail[], filter: any) => {
+  interface TransactionFilter {
+    category?: string | string[];
+    amount?: { lte?: number; gte?: number; gt?: number; lt?: number };
+    date?: { gte?: string; lte?: string };
+    description?: { contains?: string };
+    sortBy?: keyof CreditDetail;
+    sortOrder?: 'asc' | 'desc';
+    limit?: number;
+    fieldsOfInterest?: (keyof CreditDetail)[];
+  }
+  const applyAdvancedFilter = (details: CreditDetail[], filter: TransactionFilter): (CreditDetail | Partial<CreditDetail>)[] => {
     if (!filter || !Array.isArray(details)) return details;
     // Helper to parse date string as YYYY-MM-DD for comparison
     const parseDate = (dateStr: string) => {
       // Accepts dd/mm/yyyy or dd/mm/yy
       const parts = dateStr.split('/');
       if (parts.length === 3) {
-        let day = parts[0].padStart(2, '0');
-        let month = parts[1].padStart(2, '0');
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
         let year = parts[2];
         if (year.length === 2) year = '20' + year;
         return `${year}-${month}-${day}`;
@@ -70,7 +80,7 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
     };
     let filtered = details.filter(item => {
       // Filter by category
-      if (filter.category && item.category !== filter.category && (!Array.isArray(filter.category) || !filter.category.includes(item.category))) {
+      if (filter.category && item.category !== filter.category && (!Array.isArray(filter.category) || !filter.category.includes(item.category ?? ''))) {
         return false;
       }
       // Filter by amount
@@ -126,10 +136,14 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
     }
     // If fieldsOfInterest is provided, map each transaction to only those fields
     if (Array.isArray(filter.fieldsOfInterest) && filter.fieldsOfInterest.length > 0) {
+      const fields = filter.fieldsOfInterest;
       return filtered.map(item => {
-        const obj: any = {};
-        filter.fieldsOfInterest.forEach((field: string) => {
-          if (field in item) obj[field] = (item as any)[field];
+        const obj: Partial<CreditDetail> = {};
+        fields.forEach((field) => {
+          if (field in item) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (obj as any)[field] = item[field];
+          }
         });
         return obj;
       });
@@ -176,22 +190,15 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
         body: JSON.stringify({ question: input, categories, samples, summaries }),
       });
       const filterData = await filterResponse.json();
-      const { relevantCategories, transactionFilter, explanation } = filterData;
+      const { relevantCategories, transactionFilter } = filterData;
 
       // Step 5: filter details on client
-      let filteredDetails = details;
+      let filteredDetails: (CreditDetail | Partial<CreditDetail>)[] = details;
       if (transactionFilter) {
         filteredDetails = applyAdvancedFilter(details, transactionFilter);
       } else if (Array.isArray(relevantCategories) && relevantCategories.length > 0) {
         filteredDetails = details.filter(tx => relevantCategories.includes(tx.category));
       }
-
-      // Debug log: question, number of transactions sent, and all server response fields
-      console.log('[Chat] שאלה:', input);
-      console.log('[Chat] כמות עסקאות שנשלחו לשרת:', filteredDetails.length);
-      console.log('[Chat] relevantCategories:', relevantCategories);
-      console.log('[Chat] transactionFilter:', transactionFilter);
-      console.log('[Chat] הסבר הפילטור:', explanation);
 
       // Step 6: get final answer from backend with filtered details and summaries
       const answerResponse = await fetch('/api/llm-answer', {
@@ -210,7 +217,7 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
           answerSummary: answerData.answerSummary,
         },
       ]);
-    } catch (e) {
+    } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'שגיאה בשליחת השאלה לשרת.', timestamp: Date.now() }]);
     }
     setInput('');
@@ -240,7 +247,7 @@ const TransactionsChat: React.FC<TransactionsChatProps> = ({ details, showClearC
   // פונקציה לניקוי הצ'אט
   const handleClearChat = () => {
     setMessages([]);
-    try { localStorage.removeItem(CHAT_HISTORY_KEY); } catch {}
+    try { localStorage.removeItem(CHAT_HISTORY_KEY); } catch { /* ignore */ }
   };
 
   return (

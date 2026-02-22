@@ -36,6 +36,8 @@ interface TransactionsTableProps {
   highlightedTransactionId?: string | null;
   // חדש: פתיחת חיפוש גלובלי עם טקסט מוגדר מראש
   onOpenGlobalSearch?: (initialText?: string) => void;
+  // חדש: הגדרת חיפוש חיצוני (למשל מהתראת חיוב אשראי חסר)
+  externalSearchTerm?: string;
 }
 
 const formatDate = (dateStr: string) => {
@@ -102,6 +104,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
   dateMode = 'transaction',
   highlightedTransactionId,
   onOpenGlobalSearch,
+  externalSearchTerm,
   ...props
 }) => {
   // Constants
@@ -175,6 +178,13 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
 
   // Search state
   const [searchTerm, setSearchTerm] = React.useState('');
+
+  // סנכרון חיפוש חיצוני
+  React.useEffect(() => {
+    if (externalSearchTerm !== undefined && externalSearchTerm !== searchTerm) {
+      setSearchTerm(externalSearchTerm);
+    }
+  }, [externalSearchTerm]);
   const searchTrackedRef = React.useRef(false);
   
   // מעקב על חיפוש (פעם אחת לכל סשן חיפוש)
@@ -1238,7 +1248,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                   </div>
                 </th>
                 <th className="TransactionsTable-th TransactionsTable-th-date">תאריך</th>
-                {showChargeDate && <th className="TransactionsTable-th TransactionsTable-th-date">תאריך חיוב</th>}
+                  {showChargeDate && <th className="TransactionsTable-th TransactionsTable-th-date" style={{ width: '100px' }}>תאריך חיוב</th>}
                 <th className="TransactionsTable-th">תיאור</th>
                 {/* עמודת ספרות כרטיס הוסרה; badge מוצג ליד תג אשראי */}
                 <th className="TransactionsTable-th TransactionsTable-th-top-left TransactionsTable-th-amount">סכום</th>
@@ -1248,7 +1258,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                 <th className="TransactionsTable-th TransactionsTable-th-top-right TransactionsTable-th-date" onClick={() => handleSort('date')}>
                   תאריך {sortBy === 'date' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                 </th>
-                {showChargeDate && <th className="TransactionsTable-th TransactionsTable-th-date">תאריך חיוב</th>}
+                {showChargeDate && <th className="TransactionsTable-th TransactionsTable-th-date" style={{ width: '100px' }}>תאריך חיוב</th>}
                 <th className="TransactionsTable-th" onClick={() => handleSort('description')}>
                   תיאור {sortBy === 'description' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                 </th>
@@ -1354,7 +1364,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                               }}
                             >
                               {isBusinessIncome && <span className="TransactionsTable-income-icon" title="מקור הכנסה">💰</span>}
-                              {business}
+                              {highlightText(business)}
                             </td>
                             {Array.from({ length: 12 }).map((_, i) => (
                               <td

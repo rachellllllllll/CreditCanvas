@@ -6,7 +6,10 @@ import MiniMonthsChart from './MiniMonthsChart';
 import YearlyMonthsChart from './YearlyMonthsChart';
 import MissingDataAlert from './MissingDataAlert';
 import MissingCreditDetailAlert from './MissingCreditDetailAlert';
-import type { UnmatchedCreditCharge } from '../utils/creditChargePatterns';
+import MissingBankDetailAlert from './MissingBankDetailAlert';
+import DuplicateFilesAlert from './DuplicateFilesAlert';
+import type { UnmatchedCreditCharge, UnmatchedBankStatement } from '../utils/creditChargePatterns';
+import type { DuplicateFilesInfo } from '../utils/duplicateDetection';
 import { GlobalSearchModal, type SearchFiltersForRule } from './GlobalSearch';
 import type { CreditDetail, AnalysisResult, CategoryRule } from '../types';
 import type { CategoryDef } from './CategoryManager';
@@ -80,6 +83,10 @@ interface MainViewProps {
   onClearExternalRuleToEdit?: () => void;
   // חיובי אשראי ללא פירוט (שזוהו לפי תיאור בלבד)
   unmatchedCreditCharges?: UnmatchedCreditCharge[];
+  // מחזורי אשראי ללא עסקת בנק תואמת (חסר דף בנק)
+  unmatchedBankStatements?: UnmatchedBankStatement[];
+  // קבצים כפולים / חופפים
+  duplicateFilesInfo?: DuplicateFilesInfo | null;
 }
 
 const MainView: React.FC<MainViewProps> = ({
@@ -102,7 +109,9 @@ const MainView: React.FC<MainViewProps> = ({
   onUpdateRule,
   externalRuleToEdit,
   onClearExternalRuleToEdit,
-  unmatchedCreditCharges
+  unmatchedCreditCharges,
+  unmatchedBankStatements,
+  duplicateFilesInfo
 }) => {
   // State לניהול סינון קטגוריה (מגרף הדונאט)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -113,6 +122,14 @@ const MainView: React.FC<MainViewProps> = ({
   const [ruleToEdit, setRuleToEdit] = useState<CategoryRule | null>(null);
   const [searchTerm] = useState('');
   const [amountFilter] = useState('all');
+
+  // State לחיפוש חברת אשראי מההתראה
+  const [creditSearchTerm, setCreditSearchTerm] = useState('');
+  const tableRef = React.useRef<HTMLDivElement>(null);
+
+  const handleSearchCreditCompany = useCallback((companyName: string) => {
+    setCreditSearchTerm(companyName);
+  }, []);
   
   // פונקציה לפתיחת חיפוש גלובלי עם טקסט התחלתי
   const handleOpenGlobalSearch = useCallback((initialText?: string) => {
@@ -844,6 +861,15 @@ const MainView: React.FC<MainViewProps> = ({
         folderName={selectedFolder || undefined}
       />
 
+      {/* התראה על קבצים כפולים / חופפים */}
+      {duplicateFilesInfo && (duplicateFilesInfo.identicalFiles.length > 0 || duplicateFilesInfo.overlappingRanges.length > 0) && (
+        <DuplicateFilesAlert
+          duplicateInfo={duplicateFilesInfo}
+          onRefresh={onRefreshDirectory}
+          folderName={selectedFolder || undefined}
+        />
+      )}
+
       {/* התראה על חיובי אשראי ללא פירוט – מסוננת לחודש הנוכחי בתצוגה חודשית */}
       {unmatchedCreditCharges && unmatchedCreditCharges.length > 0 && (() => {
         const filtered = view === 'monthly' && selectedMonth
@@ -851,9 +877,16 @@ const MainView: React.FC<MainViewProps> = ({
               // date format: dd/mm/yy or dd/mm/yyyy  →  selectedMonth format: MM/YYYY
               const parts = c.date.split('/');
               if (parts.length < 3) return false;
-              let mm = parts[1].padStart(2, '0');
-              let yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+              const mm = parts[1].padStart(2, '0');
+              const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
               return `${mm}/${yyyy}` === selectedMonth;
+            })
+          : view === 'yearly' && selectedYear
+          ? unmatchedCreditCharges.filter(c => {
+              const parts = c.date.split('/');
+              if (parts.length < 3) return false;
+              const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+              return yyyy === selectedYear;
             })
           : unmatchedCreditCharges;
         return filtered.length > 0 ? (
@@ -861,6 +894,35 @@ const MainView: React.FC<MainViewProps> = ({
             unmatchedCharges={filtered}
             onRefresh={onRefreshDirectory}
             folderName={selectedFolder || undefined}
+            onSearchCompany={handleSearchCreditCompany}
+          />
+        ) : null;
+      })()}
+
+      {/* התראה על פירוט אשראי ללא דף חשבון בנק – מסוננת לחודש/שנה נבחרים */}
+      {unmatchedBankStatements && unmatchedBankStatements.length > 0 && (() => {
+        const filtered = view === 'monthly' && selectedMonth
+          ? unmatchedBankStatements.filter(s => {
+              const parts = s.chargeDate.split('/');
+              if (parts.length < 3) return false;
+              const mm = parts[1].padStart(2, '0');
+              const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+              return `${mm}/${yyyy}` === selectedMonth;
+            })
+          : view === 'yearly' && selectedYear
+          ? unmatchedBankStatements.filter(s => {
+              const parts = s.chargeDate.split('/');
+              if (parts.length < 3) return false;
+              const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+              return yyyy === selectedYear;
+            })
+          : unmatchedBankStatements;
+        return filtered.length > 0 ? (
+          <MissingBankDetailAlert
+            unmatchedStatements={filtered}
+            onRefresh={onRefreshDirectory}
+            folderName={selectedFolder || undefined}
+            cardNames={cardNames}
           />
         ) : null;
       })()}
@@ -1014,7 +1076,7 @@ const MainView: React.FC<MainViewProps> = ({
               </aside>
 
               {/* טבלת עסקאות */}
-              <div className="table-section main-table" data-tour="transactions-table">
+              <div className="table-section main-table" data-tour="transactions-table" ref={tableRef}>
                 <TransactionsTable
                   details={filteredTransactions}
                   allDetails={analysis.details}
@@ -1033,6 +1095,7 @@ const MainView: React.FC<MainViewProps> = ({
                   dateMode={dateMode}
                   highlightedTransactionId={highlightedTransactionId}
                   onOpenGlobalSearch={handleOpenGlobalSearch}
+                  externalSearchTerm={creditSearchTerm}
                 />
               </div>
             </div>
@@ -1103,7 +1166,7 @@ const MainView: React.FC<MainViewProps> = ({
             </div>
 
             {/* חלק תחתון: טבלה ברוחב מלא */}
-            <div className="yearly-table-section">
+            <div className="yearly-table-section" ref={tableRef}>
               <TransactionsTable
                 details={filteredTransactions}
                 allDetails={analysis.details}
@@ -1121,6 +1184,7 @@ const MainView: React.FC<MainViewProps> = ({
                 onMarkTransactionAsIncomeSource={onMarkTransactionAsIncomeSource}
                 dateMode={dateMode}
                 onOpenGlobalSearch={handleOpenGlobalSearch}
+                externalSearchTerm={creditSearchTerm}
               />
             </div>
           </div>

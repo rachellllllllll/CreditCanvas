@@ -1,0 +1,464 @@
+/* =======================================
+   DuplicateFilesAlert – התראה על קבצים כפולים
+   ======================================= */
+
+.DuplicateFilesAlert {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 1px solid #f59e0b;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  direction: rtl;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: DuplicateFilesAlert-fadeIn 0.3s ease;
+}
+
+@keyframes DuplicateFilesAlert-fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.DuplicateFilesAlert-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.DuplicateFilesAlert-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.DuplicateFilesAlert-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.DuplicateFilesAlert-text strong {
+  color: #92400e;
+  font-size: 15px;
+}
+
+.DuplicateFilesAlert-summary {
+  color: #78350f;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.DuplicateFilesAlert-separator {
+  color: #b45309;
+  font-weight: bold;
+}
+
+.DuplicateFilesAlert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.DuplicateFilesAlert-details-btn {
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.DuplicateFilesAlert-details-btn:hover {
+  background: #d97706;
+}
+
+.DuplicateFilesAlert-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #92400e;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.DuplicateFilesAlert-dismiss-btn:hover {
+  background: rgba(146, 64, 14, 0.1);
+}
+
+/* ===== פרטים ===== */
+
+.DuplicateFilesAlert-details {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f59e0b66;
+}
+
+.DuplicateFilesAlert-section {
+  margin-bottom: 16px;
+}
+
+.DuplicateFilesAlert-section:last-child {
+  margin-bottom: 0;
+}
+
+.DuplicateFilesAlert-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #92400e;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.DuplicateFilesAlert-section-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: #a16207;
+}
+
+/* ===== רמה 1: קבוצות קבצים זהים ===== */
+
+.DuplicateFilesAlert-group {
+  background: white;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid #fde68a;
+}
+
+.DuplicateFilesAlert-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #78350f;
+}
+
+.DuplicateFilesAlert-group-size {
+  background: #fef3c7;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.DuplicateFilesAlert-group-count {
+  font-weight: 600;
+}
+
+.DuplicateFilesAlert-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.DuplicateFilesAlert-file-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #fef3c7;
+}
+
+.DuplicateFilesAlert-file-list li:last-child {
+  border-bottom: none;
+}
+
+.DuplicateFilesAlert-file-badge {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  min-width: 65px;
+  text-align: center;
+}
+
+.DuplicateFilesAlert-file-kept .DuplicateFilesAlert-file-badge {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.DuplicateFilesAlert-file-skipped .DuplicateFilesAlert-file-badge {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.DuplicateFilesAlert-file-name {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.DuplicateFilesAlert-file-path {
+  font-size: 11px;
+  color: #9ca3af;
+  font-family: monospace;
+}
+
+/* ===== רמה 3: חפיפות תאריכים ===== */
+
+.DuplicateFilesAlert-overlap {
+  background: white;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid #fde68a;
+}
+
+.DuplicateFilesAlert-overlap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.DuplicateFilesAlert-overlap-source {
+  font-weight: 600;
+  color: #78350f;
+  font-size: 13px;
+}
+
+.DuplicateFilesAlert-overlap-badge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.DuplicateFilesAlert-overlap-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.DuplicateFilesAlert-overlap-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-radius: 6px;
+}
+
+.DuplicateFilesAlert-overlap-vs {
+  text-align: center;
+  font-size: 14px;
+  color: #b45309;
+}
+
+.DuplicateFilesAlert-date-range {
+  font-size: 12px;
+  color: #78350f;
+  font-family: monospace;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+.DuplicateFilesAlert-tx-count {
+  font-family: inherit;
+  margin-right: 4px;
+  color: #a16207;
+}
+
+/* ===== טיפ ===== */
+
+.DuplicateFilesAlert-tip {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fffbeb;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #78350f;
+}
+
+.DuplicateFilesAlert-refresh-btn {
+  background: none;
+  border: none;
+  color: #d97706;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.DuplicateFilesAlert-refresh-btn:hover {
+  color: #b45309;
+}
+
+/* ===== Dark Mode ===== */
+
+@media (prefers-color-scheme: dark) {
+  .DuplicateFilesAlert {
+    background: linear-gradient(135deg, #422006, #78350f);
+    border-color: #b45309;
+  }
+
+  .DuplicateFilesAlert-text strong {
+    color: #fde68a;
+  }
+
+  .DuplicateFilesAlert-summary {
+    color: #fcd34d;
+  }
+
+  .DuplicateFilesAlert-separator {
+    color: #f59e0b;
+  }
+
+  .DuplicateFilesAlert-details-btn {
+    background: #b45309;
+  }
+
+  .DuplicateFilesAlert-details-btn:hover {
+    background: #92400e;
+  }
+
+  .DuplicateFilesAlert-dismiss-btn {
+    color: #fde68a;
+  }
+
+  .DuplicateFilesAlert-dismiss-btn:hover {
+    background: rgba(253, 230, 138, 0.1);
+  }
+
+  .DuplicateFilesAlert-details {
+    border-top-color: #b4530966;
+  }
+
+  .DuplicateFilesAlert-section-title {
+    color: #fde68a;
+  }
+
+  .DuplicateFilesAlert-section-subtitle {
+    color: #fcd34d;
+  }
+
+  .DuplicateFilesAlert-group,
+  .DuplicateFilesAlert-overlap {
+    background: #1c1917;
+    border-color: #78350f;
+  }
+
+  .DuplicateFilesAlert-group-header {
+    color: #fcd34d;
+  }
+
+  .DuplicateFilesAlert-group-size {
+    background: #422006;
+    color: #fde68a;
+  }
+
+  .DuplicateFilesAlert-file-name {
+    color: #f3f4f6;
+  }
+
+  .DuplicateFilesAlert-file-path {
+    color: #6b7280;
+  }
+
+  .DuplicateFilesAlert-file-list li {
+    border-bottom-color: #374151;
+  }
+
+  .DuplicateFilesAlert-file-kept .DuplicateFilesAlert-file-badge {
+    background: #064e3b;
+    color: #6ee7b7;
+  }
+
+  .DuplicateFilesAlert-file-skipped .DuplicateFilesAlert-file-badge {
+    background: #7f1d1d;
+    color: #fca5a5;
+  }
+
+  .DuplicateFilesAlert-overlap-source {
+    color: #fcd34d;
+  }
+
+  .DuplicateFilesAlert-overlap-badge {
+    background: #422006;
+    color: #fde68a;
+  }
+
+  .DuplicateFilesAlert-overlap-file {
+    background: #292524;
+  }
+
+  .DuplicateFilesAlert-overlap-vs {
+    color: #f59e0b;
+  }
+
+  .DuplicateFilesAlert-date-range {
+    color: #fcd34d;
+  }
+
+  .DuplicateFilesAlert-tx-count {
+    color: #d97706;
+  }
+
+  .DuplicateFilesAlert-tip {
+    background: #292524;
+    color: #fcd34d;
+  }
+
+  .DuplicateFilesAlert-refresh-btn {
+    color: #f59e0b;
+  }
+
+  .DuplicateFilesAlert-refresh-btn:hover {
+    color: #fbbf24;
+  }
+}
+
+/* ===== Responsive ===== */
+
+@media (max-width: 600px) {
+  .DuplicateFilesAlert {
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .DuplicateFilesAlert-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .DuplicateFilesAlert-icon {
+    font-size: 22px;
+  }
+
+  .DuplicateFilesAlert-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .DuplicateFilesAlert-overlap-file {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .DuplicateFilesAlert-file-list li {
+    flex-wrap: wrap;
+  }
+}

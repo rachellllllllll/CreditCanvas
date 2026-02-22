@@ -96,7 +96,6 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         <div className="onboarding-inner">
           <div className="onboarding-header">
             <h1 id="onboardingTitle">
-              <span className="title-icon">💰</span>
               מערכת ניתוח חיובי אשראי
             </h1>
           </div>
@@ -129,7 +128,6 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Header */}
         <div className="onboarding-header">
           <h1 id="onboardingTitle">
-            <span className="title-icon">💰</span>
             מערכת ניתוח חיובי אשראי
           </h1>
           <p className="onboarding-subtitle">
@@ -140,7 +138,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 1: Preparation */}
         <CollapsibleSection
           title="הכנת הקבצים"
-          icon="📥"
+          icon=""
           stepNumber={1}
           defaultOpen={isNewUser}
           highlight={isNewUser}
@@ -148,13 +146,12 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         >
           <div className="preparation-content">
             <p className="prep-intro">
-              הורד קבצי Excel מהאתר או מהאפליקציה של הבנק/חברת האשראי:
+              הורד קבצי Excel (.xlsx או .xls) מהאתר או מהאפליקציה של הבנק/חברת האשראי:
             </p>
             
             <div className="prep-columns">
               <div className="prep-column">
                 <div className="prep-column-header">
-                  <span className="prep-icon">💳</span>
                   <span>כרטיסי אשראי</span>
                 </div>
                 <ul className="prep-list">
@@ -167,7 +164,6 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               
               <div className="prep-column">
                 <div className="prep-column-header">
-                  <span className="prep-icon">🏦</span>
                   <span>חשבונות בנק</span>
                 </div>
                 <ul className="prep-list">
@@ -192,7 +188,6 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         <div className="onboarding-section main-action">
           <div className="main-action-header">
             <span className="step-number">2</span>
-            <span className="section-icon">🚀</span>
             <span className="section-text">בחירת תיקייה והפעלה</span>
           </div>
           
@@ -228,7 +223,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               autoFocus
             >
               <span className="cta-icon">📁</span>
-              <span className="cta-text">בחר תיקייה עם קבצי Excel</span>
+              <span className="cta-text">בחר תיקייה עם קבצי Excel (.xlsx / .xls)</span>
             </button>
           </div>
         </div>
@@ -236,26 +231,22 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Step 3: What happens next */}
         <CollapsibleSection
           title="מה המערכת תעשה?"
-          icon="🔮"
+          icon=""
           stepNumber={3}
           defaultOpen={false}
           variant="purple"
         >
           <ul className="features-list">
             <li>
-              <span className="feature-check">✅</span>
-              <span>קריאת כל קבצי ה-Excel מהתיקייה</span>
+              <span>קריאת כל קבצי ה-Excel (.xlsx ו-.xls) מהתיקייה</span>
             </li>
             <li>
-              <span className="feature-check">✅</span>
               <span>זיהוי אוטומטי של סוג הקובץ (בנק / אשראי)</span>
             </li>
             <li>
-              <span className="feature-check">✅</span>
               <span>איחוד כל הנתונים וקטלוג אוטומטי</span>
             </li>
             <li>
-              <span className="feature-check">✅</span>
               <span>הצגה בגרפים וטבלאות לפי חודש ושנה</span>
             </li>
           </ul>

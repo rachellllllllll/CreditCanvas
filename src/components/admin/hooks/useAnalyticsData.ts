@@ -41,6 +41,7 @@ interface UseAnalyticsDataReturn {
   refresh: () => Promise<void>;
   loadUserFullHistory: (visitorId: string) => Promise<AnalyticsEvent[]>;
   userRealDates: Map<string, { firstSeen: number; lastSeen: number }>;
+  userFullEvents: Map<string, AnalyticsEvent[]>;
 }
 
 export function useAnalyticsData(): UseAnalyticsDataReturn {
@@ -50,6 +51,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>('week');
   const [userRealDates, setUserRealDates] = useState<Map<string, { firstSeen: number; lastSeen: number }>>(new Map());
+  const [userFullEvents, setUserFullEvents] = useState<Map<string, AnalyticsEvent[]>>(new Map());
 
   // Calculate date boundaries based on range
   const getDateBoundary = useCallback((range: DateRange): number => {
@@ -327,8 +329,8 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     loadData();
   }, [loadData]);
 
-  // Load real first/last seen dates for all users (from full history)
-  const loadUserRealDates = useCallback(async () => {
+  // Load full event history for all users (for accurate stats in Users table)
+  const loadUserFullData = useCallback(async () => {
     if (events.length === 0) return;
     
     try {
@@ -339,57 +341,55 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       // קבלת רשימת visitorIds ייחודיים
       const visitorIds = Array.from(new Set(events.map(e => e.visitorId)));
       const datesMap = new Map<string, { firstSeen: number; lastSeen: number }>();
+      const fullEventsMap = new Map<string, AnalyticsEvent[]>();
 
-      // טעינת תאריכים אמיתיים לכל משתמש - במקביל לשיפור ביצועים
+      // טעינת כל האירועים לכל משתמש — שאילתה אחת במקום שתיים (first+last)
       const eventsRef = collection(db, 'analytics_events');
       
-      // יצירת כל השאילתות במקביל
-      const datePromises = visitorIds.map(async (visitorId) => {
-        // שאילתה לאירוע הראשון
-        const firstQuery = query(
-          eventsRef,
-          where('visitorId', '==', visitorId),
-          orderBy('timestamp', 'asc'),
-          limit(1)
-        );
-        
-        // שאילתה לאירוע האחרון
-        const lastQuery = query(
+      const dataPromises = visitorIds.map(async (visitorId) => {
+        const userQuery = query(
           eventsRef,
           where('visitorId', '==', visitorId),
           orderBy('timestamp', 'desc'),
-          limit(1)
+          limit(500)
         );
 
-        const [firstSnapshot, lastSnapshot] = await Promise.all([
-          getDocs(firstQuery),
-          getDocs(lastQuery)
-        ]);
+        const snapshot = await getDocs(userQuery);
+        const userEvents: AnalyticsEvent[] = [];
+        snapshot.forEach((doc) => {
+          userEvents.push({ id: doc.id, ...doc.data() } as AnalyticsEvent);
+        });
 
-        const firstSeen = firstSnapshot.docs[0]?.data()?.timestamp || 0;
-        const lastSeen = lastSnapshot.docs[0]?.data()?.timestamp || 0;
+        // חישוב firstSeen/lastSeen מכל האירועים
+        let firstSeen = 0;
+        let lastSeen = 0;
+        if (userEvents.length > 0) {
+          // Events are sorted DESC, so first item is latest, last item is earliest
+          lastSeen = userEvents[0].timestamp;
+          firstSeen = userEvents[userEvents.length - 1].timestamp;
+        }
 
-        return { visitorId, firstSeen, lastSeen };
+        return { visitorId, firstSeen, lastSeen, events: userEvents };
       });
 
-      // המתן לכל השאילתות
-      const results = await Promise.all(datePromises);
+      const results = await Promise.all(dataPromises);
       
-      // בנה את המפה מהתוצאות
-      results.forEach(({ visitorId, firstSeen, lastSeen }) => {
+      results.forEach(({ visitorId, firstSeen, lastSeen, events: userEvts }) => {
         datesMap.set(visitorId, { firstSeen, lastSeen });
+        fullEventsMap.set(visitorId, userEvts);
       });
 
       setUserRealDates(datesMap);
+      setUserFullEvents(fullEventsMap);
     } catch (err) {
-      console.error('[Admin] Error loading user real dates:', err);
+      console.error('[Admin] Error loading user full data:', err);
     }
   }, [events]);
 
-  // Load real dates when events change
+  // Load full user data when events change
   useEffect(() => {
-    loadUserRealDates();
-  }, [loadUserRealDates]);
+    loadUserFullData();
+  }, [loadUserFullData]);
 
   // Load full history for a specific user (ignores date filter)
   const loadUserFullHistory = useCallback(async (visitorId: string): Promise<AnalyticsEvent[]> => {
@@ -432,6 +432,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     setDateRange,
     refresh: loadData,
     loadUserFullHistory,
-    userRealDates
+    userRealDates,
+    userFullEvents
   };
 }

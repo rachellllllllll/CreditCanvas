@@ -12,12 +12,13 @@ interface UsersTableProps {
   events: AnalyticsEvent[];
   loadUserFullHistory?: (visitorId: string) => Promise<AnalyticsEvent[]>;
   userRealDates?: Map<string, { firstSeen: number; lastSeen: number }>;
+  userFullEvents?: Map<string, AnalyticsEvent[]>;
 }
 
 type SortKey = 'visits' | 'files' | 'lastSeen' | 'duration' | 'errors';
 type FilterKey = 'all' | 'withFeedback' | 'withErrors' | 'new' | 'powerUsers';
 
-export default function UsersTable({ events, loadUserFullHistory, userRealDates }: UsersTableProps) {
+export default function UsersTable({ events, loadUserFullHistory, userRealDates, userFullEvents }: UsersTableProps) {
   const [sortBy, setSortBy] = useState<SortKey>('lastSeen');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterBy, setFilterBy] = useState<FilterKey>('all');
@@ -29,7 +30,27 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates 
   const pageSize = 20;
 
   // Aggregate events into user summaries
-  const users = useMemo(() => aggregateUsers(events, userRealDates), [events, userRealDates]);
+  // Use full history events when available, but only for users active in the current period
+  const users = useMemo(() => {
+    const activeVisitorIds = new Set(events.map(e => e.visitorId));
+    
+    // If we have full history events, use them for accurate stats
+    if (userFullEvents && userFullEvents.size > 0) {
+      const mergedEvents: AnalyticsEvent[] = [];
+      for (const visitorId of activeVisitorIds) {
+        const fullEvts = userFullEvents.get(visitorId);
+        if (fullEvts && fullEvts.length > 0) {
+          mergedEvents.push(...fullEvts);
+        } else {
+          // Fallback: use filtered events for this user
+          mergedEvents.push(...events.filter(e => e.visitorId === visitorId));
+        }
+      }
+      return aggregateUsers(mergedEvents, userRealDates);
+    }
+    
+    return aggregateUsers(events, userRealDates);
+  }, [events, userRealDates, userFullEvents]);
 
   // Filter
   const filtered = useMemo(() => {
@@ -127,12 +148,27 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates 
 
   // כשנבחר משתמש — טען את ההיסטוריה המלאה שלו (ללא הגבלת תאריך)
   useEffect(() => {
-    if (!selectedUserId || !loadUserFullHistory) {
+    if (!selectedUserId) {
       setFullHistoryUser(null);
       return;
     }
+    
     // אם כבר טעון עבור אותו משתמש, דלג
     if (fullHistoryUser?.visitorId === selectedUserId) return;
+    
+    // אם יש לנו היסטוריה מלאה מה-userFullEvents, השתמש בה במקום לקרוא מחדש מ-Firebase
+    const cachedFullEvents = userFullEvents?.get(selectedUserId);
+    if (cachedFullEvents && cachedFullEvents.length > 0) {
+      setFullHistoryUser({ visitorId: selectedUserId, events: cachedFullEvents });
+      setHistoryLoading(false);
+      return;
+    }
+    
+    // Fallback: טען מ-Firebase אם אין userFullEvents
+    if (!loadUserFullHistory) {
+      setFullHistoryUser(null);
+      return;
+    }
 
     let cancelled = false;
     setHistoryLoading(true);
@@ -148,7 +184,7 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates 
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUserId, loadUserFullHistory]);
+  }, [selectedUserId, loadUserFullHistory, userFullEvents]);
 
   // בנה user summary מההיסטוריה המלאה אם קיימת, אחרת מהאירועים המסוננים
   const selectedUser = useMemo(() => {

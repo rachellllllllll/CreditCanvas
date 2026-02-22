@@ -25,16 +25,21 @@ const DateNavigator: React.FC<DateNavigatorProps> = ({
   availableYears,
 }) => {
   const [open, setOpen] = React.useState(false);
+  // Independent year state used inside the month-picker popover
+  const [popoverYear, setPopoverYear] = React.useState(selectedYear);
   const popRef = React.useRef<HTMLDivElement | null>(null);
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
 
   // Derive year index for yearly view
   const yearIdx = availableYears.indexOf(selectedYear);
 
-  // Months filtered to current selectedYear (for popover grid)
+  // Year index inside the popover (for month-picker year nav)
+  const popoverYearIdx = availableYears.indexOf(popoverYear);
+
+  // Months filtered to popoverYear (for popover grid)
   const monthsForYear = React.useMemo(() => {
-    return sortedMonths.filter(m => m.split('/')[1] === selectedYear);
-  }, [sortedMonths, selectedYear]);
+    return sortedMonths.filter(m => m.split('/')[1] === popoverYear);
+  }, [sortedMonths, popoverYear]);
 
   const handlePrev = () => {
     if (view === 'monthly') {
@@ -55,11 +60,11 @@ const DateNavigator: React.FC<DateNavigatorProps> = ({
     setOpen(o => {
       const next = !o;
       if (next && view === 'monthly') {
-        // סנכרון השנה עם החודש הנבחר בעת פתיחת חלון בחירת החודש
+        // סנכרון שנת הפופאובר עם החודש הנבחר בעת פתיחת חלון בחירת החודש
         const parts = selectedMonth.split('/');
         if (parts.length === 2) {
           const ym = parts[1];
-          if (ym && ym !== selectedYear) setSelectedYear(ym);
+          if (ym) setPopoverYear(ym);
         }
       }
       return next;
@@ -111,13 +116,29 @@ const DateNavigator: React.FC<DateNavigatorProps> = ({
       {open && view === 'monthly' && (
         <div className="dn-popover" ref={popRef} role="dialog" aria-label="בחר חודש">
           <div className="dn-pop-header">
-            <span className="dn-pop-year">{selectedYear}</span>
+            <div className="dn-year-nav">
+              <button
+                type="button"
+                className="dn-year-arrow"
+                disabled={popoverYearIdx <= 0}
+                aria-label="שנה קודמת"
+                onClick={() => { if (popoverYearIdx > 0) setPopoverYear(availableYears[popoverYearIdx - 1]); }}
+              >▶</button>
+              <span className="dn-pop-year">{popoverYear}</span>
+              <button
+                type="button"
+                className="dn-year-arrow"
+                disabled={popoverYearIdx >= availableYears.length - 1}
+                aria-label="שנה הבאה"
+                onClick={() => { if (popoverYearIdx < availableYears.length - 1) setPopoverYear(availableYears[popoverYearIdx + 1]); }}
+              >◀</button>
+            </div>
             <button type="button" className="dn-close" aria-label="סגור" onClick={close}>×</button>
           </div>
           <div className="dn-months" id="monthGrid">
             {Array.from({ length: 12 }, (_, i) => {
               const mm = pad(i + 1);
-              const full = `${mm}/${selectedYear}`;
+              const full = `${mm}/${popoverYear}`;
               const hasData = monthsForYear.includes(full);
               const active = full === selectedMonth;
               return (
