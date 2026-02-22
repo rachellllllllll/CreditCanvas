@@ -570,6 +570,8 @@ export function markBankCombinedCreditCharges(
     });
 
     const comboSize = combo.length;
+    // אסוף את כל הכרטיסים השונים שבשילוב (להצגה בטבלה)
+    const allCards = Array.from(new Set(combo.map(c => c.cardLast4).filter(Boolean))) as string[];
     return {
       ...d,
       transactionType: 'credit_charge_combined',
@@ -579,6 +581,7 @@ export function markBankCombinedCreditCharges(
       matchedComboSize: comboSize,
       matchReason: `combined_${comboSize}`,
       matchedCardLast4: firstCard,
+      matchedCardLast4All: allCards,
     } as CreditDetail;
   });
 
@@ -587,7 +590,7 @@ export function markBankCombinedCreditCharges(
 }
 
 // Orchestrator: מבצע את כל השלבים של זיהוי חיובי אשראי ומחזיר פרטי ניתוח
-// סדר חדש: שילובים (combined) קודם, אח"כ התאמות בודדות – מונע "בזבוז" מחזורים על עסקאות לא נכונות.
+// סדר: קודם התאמות בודדות 1:1 (סכום מדויק = מחזור בודד) → אח"כ שילובים (combined) על מה שנשאר.
 // + מיפוי כרטיס↔חברה: לומד איזה כרטיס שייך לאיזה שם חברה ומשתמש כמגביל בהתאמות עתידיות.
 export async function processCreditChargeMatching(
   allDetails: CreditDetail[],
@@ -607,20 +610,20 @@ export async function processCreditChargeMatching(
     minToleranceAmount: opts.minToleranceAmount,
   };
 
-  // שלב 1: זיהוי חיובי בנק מאוחדים (2+ מחזורים) – מופעל ראשון כדי שעסקת בנק
-  // שמכסה סכום כולל של מספר מחזורים תזוהה לפני שהמחזורים הבודדים "ייתפסו"
-  const { updatedDetails: afterCombined, updatedCycles: cyclesAfterCombined } = markBankCombinedCreditCharges(
+  // שלב 1: התאמות בודדות 1:1 (סכום מדויק למחזור בודד) – תמיד עדיף!
+  // התאמה מדויקת 1:1 אמינה יותר (פחות false positives) משילובים.
+  const { updatedDetails: afterExact, updatedCycles: cyclesAfterExact } = await markBankCreditChargesExactWithPatterns(
     allDetails,
     cycles,
+    dirHandle,
     matchOpts,
     existingMappings
   );
 
-  // שלב 2: התאמה לפי patterns + סכום מדויק למחזורי כרטיס בודדים (רק על מה שנשאר)
-  const { updatedDetails: finalDetails, updatedCycles: finalCycles } = await markBankCreditChargesExactWithPatterns(
-    afterCombined,
-    cyclesAfterCombined,
-    dirHandle,
+  // שלב 2: זיהוי חיובי בנק מאוחדים (2+ מחזורים) – חוצה-תאריכים, רק על מה שנשאר
+  const { updatedDetails: finalDetails, updatedCycles: finalCycles } = markBankCombinedCreditCharges(
+    afterExact,
+    cyclesAfterExact,
     matchOpts,
     existingMappings
   );

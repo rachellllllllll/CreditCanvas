@@ -19,6 +19,7 @@ export interface CreditDetail {
   matchReason?: string; // סיבת התאמה (pattern+amount / amount / combined_N)
   matchedComboSize?: number; // במקרה של חיוב בנק מאוחד (כמה מחזורים)
   matchedCardLast4?: string; // כרטיס שהותאם (בחיוב בנק שזוהה)
+  matchedCardLast4All?: string[]; // כל הכרטיסים שהותאמו (בחיוב מאוחד)
   neutral?: boolean;
   relatedTransactionIds?: string[];
   matchedCycleKeys?: string[]; // במקרה של חיוב בנק המכסה כמה מחזורי כרטיס

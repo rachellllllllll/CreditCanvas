@@ -1560,10 +1560,12 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                           <span style={{
                             marginRight: 4, fontSize: 12, padding: '2px 6px', borderRadius: 6,
                             background: '#ede9fe', color: '#5b21b6'
-                          }} title={`חיוב בנק מאוחד – משלב ${d.matchedComboSize || (d.matchedCycleKeys?.length || 0)} מחזורים`}>
+                          }} title={`חיוב בנק מאוחד – משלב ${d.matchedComboSize || (d.matchedCycleKeys?.length || 0)} מחזורים${d.matchedCardLast4All?.length ? ' כרטיסים: ' + d.matchedCardLast4All.map((c: string) => getCardDisplayName(c) || '****' + c).join(', ') : ''}`}>
                             חיוב מאוחד {(() => {
                               const size = d.matchedComboSize || (d.matchedCycleKeys?.length || 0);
-                              return size ? `(${size})` : '';
+                              const cards = d.matchedCardLast4All;
+                              const cardStr = cards?.length ? cards.map(c => getCardDisplayName(c) || '****' + c).join('+') : '';
+                              return cardStr ? `(${cardStr})` : size ? `(${size})` : '';
                             })()}
                           </span>
                         )}
@@ -1653,10 +1655,12 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                       <span style={{
                         marginRight: 4, fontSize: 12, padding: '2px 6px', borderRadius: 6,
                         background: '#ede9fe', color: '#5b21b6'
-                      }} title={`חיוב בנק מאוחד – משלב ${d.matchedComboSize || (d.matchedCycleKeys?.length || 0)} מחזורים`}>
+                      }} title={`חיוב בנק מאוחד – משלב ${d.matchedComboSize || (d.matchedCycleKeys?.length || 0)} מחזורים${d.matchedCardLast4All?.length ? ' כרטיסים: ' + d.matchedCardLast4All.map((c: string) => getCardDisplayName(c) || '****' + c).join(', ') : ''}`}>
                         חיוב מאוחד {(() => {
                           const size = d.matchedComboSize || (d.matchedCycleKeys?.length || 0);
-                          return size ? `(${size})` : '';
+                          const cards = d.matchedCardLast4All;
+                          const cardStr = cards?.length ? cards.map(c => getCardDisplayName(c) || '****' + c).join('+') : '';
+                          return cardStr ? `(${cardStr})` : size ? `(${size})` : '';
                         })()}
                       </span>
                     )}
