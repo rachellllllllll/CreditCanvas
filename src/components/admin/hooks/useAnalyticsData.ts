@@ -353,7 +353,6 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
         const userQuery = query(
           eventsRef,
           where('visitorId', '==', visitorId),
-          orderBy('timestamp', 'desc'),
           limit(500)
         );
 
@@ -362,6 +361,9 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
         snapshot.forEach((doc) => {
           userEvents.push({ id: doc.id, ...doc.data() } as AnalyticsEvent);
         });
+        
+        // סדר בקוד (חדש קודם)
+        userEvents.sort((a, b) => b.timestamp - a.timestamp);
 
         // חישוב firstSeen/lastSeen מכל האירועים
         let firstSeen = 0;
@@ -404,17 +406,23 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       if (!app) return [];
       const db = getFirestore(app);
       const eventsRef = collection(db, 'analytics_events');
+      
+      // שאילתה פשוטה ללא orderBy - נסדר בקוד
       const q = query(
         eventsRef,
         where('visitorId', '==', visitorId),
-        orderBy('timestamp', 'desc'),
-        limit(500)
+        limit(1000)  // הגדלנו מ-500 ל-1000 כדי לטעון יותר נתונים
       );
       const snapshot = await getDocs(q);
       const result: AnalyticsEvent[] = [];
       snapshot.forEach((doc) => {
         result.push({ id: doc.id, ...doc.data() } as AnalyticsEvent);
       });
+      
+      // סדר בקוד לפי timestamp (חדש קודם)
+      result.sort((a, b) => b.timestamp - a.timestamp);
+      
+      console.log('[useAnalyticsData] Loaded', result.length, 'events for user', visitorId);
       return result;
     } catch (err) {
       console.error('[Admin] Error loading user history:', err);
