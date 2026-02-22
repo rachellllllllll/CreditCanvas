@@ -1893,6 +1893,12 @@ const App: React.FC = () => {
           
         },
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
+          // דלג אם ה-mapping ריק (קריאה אוטומטית מ-hasNothingToShow)
+          if (Object.keys(mapping).length === 0) {
+            console.log('[onConfirm] ⏭️ Skipped: empty mapping');
+            setNewCategoriesPrompt(null);
+            return;
+          }
           // חשוב: להשתמש ב-ref ולא ב-closure כי categoriesList ו-categoryAliases יכולים להיות לא מעודכנים
           const merged = [...categoriesListRef.current];
           const newAliases = { ...categoryAliasesRef.current };
