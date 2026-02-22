@@ -161,9 +161,7 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
     
     // אם יש לנו היסטוריה מלאה מה-userFullEvents, השתמש בה במקום לקרוא מחדש מ-Firebase
     const cachedFullEvents = userFullEvents?.get(selectedUserId);
-    console.log('[UsersTable] selectedUserId:', selectedUserId, 'cachedFullEvents:', cachedFullEvents?.length || 0, 'userFullEvents size:', userFullEvents?.size || 0);
     if (cachedFullEvents && cachedFullEvents.length > 0) {
-      console.log('[UsersTable] Using cached full events for user:', selectedUserId);
       setFullHistoryUser({ visitorId: selectedUserId, events: cachedFullEvents });
       setHistoryLoading(false);
       return;
@@ -171,22 +169,18 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
     
     // Fallback: טען מ-Firebase אם אין userFullEvents
     if (!loadUserFullHistory) {
-      console.log('[UsersTable] No loadUserFullHistory function, using filtered events');
       setFullHistoryUser(null);
       return;
     }
 
-    console.log('[UsersTable] Loading full history from Firebase for user:', selectedUserId);
     let cancelled = false;
     setHistoryLoading(true);
     loadUserFullHistory(selectedUserId).then(fullEvents => {
       if (cancelled) return;
-      console.log('[UsersTable] Loaded', fullEvents.length, 'events from Firebase for user:', selectedUserId);
       if (fullEvents.length > 0) {
         setFullHistoryUser({ visitorId: selectedUserId, events: fullEvents });
       } else {
         // fallback: השתמש באירועים המסוננים
-        console.log('[UsersTable] No events from Firebase,using filtered events');
         setFullHistoryUser(null);
       }
       setHistoryLoading(false);

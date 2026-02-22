@@ -57,7 +57,7 @@ const CATEGORY_MAPPINGS: Record<string, { icon: string; color: string; recommend
   'חינוך': { icon: '🎓', color: '#7b68ee', recommendedIcons: ['🎓', '📚', '🏫', '📝', '📖', '🖊️'] },
   'משרד': { icon: '📋', color: '#607d8b', recommendedIcons: ['📋', '🖊️', '📐', '📂', '🗂️', '📁'] },
   'מזל': { icon: '🎰', color: '#d4af37', recommendedIcons: ['🎰', '🎲', '🃏', '♠️', '♥️', '🎯'] },
-
+  'מזומן': { icon: '💵', color: '#4caf50', recommendedIcons: ['💵', '💰', '💳', '🏦', '🪙', '💸'] },
 };
 
 // const getDefaultIconAndColor = (categoryName: string): { icon: string; color: string; recommendedIcons?: string[] } | undefined => {

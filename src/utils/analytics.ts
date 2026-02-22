@@ -399,7 +399,6 @@ export async function trackReturningUser(profile: UserProfile): Promise<void> {
 export interface UnknownCategoryInfo {
   excelCategory: string;      // שם הקטגוריה מהאקסל
   count: number;              // כמה עסקאות
-  descriptions: string[];     // TOP 10 תיאורי עסקאות נפוצים
 }
 
 /**

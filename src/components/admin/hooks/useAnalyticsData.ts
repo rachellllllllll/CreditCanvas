@@ -34,6 +34,7 @@ interface UseAnalyticsDataReturn {
   referrerBreakdown: Record<string, number>;
   featureUsage: Record<string, number>;
   categoryMappings: Array<{ excelCategory: string; selectedCategory: string; count: number; descriptions: string[]; date: string; mappingType: MappingType }>;
+  unknownCategoriesInsights: Array<{ excelCategory: string; totalTransactions: number; userCount: number; mappedTo: Array<{ selectedCategory: string; count: number; mappingType: MappingType }> }>;
   loading: boolean;
   error: string | null;
   dateRange: DateRange;
@@ -326,6 +327,56 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     return mappings;
   }, [events]);
 
+  // Extract unknown categories from files_loaded events and cross-reference with mappings
+  const unknownCategoriesInsights = useMemo(() => {
+    // שלב 1: איסוף קטגוריות לא מזוהות מאירועי files_loaded
+    const catMap = new Map<string, { totalTransactions: number; visitors: Set<string> }>();
+    
+    events.forEach(e => {
+      if (e.event === 'files_loaded' && Array.isArray(e.metadata?.unknownCategories)) {
+        const unknowns = e.metadata.unknownCategories as Array<{ excelCategory?: string; count?: number }>;
+        for (const u of unknowns) {
+          if (!u.excelCategory) continue;
+          const existing = catMap.get(u.excelCategory) || { totalTransactions: 0, visitors: new Set<string>() };
+          existing.totalTransactions += (u.count || 0);
+          existing.visitors.add(e.visitorId);
+          catMap.set(u.excelCategory, existing);
+        }
+      }
+    });
+
+    // שלב 2: הצלבה עם מיפויים — לאן משתמשים מיפו את הקטגוריות האלו
+    const mappingsByExcel = new Map<string, Map<string, { count: number; mappingType: MappingType }>>();
+    for (const m of categoryMappings) {
+      if (!mappingsByExcel.has(m.excelCategory)) {
+        mappingsByExcel.set(m.excelCategory, new Map());
+      }
+      const targetMap = mappingsByExcel.get(m.excelCategory)!;
+      const existing = targetMap.get(m.selectedCategory) || { count: 0, mappingType: m.mappingType };
+      existing.count++;
+      targetMap.set(m.selectedCategory, existing);
+    }
+
+    // שלב 3: בנייה של רשימה משולבת
+    const insights = Array.from(catMap.entries()).map(([excelCategory, data]) => {
+      const mappedToMap = mappingsByExcel.get(excelCategory);
+      const mappedTo = mappedToMap
+        ? Array.from(mappedToMap.entries())
+            .map(([selectedCategory, info]) => ({ selectedCategory, count: info.count, mappingType: info.mappingType }))
+            .sort((a, b) => b.count - a.count)
+        : [];
+
+      return {
+        excelCategory,
+        totalTransactions: data.totalTransactions,
+        userCount: data.visitors.size,
+        mappedTo,
+      };
+    });
+
+    return insights.sort((a, b) => b.userCount - a.userCount || b.totalTransactions - a.totalTransactions);
+  }, [events, categoryMappings]);
+
   // Load data on mount and when date range changes
   useEffect(() => {
     loadData();
@@ -386,7 +437,6 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
 
       setUserRealDates(datesMap);
       setUserFullEvents(fullEventsMap);
-      console.log('[useAnalyticsData] ✅ Loaded full data for', visitorIds.length, 'users, fullEventsMap size:', fullEventsMap.size);
     } catch (err) {
       console.error('[Admin] Error loading user full data:', err);
     } finally {
@@ -422,7 +472,6 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
       // סדר בקוד לפי timestamp (חדש קודם)
       result.sort((a, b) => b.timestamp - a.timestamp);
       
-      console.log('[useAnalyticsData] Loaded', result.length, 'events for user', visitorId);
       return result;
     } catch (err) {
       console.error('[Admin] Error loading user history:', err);
@@ -440,6 +489,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     referrerBreakdown,
     featureUsage,
     categoryMappings,
+    unknownCategoriesInsights,
     loading,
     error,
     dateRange,

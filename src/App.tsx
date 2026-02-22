@@ -909,7 +909,6 @@ const App: React.FC = () => {
       // סמן מיד שאנחנו בודקים Tour - לחסום דיאלוגים אחרים עד שנדע
       setTourPending(true);
       const shouldShowTour = await checkShouldShowTour(dir);
-      console.log('[Tour] shouldShowTour:', shouldShowTour);
       if (shouldShowTour) {
         setTimeout(() => setShowTour(true), 500);
       } else {
@@ -949,34 +948,19 @@ const App: React.FC = () => {
           const loadedCategoryNames = new Set(loadedCategories?.map(c => c.name) || []);
           const loadedAliasNames = new Set(Object.keys(loadedCategoryAliases || {}));
           
-          // קבץ עסקאות לפי קטגוריה לא מזוהה
-          const unknownCategoriesMap = new Map<string, { count: number; descriptions: Map<string, number> }>();
+          // קבץ עסקאות לפי קטגוריה לא מזוהה (שם + כמות בלבד, ללא תיאורים — פרטיות)
+          const unknownCategoriesMap = new Map<string, number>();
           
           for (const d of allDetails) {
             const cat = d.category;
             if (cat && !loadedCategoryNames.has(cat) && !loadedAliasNames.has(cat)) {
-              // קטגוריה לא מזוהה
-              if (!unknownCategoriesMap.has(cat)) {
-                unknownCategoriesMap.set(cat, { count: 0, descriptions: new Map() });
-              }
-              const entry = unknownCategoriesMap.get(cat)!;
-              entry.count++;
-              // ספור תיאורים
-              const desc = d.description || '';
-              if (desc) {
-                entry.descriptions.set(desc, (entry.descriptions.get(desc) || 0) + 1);
-              }
+              unknownCategoriesMap.set(cat, (unknownCategoriesMap.get(cat) || 0) + 1);
             }
           }
           
-          // המר ל-array עם TOP 10 תיאורים לכל קטגוריה
-          const unknownCategories: UnknownCategoryInfo[] = Array.from(unknownCategoriesMap.entries()).map(([excelCategory, data]) => ({
+          const unknownCategories: UnknownCategoryInfo[] = Array.from(unknownCategoriesMap.entries()).map(([excelCategory, count]) => ({
             excelCategory,
-            count: data.count,
-            descriptions: Array.from(data.descriptions.entries())
-              .sort((a, b) => b[1] - a[1]) // מיון לפי כמות יורדת
-              .slice(0, 10) // TOP 10
-              .map(([desc]) => desc)
+            count,
           }));
           
           await trackFilesLoaded(profile, {
@@ -1553,7 +1537,6 @@ const App: React.FC = () => {
   
   React.useEffect(() => {
     if (!categoriesLoading && dirHandle) {
-      console.log('[CatLoadedOnce] Setting categoriesLoadedOnce=true');
       setCategoriesLoadedOnce(true);
     }
   }, [categoriesLoading, dirHandle]);
@@ -1631,35 +1614,18 @@ const App: React.FC = () => {
   });
 
   React.useEffect(() => {
-    // === DEBUG: trace category effect ===
-    console.log('[CatEffect] Running. analysis:', !!analysis, 'categoriesLoadedOnce:', categoriesLoadedOnce, 
-      'initialPromptShown:', initialPromptShown, 'autoMergeRunRef:', autoMergeRunRef.current, 
-      'tourPending:', tourPending, 'categoriesList.length:', categoriesList.length);
-    
     // חכה שהקטגוריות יטענו לפחות פעם אחת
-    if (!analysis || !categoriesLoadedOnce) {
-      console.log('[CatEffect] ⏳ Waiting: analysis=', !!analysis, 'categoriesLoadedOnce=', categoriesLoadedOnce);
-      return;
-    }
+    if (!analysis || !categoriesLoadedOnce) return;
     
     // אם הדיאלוג כבר הוצג בסשן הזה - לא מציגים שוב (למנוע הצגה אחרי מחיקת קטגוריה)
-    if (initialPromptShown) {
-      console.log('[CatEffect] ⏭️ Skipped: initialPromptShown=true');
-      return;
-    }
+    if (initialPromptShown) return;
     
     // אם auto-merge כבר רץ — לא לרוץ שוב (כדי למנוע לולאה מ-setAnalysis/setCategoryAliases)
-    if (autoMergeRunRef.current) {
-      console.log('[CatEffect] ⏭️ Skipped: autoMergeRunRef=true');
-      return;
-    }
+    if (autoMergeRunRef.current) return;
     
     // 🆕 חכה שה-Tour יסתיים/ידולג לפני הצגת דיאלוג קטגוריות/קונפליקטים
     // אם יש Tour בהמתנה (לפני או במהלך התצוגה) - לא להציג דיאלוג נוסף במקביל
-    if (tourPending) {
-      console.log('[CatEffect] ⏭️ Skipped: tourPending=true');
-      return;
-    }
+    if (tourPending) return;
     
     // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList וגם לא ב-categoryAliases (כבר מופו)
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
@@ -1672,13 +1638,8 @@ const App: React.FC = () => {
     // בדוק גם קונפליקטים בין בתי עסק (גם אם אין קטגוריות חדשות)
     let conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
     
-    console.log('[CatEffect] ✅ Guards passed! excelCats:', excelCats.length, 'missingCats:', missingCats.length, 
-      'conflictCount:', conflictCount, 'excelCats:', excelCats, 'categoriesList:', categoriesList.map(c => c.name));
     // אם אין קטגוריות חדשות ואין קונפליקטים - אין צורך בדיאלוג
-    if (missingCats.length === 0 && conflictCount === 0) {
-      console.log('[CatEffect] 🟢 No missing cats and no conflicts — nothing to do');
-      return;
-    }
+    if (missingCats.length === 0 && conflictCount === 0) return;
     
     // אם יש רק קונפליקטים (ללא קטגוריות חדשות) והמשתמש כבר דילג עליהם - אל תציג שוב
     // (אלא אם מספר הקונפליקטים השתנה, מה שמעיד על שינוי בנתונים)
@@ -1697,8 +1658,6 @@ const App: React.FC = () => {
         catsWithoutDefaults.push(cat);
       }
     }
-    
-    console.log('[CatEffect] 📋 catsWithDefaults:', catsWithDefaults, 'catsWithoutDefaults:', catsWithoutDefaults);
     
     // --- שלב א: איחוד אוטומטי של קטגוריות מאותה קבוצה (תמיד, גם כשיש קונפליקטים) ---
     const getGroupKeyForCat = (catName: string): string | null => {
@@ -1752,7 +1711,6 @@ const App: React.FC = () => {
     }
     
     // שמור aliases ועדכן עסקאות
-    console.log('[CatEffect] 🔀 autoMergedAliases:', autoMergedAliases);
     if (Object.keys(autoMergedAliases).length > 0) {
       autoMergeRunRef.current = true; // מנע הרצה חוזרת כש-setAnalysis/setCategoryAliases מעדכנים
       const newAliases = { ...categoryAliases, ...autoMergedAliases };
@@ -1792,13 +1750,9 @@ const App: React.FC = () => {
     }
     
     // אם אחרי האיחוד אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
-    if (missingCats.length === 0 && conflictCount === 0) {
-      console.log('[CatEffect] 🟢 After merge: no missing cats and no conflicts — nothing to do');
-      return;
-    }
+    if (missingCats.length === 0 && conflictCount === 0) return;
     
     // --- שלב ב: אישור אוטומטי של קטגוריות עם דיפולט (תמיד, לא תלוי בקונפליקטים) ---
-    console.log('[CatEffect] 📦 Auto-approve step: catsWithDefaults:', catsWithDefaults, 'missingCats remaining:', missingCats.length);
     // קונפליקטים הם בין בתי עסק, לא בין קיומן של קטגוריות — לכן אפשר לאשר קטגוריות במקביל
     if (catsWithDefaults.length > 0) {
       const autoApprovedMapping: Record<string, CategoryDef> = {};
@@ -1816,7 +1770,6 @@ const App: React.FC = () => {
       );
       
       if (newCatsToAdd.length > 0) {
-        console.log('[CatEffect] ✨ Auto-approving', newCatsToAdd.length, 'categories:', newCatsToAdd.map(c => c.name));
         const merged = [...categoriesList, ...newCatsToAdd];
         setCategoriesList(merged);
         if (dirHandle) {
@@ -1895,17 +1848,12 @@ const App: React.FC = () => {
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
           // דלג אם ה-mapping ריק (קריאה אוטומטית מ-hasNothingToShow)
           if (Object.keys(mapping).length === 0) {
-            console.log('[onConfirm] ⏭️ Skipped: empty mapping');
             setNewCategoriesPrompt(null);
             return;
           }
           // חשוב: להשתמש ב-ref ולא ב-closure כי categoriesList ו-categoryAliases יכולים להיות לא מעודכנים
           const merged = [...categoriesListRef.current];
           const newAliases = { ...categoryAliasesRef.current };
-          
-          console.log('[onConfirm] 📥 mapping keys:', Object.keys(mapping));
-          console.log('[onConfirm] 📥 mapping entries:', Object.entries(mapping).map(([k, v]) => `${k} → ${v.name}`));
-          console.log('[onConfirm] 📋 categoriesListRef.current has', categoriesListRef.current.length, 'items');
           
           Object.entries(mapping).forEach(([excelName, catDef]) => {
             // אם שם הקטגוריה שונה משם המקור - זה מיפוי/איחוד
@@ -1922,16 +1870,11 @@ const App: React.FC = () => {
             }
           });
           
-          console.log('[onConfirm] ✅ merged total:', merged.length, 'categories:', merged.map(c => c.name));
-          console.log('[onConfirm] 📝 newAliases:', newAliases);
-          console.log('[onConfirm] 💾 dirHandle:', !!dirHandle);
-          
           setCategoriesList(merged);
           setCategoryAliases(newAliases);
           
           if (dirHandle) {
             await saveCategoriesToDir(dirHandle, merged);
-            console.log('[onConfirm] 💾 Saved', merged.length, 'categories to file');
             // שמור את המיפויים כדי שלא יציע שוב בפעם הבאה
             if (Object.keys(newAliases).length > 0) {
               await saveAliasesToDir(dirHandle, newAliases, 'category');
@@ -2032,10 +1975,8 @@ const App: React.FC = () => {
   React.useEffect(() => {
     if (!dirHandle) return;
     (async () => {
-      console.log('[LoadCats] Loading categories from dir...');
       setCategoriesLoading(true);
       const loaded = await loadCategoriesFromDir(dirHandle);
-      console.log('[LoadCats] Loaded:', loaded ? loaded.length + ' categories' : 'null (no file)');
       if (loaded) setCategoriesList(loaded);
       setCategoriesLoading(false);
     })();

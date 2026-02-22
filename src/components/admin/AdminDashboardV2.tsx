@@ -25,6 +25,7 @@ import FeedbackTable from './FeedbackTable';
 import ReferrerChart from './ReferrerChart';
 import FeatureUsageChart from './FeatureUsageChart';
 import CategoryMappingsTable from './CategoryMappingsTable';
+import CategoryInsightsCard from './CategoryInsightsCard';
 import ErrorsTable from './ErrorsTable';
 import UnknownCreditDescriptionsTable from './UnknownCreditDescriptionsTable';
 import { extractFeedbackEntries, calculateFeedbackStats } from './feedbackUtils';
@@ -64,6 +65,7 @@ export default function AdminDashboardV2() {
     referrerBreakdown,
     featureUsage,
     categoryMappings,
+    unknownCategoriesInsights,
     loading: dataLoading,
     error: dataError,
     dateRange,
@@ -446,6 +448,7 @@ export default function AdminDashboardV2() {
           {/* ===== Tab: Data ===== */}
           {activeTab === 'data' && (
             <>
+              <CategoryInsightsCard insights={unknownCategoriesInsights} />
               <UnknownCreditDescriptionsTable events={events} onDeleted={refresh} />
               <CategoryMappingsTable mappings={categoryMappings} />
               <div className="section-header" style={{ marginTop: '24px' }}>
