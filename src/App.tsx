@@ -1897,6 +1897,10 @@ const App: React.FC = () => {
           const merged = [...categoriesListRef.current];
           const newAliases = { ...categoryAliasesRef.current };
           
+          console.log('[onConfirm] 📥 mapping keys:', Object.keys(mapping));
+          console.log('[onConfirm] 📥 mapping entries:', Object.entries(mapping).map(([k, v]) => `${k} → ${v.name}`));
+          console.log('[onConfirm] 📋 categoriesListRef.current has', categoriesListRef.current.length, 'items');
+          
           Object.entries(mapping).forEach(([excelName, catDef]) => {
             // אם שם הקטגוריה שונה משם המקור - זה מיפוי/איחוד
             if (excelName !== catDef.name) {
@@ -1912,11 +1916,16 @@ const App: React.FC = () => {
             }
           });
           
+          console.log('[onConfirm] ✅ merged total:', merged.length, 'categories:', merged.map(c => c.name));
+          console.log('[onConfirm] 📝 newAliases:', newAliases);
+          console.log('[onConfirm] 💾 dirHandle:', !!dirHandle);
+          
           setCategoriesList(merged);
           setCategoryAliases(newAliases);
           
           if (dirHandle) {
             await saveCategoriesToDir(dirHandle, merged);
+            console.log('[onConfirm] 💾 Saved', merged.length, 'categories to file');
             // שמור את המיפויים כדי שלא יציע שוב בפעם הבאה
             if (Object.keys(newAliases).length > 0) {
               await saveAliasesToDir(dirHandle, newAliases, 'category');
