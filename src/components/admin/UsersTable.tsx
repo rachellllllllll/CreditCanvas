@@ -13,12 +13,13 @@ interface UsersTableProps {
   loadUserFullHistory?: (visitorId: string) => Promise<AnalyticsEvent[]>;
   userRealDates?: Map<string, { firstSeen: number; lastSeen: number }>;
   userFullEvents?: Map<string, AnalyticsEvent[]>;
+  loadingUserFullData?: boolean;
 }
 
 type SortKey = 'visits' | 'files' | 'lastSeen' | 'duration' | 'errors';
 type FilterKey = 'all' | 'withFeedback' | 'withErrors' | 'new' | 'powerUsers';
 
-export default function UsersTable({ events, loadUserFullHistory, userRealDates, userFullEvents }: UsersTableProps) {
+export default function UsersTable({ events, loadUserFullHistory, userRealDates, userFullEvents, loadingUserFullData }: UsersTableProps) {
   const [sortBy, setSortBy] = useState<SortKey>('lastSeen');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterBy, setFilterBy] = useState<FilterKey>('all');
@@ -147,6 +148,8 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
   };
 
   // כשנבחר משתמש — טען את ההיסטוריה המלאה שלו (ללא הגבלת תאריך)
+  // ⚠️ חשוב: פילטר התאריך מסנן אילו משתמשים מוצגים (רק פעילים בתקופה),
+  // אבל כשפותחים משתמש, מציגים את כל ההיסטוריה שלו (לא רק מהתקופה המסוננת)
   useEffect(() => {
     if (!selectedUserId) {
       setFullHistoryUser(null);
@@ -158,7 +161,9 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
     
     // אם יש לנו היסטוריה מלאה מה-userFullEvents, השתמש בה במקום לקרוא מחדש מ-Firebase
     const cachedFullEvents = userFullEvents?.get(selectedUserId);
+    console.log('[UsersTable] selectedUserId:', selectedUserId, 'cachedFullEvents:', cachedFullEvents?.length || 0, 'userFullEvents size:', userFullEvents?.size || 0);
     if (cachedFullEvents && cachedFullEvents.length > 0) {
+      console.log('[UsersTable] Using cached full events for user:', selectedUserId);
       setFullHistoryUser({ visitorId: selectedUserId, events: cachedFullEvents });
       setHistoryLoading(false);
       return;
@@ -166,18 +171,22 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
     
     // Fallback: טען מ-Firebase אם אין userFullEvents
     if (!loadUserFullHistory) {
+      console.log('[UsersTable] No loadUserFullHistory function, using filtered events');
       setFullHistoryUser(null);
       return;
     }
 
+    console.log('[UsersTable] Loading full history from Firebase for user:', selectedUserId);
     let cancelled = false;
     setHistoryLoading(true);
     loadUserFullHistory(selectedUserId).then(fullEvents => {
       if (cancelled) return;
+      console.log('[UsersTable] Loaded', fullEvents.length, 'events from Firebase for user:', selectedUserId);
       if (fullEvents.length > 0) {
         setFullHistoryUser({ visitorId: selectedUserId, events: fullEvents });
       } else {
         // fallback: השתמש באירועים המסוננים
+        console.log('[UsersTable] No events from Firebase,using filtered events');
         setFullHistoryUser(null);
       }
       setHistoryLoading(false);
@@ -212,7 +221,14 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
     <div className="users-table-section">
       {/* Header */}
       <div className="table-header">
-        <h2>👥 משתמשים ({filtered.length.toLocaleString('he-IL')})</h2>
+        <h2>
+          👥 משתמשים ({filtered.length.toLocaleString('he-IL')})
+          {loadingUserFullData && (
+            <span style={{ fontSize: '0.75em', color: 'var(--admin-text-secondary)', marginRight: 8 }}>
+              ⏳ טוען היסטוריה מלאה...
+            </span>
+          )}
+        </h2>
         <div className="table-controls">
           <div className="search-box">
             <span className="search-icon">🔍</span>

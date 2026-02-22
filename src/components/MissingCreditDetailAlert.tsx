@@ -9,11 +9,41 @@ interface MissingCreditDetailAlertProps {
   onRefresh: () => void;
   /** שם התיקייה הנוכחית (לזכירת dismiss) */
   folderName?: string;
+  /** חודש נבחר בפורמט 'MM/YYYY' (תצוגה חודשית) */
+  selectedMonth?: string;
+  /** שנה נבחרת בפורמט 'YYYY' (תצוגה שנתית) */
+  selectedYear?: string;
   /** חיפוש עסקאות לפי שם חברת אשראי בטבלה */
   onSearchCompany?: (companyName: string) => void;
 }
 
-const DISMISS_KEY = 'missingCreditDetailAlert_dismissed';
+const DISMISS_KEY = 'missingCreditDetailAlert_dismissed_v2';
+
+/**
+ * יוצר hash פשוט ממחרוזת – לזיהוי שינוי בתוכן החיובים
+ */
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + ch;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
+}
+
+/**
+ * בונה מפתח dismiss ייחודי לפי תיקייה + תקופה + תוכן
+ */
+function buildDismissKey(folderName: string, charges: UnmatchedCreditCharge[], selectedMonth?: string, selectedYear?: string): string {
+  const period = selectedMonth || selectedYear || 'all';
+  const companiesSignature = charges
+    .map(c => c.description.trim())
+    .sort()
+    .join('|');
+  const contentHash = simpleHash(companiesSignature);
+  return `${folderName}::${period}::${contentHash}`;
+}
 
 /**
  * קיבוץ חיובים לפי חברת אשראי (תיאור מרכזי)
@@ -35,21 +65,31 @@ const MissingCreditDetailAlert: React.FC<MissingCreditDetailAlertProps> = ({
   unmatchedCharges,
   onRefresh,
   folderName = 'default',
+  selectedMonth,
+  selectedYear,
   onSearchCompany,
 }) => {
-  const [isDismissed, setIsDismissed] = useState(() => {
+  const dismissKey = useMemo(
+    () => buildDismissKey(folderName, unmatchedCharges, selectedMonth, selectedYear),
+    [folderName, unmatchedCharges, selectedMonth, selectedYear]
+  );
+
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  // בדוק dismiss בכל פעם שהמפתח משתנה (חודש/תיקייה/תוכן שונה)
+  React.useEffect(() => {
     try {
       const dismissed = localStorage.getItem(DISMISS_KEY);
       if (dismissed) {
-        const data = JSON.parse(dismissed) as Record<string, number>;
-        // dismiss תקף ל-24 שעות
-        if (data[folderName] && Date.now() - data[folderName] < 24 * 60 * 60 * 1000) {
-          return true;
-        }
+        const data = JSON.parse(dismissed) as Record<string, boolean>;
+        setIsDismissed(!!data[dismissKey]);
+      } else {
+        setIsDismissed(false);
       }
-    } catch { /* ignore */ }
-    return false;
-  });
+    } catch {
+      setIsDismissed(false);
+    }
+  }, [dismissKey]);
 
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -63,8 +103,15 @@ const MissingCreditDetailAlert: React.FC<MissingCreditDetailAlertProps> = ({
     setIsDismissed(true);
     try {
       const dismissed = localStorage.getItem(DISMISS_KEY);
-      const data: Record<string, number> = dismissed ? JSON.parse(dismissed) : {};
-      data[folderName] = Date.now();
+      const data: Record<string, boolean> = dismissed ? JSON.parse(dismissed) : {};
+      data[dismissKey] = true;
+      // ניקוי ערכים ישנים – שומר מקסימום 50 ערכים
+      const keys = Object.keys(data);
+      if (keys.length > 50) {
+        for (const oldKey of keys.slice(0, keys.length - 50)) {
+          delete data[oldKey];
+        }
+      }
       localStorage.setItem(DISMISS_KEY, JSON.stringify(data));
     } catch { /* ignore */ }
   };

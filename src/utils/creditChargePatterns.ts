@@ -205,6 +205,74 @@ export function loadCreditChargeWindowConfig(): WindowConfig {
 
 // (נמחקה פונקציית savePatterns שלא בשימוש לאחר צמצום יכולות עדכון דינמי של התבניות)
 
+// --- Card ↔ Company mapping ---
+// מיפוי בין 4 ספרות אחרונות של כרטיס לבין שם חברת האשראי בדף הבנק
+export interface CardCompanyMapping {
+  cardLast4: string;
+  companyName: string;
+  lastMatchDate: string;
+}
+
+const CARD_COMPANY_MAPPING_FILENAME = 'cardCompanyMapping.json';
+
+async function loadCardCompanyMapping(dirHandle: FileSystemDirectoryHandle): Promise<CardCompanyMapping[]> {
+  if (!dirHandle) return [];
+  try {
+    const fh = await dirHandle.getFileHandle(CARD_COMPANY_MAPPING_FILENAME);
+    const file = await fh.getFile();
+    const txt = await file.text();
+    const data = JSON.parse(txt);
+    if (Array.isArray(data)) return data as CardCompanyMapping[];
+  } catch { /* file doesn't exist yet */ }
+  return [];
+}
+
+async function saveCardCompanyMapping(dirHandle: FileSystemDirectoryHandle, mappings: CardCompanyMapping[]): Promise<void> {
+  if (!dirHandle) return;
+  try {
+    const fh = await dirHandle.getFileHandle(CARD_COMPANY_MAPPING_FILENAME, { create: true });
+    const writable = await fh.createWritable();
+    await writable.write(JSON.stringify(mappings, null, 2));
+    await writable.close();
+  } catch { /* ignore */ }
+}
+
+/**
+ * לומד מיפוי כרטיס↔חברה מתוך עסקאות בנק שהותאמו בהצלחה לפירוט אשראי.
+ * מחזיר מיפוי מעודכן (ממזג עם קיימים).
+ */
+function learnCardCompanyMappings(details: CreditDetail[], existingMappings: CardCompanyMapping[]): CardCompanyMapping[] {
+  const mappingMap = new Map<string, CardCompanyMapping>();
+  existingMappings.forEach(m => mappingMap.set(m.cardLast4, m));
+
+  for (const d of details) {
+    if (d.source !== 'bank') continue;
+    if (d.transactionType !== 'credit_charge' && d.transactionType !== 'credit_charge_combined') continue;
+    const cardLast4 = d.matchedCardLast4;
+    if (!cardLast4 || !d.description) continue;
+
+    const companyName = d.description.trim();
+    if (isKnownCreditChargeDescription(companyName)) {
+      mappingMap.set(cardLast4, { cardLast4, companyName, lastMatchDate: d.date });
+    }
+  }
+
+  return Array.from(mappingMap.values());
+}
+
+/**
+ * בונה מפת חיפוש מהירה: companyName → cardLast4[]
+ */
+function buildCompanyToCardsMap(mappings: CardCompanyMapping[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const m of mappings) {
+    const key = m.companyName.trim().toLowerCase();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(m.cardLast4);
+  }
+  return map;
+}
+
 
 // compilePatternToRegex: ממיר תבנית (contains/regex) ל-RegExp פעיל או null אם אינה תקפה
 function compilePatternToRegex(p: CreditChargePattern): RegExp | null {
@@ -226,7 +294,8 @@ export async function markBankCreditChargesExactWithPatterns(
   details: CreditDetail[],
   cycles: CreditChargeCycleSummary[],
   dirHandle: FileSystemDirectoryHandle,
-  opts: MatchOptions = {}
+  opts: MatchOptions = {},
+  cardCompanyMappings: CardCompanyMapping[] = []
 ): Promise<MarkResult> {
   const {
     daysBeforeCharge = DEFAULT_WINDOW_CONFIG.daysBeforeCharge,
@@ -243,8 +312,11 @@ export async function markBankCreditChargesExactWithPatterns(
   const patterns = await ensurePatternsFile(dirHandle);
   const regexes = patterns.map(compilePatternToRegex).filter(Boolean) as RegExp[];
 
-  // השתמש רק במחזורים לפי כרטיס (cardLast4 מוגדר) – לא במחזורים מאוחדים
-  const perCardCycles = cycles.filter(c => c.cardLast4);
+  // השתמש רק במחזורים לפי כרטיס שטרם הותאמו – לא במחזורים מאוחדים ולא כאלה שכבר סומנו בשלב השילובים
+  const perCardCycles = cycles.filter(c => c.cardLast4 && (!c.bankMatchStatus || c.bankMatchStatus === 'none'));
+
+  // בנה מפת company→cards לסינון לפי מיפוי כרטיס↔חברה
+  const companyToCards = buildCompanyToCardsMap(cardCompanyMappings);
 
   // מפת התאמות למחזור לצורך סטטוס בסוף
   const cycleAgg: Record<string, { amt: number; bankIds: string[] }> = {};
@@ -264,11 +336,23 @@ export async function markBankCreditChargesExactWithPatterns(
 
   details.forEach((d, idx) => {
     if (d.source !== 'bank') return;
+    // דלג על עסקאות שכבר הותאמו בשלב השילובים
+    if (d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') return;
+    if (d.neutral) return;
     const desc = d.description || '';
 
     // רשימת מחזורים בטווח ימים עבור העסקה הזו
-    const windowCycles = perCardCycles.filter(c => c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, { daysBeforeCharge, daysAfterCharge }));
+    let windowCycles = perCardCycles.filter(c => c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, { daysBeforeCharge, daysAfterCharge }));
     if (!windowCycles.length) return;
+
+    // סינון לפי מיפוי כרטיס↔חברה: אם ידוע שeDesc שייך לכרטיסים מסוימים, הגבל
+    const descLower = desc.trim().toLowerCase();
+    const allowedCards = companyToCards.get(descLower);
+    if (allowedCards && allowedCards.length > 0) {
+      const filtered = windowCycles.filter(c => allowedCards.includes(c.cardLast4!));
+      if (filtered.length > 0) windowCycles = filtered;
+      // אם אין התאמה לאף כרטיס מוכר – ממשיכים עם כל המחזורים (fallback)
+    }
 
     const patternMatched = regexes.some(r => r.test(desc));
 
@@ -324,8 +408,12 @@ export async function markBankCreditChargesExactWithPatterns(
 
   // חישוב סטטוס מחזורי כרטיס (רק למחזורי כרטיס, לא מאוחדים)
   const updatedCycles: CreditChargeCycleSummary[] = cycles.map(c => {
+    // שמירה על מחזורים שכבר הותאמו בשלב קודם (שלב שילובים)
+    if (c.bankMatchStatus && c.bankMatchStatus !== 'none') {
+      return c;
+    }
     if (!c.cardLast4) {
-      // מחזור מאוחד – לא נבדק בלוגיקה חדשה, משאיר bankMatchStatus ללא שינוי או none אם לא הותאם קודם
+      // מחזור מאוחד – לא נבדק בלוגיקה חדשה
       return { ...c, bankMatchStatus: 'none', bankMatchedAmount: 0, bankTransactionIds: [] };
     }
     const agg = cycleAgg[c.cycleKey!];
@@ -351,7 +439,8 @@ export async function markBankCreditChargesExactWithPatterns(
 export function markBankCombinedCreditCharges(
   details: CreditDetail[],
   cycles: CreditChargeCycleSummary[],
-  opts: MatchOptions = {}
+  opts: MatchOptions = {},
+  cardCompanyMappings: CardCompanyMapping[] = []
 ): MarkResult {
   const {
     daysBeforeCharge = DEFAULT_WINDOW_CONFIG.daysBeforeCharge,
@@ -393,7 +482,13 @@ export function markBankCombinedCreditCharges(
   }
 
   const updatedDetails = details.map(d => {
-    if (d.source !== 'bank' || d.transactionType === 'credit_charge') return d;
+    if (d.source !== 'bank' || d.transactionType === 'credit_charge' || d.transactionType === 'credit_charge_combined') return d;
+    if (d.neutral) return d;
+
+    // סינון לפי מיפוי כרטיס↔חברה: אם ידוע ששם החברה שייך לכרטיסים מסוימים
+    const descLower = (d.description || '').trim().toLowerCase();
+    const companyToCards = buildCompanyToCardsMap(cardCompanyMappings);
+    const allowedCards = companyToCards.get(descLower);
 
     // מצא מחזורי כרטיס בטווח ימים ובאותו תאריך חיוב
     let matchedCombo: CreditChargeCycleSummary[] | null = null;
@@ -402,10 +497,19 @@ export function markBankCombinedCreditCharges(
     for (const [chargeDate, cyclesArr] of Object.entries(cyclesByDate)) {
       // סנן לפי חלון ימים (התאריך של העסקה מול תאריך החיוב של הקבוצה)
       if (!isBankChargeInWindow(d.date, chargeDate, { daysBeforeCharge, daysAfterCharge })) continue;
-      // סדר עדיפויות: קודם 4, אח"כ 3, אח"כ 2
-      for (const size of [4, 3, 2]) {
-        if (cyclesArr.length < size) continue;
-        const combos = combinations(cyclesArr, size);
+
+      // סנן מחזורים לפי מיפוי כרטיס↔חברה אם קיים
+      let filteredCyclesArr = cyclesArr;
+      if (allowedCards && allowedCards.length > 0) {
+        const filtered = cyclesArr.filter(c => allowedCards.includes(c.cardLast4!));
+        if (filtered.length > 0) filteredCyclesArr = filtered;
+      }
+
+      // סדר עדיפויות: קודם כל כל המחזורים ביחד, אח"כ 4, 3, 2
+      const sizesToTry = [filteredCyclesArr.length, 4, 3, 2].filter((s, i, arr) => s >= 2 && s <= filteredCyclesArr.length && arr.indexOf(s) === i);
+      for (const size of sizesToTry) {
+        if (filteredCyclesArr.length < size) continue;
+        const combos = combinations(filteredCyclesArr, size);
         for (const combo of combos) {
           const comboNet = combo.reduce((sum, c) => sum + c.netCharge, 0);
           // בדיקת כיוון: חיוב רגיל → expense בבנק; זיכוי → income
@@ -426,6 +530,8 @@ export function markBankCombinedCreditCharges(
 
   if (!matchedCombo) return d;
 
+    // שמור את הכרטיס הראשון שהותאם (לצורך לימוד מיפוי כרטיס↔חברה)
+    const firstCard = matchedCombo[0]?.cardLast4;
     matchedCombo.forEach(c => {
       const existing = cycleMap[c.cycleKey!];
       const bankIds = existing.bankTransactionIds ? [...existing.bankTransactionIds, d.id] : [d.id];
@@ -446,7 +552,8 @@ export function markBankCombinedCreditCharges(
       matchedCycleKeys: matchedCombo.map(c => c.cycleKey!),
       matchedChargeDate: matchedChargeDate || undefined,
       matchedComboSize: comboSize,
-      matchReason: `combined_${comboSize}`
+      matchReason: `combined_${comboSize}`,
+      matchedCardLast4: firstCard,
     } as CreditDetail;
   });
 
@@ -454,7 +561,9 @@ export function markBankCombinedCreditCharges(
   return { updatedDetails, updatedCycles };
 }
 
-// Orchestrator: מבצע את כל השלבים של זיהוי חיובי אשראי (patterns + exact + שילובים 2/3/4) ומחזיר פרטי ניתוח
+// Orchestrator: מבצע את כל השלבים של זיהוי חיובי אשראי ומחזיר פרטי ניתוח
+// סדר חדש: שילובים (combined) קודם, אח"כ התאמות בודדות – מונע "בזבוז" מחזורים על עסקאות לא נכונות.
+// + מיפוי כרטיס↔חברה: לומד איזה כרטיס שייך לאיזה שם חברה ומשתמש כמגביל בהתאמות עתידיות.
 export async function processCreditChargeMatching(
   allDetails: CreditDetail[],
   dirHandle: FileSystemDirectoryHandle,
@@ -462,29 +571,41 @@ export async function processCreditChargeMatching(
 ): Promise<{ details: CreditDetail[]; creditChargeCycles: CreditChargeCycleSummary[] }> {
   const cycles = computeCreditChargeCycles(allDetails);
   const windowCfg = loadCreditChargeWindowConfig();
-  // שלב 1: התאמה לפי patterns + סכום מדויק למחזורי כרטיס בודדים
-  const { updatedDetails: afterExact, updatedCycles: cyclesAfterExact } = await markBankCreditChargesExactWithPatterns(
+
+  // טען מיפוי כרטיס↔חברה קיים מהתיקייה
+  const existingMappings = await loadCardCompanyMapping(dirHandle);
+
+  const matchOpts = {
+    daysBeforeCharge: opts.daysBeforeCharge ?? windowCfg.daysBeforeCharge,
+    daysAfterCharge: opts.daysAfterCharge ?? windowCfg.daysAfterCharge,
+    toleranceRatio: opts.toleranceRatio,
+    minToleranceAmount: opts.minToleranceAmount,
+  };
+
+  // שלב 1: זיהוי חיובי בנק מאוחדים (2+ מחזורים) – מופעל ראשון כדי שעסקת בנק
+  // שמכסה סכום כולל של מספר מחזורים תזוהה לפני שהמחזורים הבודדים "ייתפסו"
+  const { updatedDetails: afterCombined, updatedCycles: cyclesAfterCombined } = markBankCombinedCreditCharges(
     allDetails,
     cycles,
+    matchOpts,
+    existingMappings
+  );
+
+  // שלב 2: התאמה לפי patterns + סכום מדויק למחזורי כרטיס בודדים (רק על מה שנשאר)
+  const { updatedDetails: finalDetails, updatedCycles: finalCycles } = await markBankCreditChargesExactWithPatterns(
+    afterCombined,
+    cyclesAfterCombined,
     dirHandle,
-    {
-      daysBeforeCharge: opts.daysBeforeCharge ?? windowCfg.daysBeforeCharge,
-      daysAfterCharge: opts.daysAfterCharge ?? windowCfg.daysAfterCharge,
-      toleranceRatio: opts.toleranceRatio,
-      minToleranceAmount: opts.minToleranceAmount,
-    }
+    matchOpts,
+    existingMappings
   );
-  // שלב 2: זיהוי חיובי בנק מאוחדים (2,3,4 מחזורים)
-  const { updatedDetails: finalDetails, updatedCycles: finalCycles } = markBankCombinedCreditCharges(
-    afterExact,
-    cyclesAfterExact,
-    {
-      daysBeforeCharge: opts.daysBeforeCharge ?? windowCfg.daysBeforeCharge,
-      daysAfterCharge: opts.daysAfterCharge ?? windowCfg.daysAfterCharge,
-      toleranceRatio: opts.toleranceRatio,
-      minToleranceAmount: opts.minToleranceAmount,
-    }
-  );
+
+  // שלב 3: לימוד מיפוי כרטיס↔חברה מהתאמות שנמצאו ושמירה
+  const updatedMappings = learnCardCompanyMappings(finalDetails, existingMappings);
+  if (updatedMappings.length > 0) {
+    await saveCardCompanyMapping(dirHandle, updatedMappings);
+  }
+
   return { details: finalDetails, creditChargeCycles: finalCycles };
 }
 

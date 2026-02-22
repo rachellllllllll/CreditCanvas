@@ -71,7 +71,8 @@ export default function AdminDashboardV2() {
     refresh,
     loadUserFullHistory,
     userRealDates,
-    userFullEvents
+    userFullEvents,
+    loadingUserFullData
   } = useAnalyticsData();
 
   // Auth state management
@@ -432,6 +433,7 @@ export default function AdminDashboardV2() {
                 loadUserFullHistory={loadUserFullHistory}
                 userRealDates={userRealDates}
                 userFullEvents={userFullEvents}
+                loadingUserFullData={loadingUserFullData}
               />
             </>
           )}

@@ -42,6 +42,7 @@ interface UseAnalyticsDataReturn {
   loadUserFullHistory: (visitorId: string) => Promise<AnalyticsEvent[]>;
   userRealDates: Map<string, { firstSeen: number; lastSeen: number }>;
   userFullEvents: Map<string, AnalyticsEvent[]>;
+  loadingUserFullData: boolean;
 }
 
 export function useAnalyticsData(): UseAnalyticsDataReturn {
@@ -52,6 +53,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
   const [dateRange, setDateRange] = useState<DateRange>('week');
   const [userRealDates, setUserRealDates] = useState<Map<string, { firstSeen: number; lastSeen: number }>>(new Map());
   const [userFullEvents, setUserFullEvents] = useState<Map<string, AnalyticsEvent[]>>(new Map());
+  const [loadingUserFullData, setLoadingUserFullData] = useState(false);
 
   // Calculate date boundaries based on range
   const getDateBoundary = useCallback((range: DateRange): number => {
@@ -333,6 +335,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
   const loadUserFullData = useCallback(async () => {
     if (events.length === 0) return;
     
+    setLoadingUserFullData(true);
     try {
       const app = getFirebaseApp();
       if (!app) return;
@@ -381,8 +384,11 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
 
       setUserRealDates(datesMap);
       setUserFullEvents(fullEventsMap);
+      console.log('[useAnalyticsData] ✅ Loaded full data for', visitorIds.length, 'users, fullEventsMap size:', fullEventsMap.size);
     } catch (err) {
       console.error('[Admin] Error loading user full data:', err);
+    } finally {
+      setLoadingUserFullData(false);
     }
   }, [events]);
 
@@ -433,6 +439,7 @@ export function useAnalyticsData(): UseAnalyticsDataReturn {
     refresh: loadData,
     loadUserFullHistory,
     userRealDates,
-    userFullEvents
+    userFullEvents,
+    loadingUserFullData
   };
 }

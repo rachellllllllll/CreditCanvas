@@ -894,6 +894,8 @@ const MainView: React.FC<MainViewProps> = ({
             unmatchedCharges={filtered}
             onRefresh={onRefreshDirectory}
             folderName={selectedFolder || undefined}
+            selectedMonth={view === 'monthly' ? selectedMonth : undefined}
+            selectedYear={view === 'yearly' ? selectedYear : undefined}
             onSearchCompany={handleSearchCreditCompany}
           />
         ) : null;
