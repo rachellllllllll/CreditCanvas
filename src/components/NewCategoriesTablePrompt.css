@@ -1054,3 +1054,133 @@
   border-color: #fde68a;
   background: #fffbeb;
 }
+
+/* ===== Uncategorized Merchants Screen ===== */
+
+.new-cats-uncategorized {
+  max-width: 720px;
+}
+
+.summary-step.info {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.uncategorized-progress-bar {
+  width: 100%;
+  height: 28px;
+  background: #e2e8f0;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.uncategorized-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+  border-radius: 14px;
+  transition: width 0.3s ease;
+}
+
+.uncategorized-progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.uncategorized-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding-inline-end: 4px;
+}
+
+.uncategorized-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  text-align: right;
+  transition: all 0.2s;
+}
+
+.uncategorized-card.resolved {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.uncategorized-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.uncategorized-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.uncategorized-expand-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: #64748b;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.uncategorized-expand-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.uncategorized-merchant {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uncategorized-meta {
+  font-size: 0.82rem;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.uncategorized-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uncategorized-details {
+  margin-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.uncategorized-details .new-cats-table-details {
+  margin: 0;
+}

@@ -28,6 +28,7 @@ interface GlobalSearchModalProps {
   ) => void;
   onAddCategory?: (cat: CategoryDef) => void;
   initialSearchText?: string;
+  dateMode?: 'transaction' | 'charge';
   // מצב עריכת כלל קיים
   ruleToEdit?: CategoryRule | null;
   onUpdateRule?: (
@@ -108,9 +109,10 @@ const formatDateForStorage = (dateStr: string): string => {
 //   }
 // };
 
-// Helper: קבלת מפתח חודש (MM/YYYY) מעסקה
-const getMonthKey = (tx: CreditDetail): string => {
-  const parts = tx.date.split('/');
+// Helper: קבלת מפתח חודש (MM/YYYY) מעסקה – מתחשב ב-dateMode
+const getMonthKey = (tx: CreditDetail, dateMode?: 'transaction' | 'charge'): string => {
+  const dateStr = (dateMode === 'charge' && tx.chargeDate) ? tx.chargeDate : tx.date;
+  const parts = dateStr.split('/');
   if (parts.length < 3) return '';
   const month = parts[1].padStart(2, '0');
   let year = parts[2];
@@ -140,6 +142,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onApplyBulkCategoryChange,
   onAddCategory,
   initialSearchText = '',
+  dateMode,
   ruleToEdit,
   onUpdateRule,
 }) => {
@@ -334,10 +337,10 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   // לחיצה על עסקה - ניווט
   const handleRowClick = useCallback((tx: CreditDetail) => {
-    const monthKey = getMonthKey(tx);
+    const monthKey = getMonthKey(tx, dateMode);
     onNavigateToTransaction(tx, monthKey);
     handleCloseAndReset();
-  }, [onNavigateToTransaction, handleCloseAndReset]);
+  }, [onNavigateToTransaction, handleCloseAndReset, dateMode]);
 
   // קבלת צבע קטגוריה
   const getCategoryColor = useCallback((categoryName: string) => {

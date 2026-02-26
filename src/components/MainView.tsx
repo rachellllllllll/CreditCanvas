@@ -87,6 +87,8 @@ interface MainViewProps {
   unmatchedBankStatements?: UnmatchedBankStatement[];
   // קבצים כפולים / חופפים
   duplicateFilesInfo?: DuplicateFilesInfo | null;
+  // עריכת הגדרת קטגוריה מתפריט ימני
+  onEditCategoryDefinition?: (categoryName: string) => void;
 }
 
 const MainView: React.FC<MainViewProps> = ({
@@ -111,7 +113,8 @@ const MainView: React.FC<MainViewProps> = ({
   onClearExternalRuleToEdit,
   unmatchedCreditCharges,
   unmatchedBankStatements,
-  duplicateFilesInfo
+  duplicateFilesInfo,
+  onEditCategoryDefinition
 }) => {
   // State לניהול סינון קטגוריה (מגרף הדונאט)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -1098,6 +1101,7 @@ const MainView: React.FC<MainViewProps> = ({
                   highlightedTransactionId={highlightedTransactionId}
                   onOpenGlobalSearch={handleOpenGlobalSearch}
                   externalSearchTerm={creditSearchTerm}
+                  onEditCategoryDefinition={onEditCategoryDefinition}
                 />
               </div>
             </div>
@@ -1187,6 +1191,7 @@ const MainView: React.FC<MainViewProps> = ({
                 dateMode={dateMode}
                 onOpenGlobalSearch={handleOpenGlobalSearch}
                 externalSearchTerm={creditSearchTerm}
+                onEditCategoryDefinition={onEditCategoryDefinition}
               />
             </div>
           </div>
@@ -1204,6 +1209,7 @@ const MainView: React.FC<MainViewProps> = ({
         allTransactions={analysis.details}
         categoriesList={categoriesList}
         initialSearchText={globalSearchInitialText}
+        dateMode={dateMode}
         ruleToEdit={ruleToEdit}
         onNavigateToTransaction={(tx, monthKey) => {
           if (onNavigateToTransaction) {

@@ -353,6 +353,7 @@ const EditCategoryDialog: React.FC<EditCategoryDialogProps> = ({ open, editDialo
               setEditDialog({ ...editDialog, newCategory: cat.name });
             }}
             allowAdd={true}
+            allowEditExisting={false}
             placeholder={editDialog.transaction?.category}
           />
           {!inputValue && (

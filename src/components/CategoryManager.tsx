@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ICONS } from './icons';
 import CategorySelectOrAdd from './CategorySelectOrAdd';
+import DeleteCategoryDialog from './DeleteCategoryDialog';
+import UndoToast from './UndoToast';
 import './CategoryManager.css';
 
 export interface CategoryDef {
@@ -18,9 +20,15 @@ interface CategoryManagerProps {
   categoriesCount?: Record<string, number>; // מיפוי שם קטגוריה לכמות עסקאות
   transactionsByCategory: Record<string, CreditDetail[]>; // מיפוי שם קטגוריה לרשימת עסקאות
   embedded?: boolean; // האם מוטמע בתוך פאנל אחר
+  onDeleteCategory?: (categoryName: string, targetCategory?: string) => void;
+  onRenameCategory?: (oldName: string, newName: string) => void;
+  rulesCountByCategory?: Record<string, number>;
+  aliasesCountByCategory?: Record<string, number>;
+  isLoading?: boolean;
+  onAddCategory?: (cat: CategoryDef) => void;
 }
 
-const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange, onClose, categoriesCount = {}, transactionsByCategory, embedded = false }) => {
+const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange, onClose, categoriesCount = {}, transactionsByCategory, embedded = false, onDeleteCategory, onRenameCategory, rulesCountByCategory = {}, aliasesCountByCategory = {}, isLoading = false, onAddCategory: onAddCategoryProp }) => {
   const [cats, setCats] = useState<CategoryDef[]>(categories);
   
   // סנכרון state מקומי כאשר ה-prop משתנה מבחוץ
@@ -41,18 +49,92 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
     window.dispatchEvent(new CustomEvent('categoriesChanged'));
   }
 
+  // State for delete dialogs
+  const [deleteDialogState, setDeleteDialogState] = useState<{ idx: number; categoryName: string; isEmpty: boolean } | null>(null);
+
+  // State for undo toast (empty category instant-delete)
+  const [undoToast, setUndoToast] = useState<{ categoryName: string; deletedCat: CategoryDef; idx: number } | null>(null);
+
   // עדכון קטגוריה (שם, אייקון, צבע)
   const handleCategoryUpdate = (idx: number, updatedCat: CategoryDef) => {
+    const oldName = cats[idx].name;
+    const newName = updatedCat.name;
+    const nameChanged = oldName !== newName;
+
+    // Check if renaming to an existing category (merge)
+    if (nameChanged) {
+      const existingIdx = cats.findIndex(c => c.name === newName && c.name !== oldName);
+      if (existingIdx >= 0) {
+        // Merge: confirm with user
+        if (window.confirm(`הקטגוריה '${newName}' כבר קיימת. לאחד את שתי הקטגוריות?`)) {
+          if (onRenameCategory) onRenameCategory(oldName, newName);
+          // Remove old definition
+          const updated = cats.filter((_, i) => i !== idx);
+          setCats(updated);
+          handleChangeAndNotify(updated);
+        }
+        return;
+      }
+      // Rename: update definition + call onRenameCategory
+      const updated = cats.slice();
+      updated[idx] = updatedCat;
+      setCats(updated);
+      handleChangeAndNotify(updated);
+      if (onRenameCategory) onRenameCategory(oldName, newName);
+      return;
+    }
+
+    // Only icon/color changed
     const updated = cats.slice();
     updated[idx] = updatedCat;
     setCats(updated);
     handleChangeAndNotify(updated);
   };
-  // מחיקה
+
+  // מחיקה — לקטגוריה ריקה: מחיקה מיידית + Toast עם Undo. לקטגוריה עם עסקאות: דיאלוג
   const handleDelete = (idx: number) => {
-    const updated = cats.filter((_, i) => i !== idx);
+    const categoryName = cats[idx].name;
+    const txCount = categoriesCount[categoryName] || 0;
+    const rCount = rulesCountByCategory[categoryName] || 0;
+    const aCount = aliasesCountByCategory[categoryName] || 0;
+    const isEmpty = txCount === 0 && rCount === 0 && aCount === 0;
+
+    if (isEmpty) {
+      // מחיקה מיידית + הצגת Toast עם אפשרות ביטול
+      // לא קוראים ל-onDeleteCategory כדי למנוע toast כפול מ-App
+      const deletedCat = cats[idx];
+      const updated = cats.filter((_, i) => i !== idx);
+      setCats(updated);
+      handleChangeAndNotify(updated);
+      setUndoToast({ categoryName, deletedCat, idx });
+    } else {
+      setDeleteDialogState({ idx, categoryName, isEmpty: false });
+    }
+  };
+
+  // שחזור קטגוריה שנמחקה (Undo)
+  const handleUndoDelete = () => {
+    if (!undoToast) return;
+    const { deletedCat, idx } = undoToast;
+    const updated = [...cats];
+    updated.splice(Math.min(idx, updated.length), 0, deletedCat);
     setCats(updated);
     handleChangeAndNotify(updated);
+    setUndoToast(null);
+  };
+
+  // מחיקה בפועל (אחרי אישור)
+  const handleConfirmDelete = (targetCategory?: string) => {
+    if (!deleteDialogState) return;
+    if (onDeleteCategory) {
+      onDeleteCategory(deleteDialogState.categoryName, targetCategory);
+    } else {
+      // Fallback: direct delete without reassignment
+      const updated = cats.filter((_, i) => i !== deleteDialogState.idx);
+      setCats(updated);
+      handleChangeAndNotify(updated);
+    }
+    setDeleteDialogState(null);
   };
   // בקשת הצעות מהשרת – לכל קטגוריה בנפרד, הצג תוצאה מידית, דלג על מאוחדות
   const fetchSuggestions = async () => {
@@ -267,7 +349,12 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
                       <CategorySelectOrAdd
                         categories={cats}
                         value={cat.name}
-                        onChange={() => {}}
+                        onChange={(newName) => {
+                          // If the name changed via selection
+                          if (newName !== cat.name) {
+                            handleCategoryUpdate(idx, { ...cat, name: newName });
+                          }
+                        }}
                         onAddCategory={(updatedCat) => handleCategoryUpdate(idx, updatedCat)}
                         allowAdd={true}
                         defaultIcon={cat.icon}
@@ -449,12 +536,64 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
 
   // If embedded, don't show overlay
   if (embedded) {
-    return content;
+    return (
+      <>
+        {content}
+        {deleteDialogState && (
+          <DeleteCategoryDialog
+            categoryName={deleteDialogState.categoryName}
+            transactionsCount={categoriesCount[deleteDialogState.categoryName] || 0}
+            rulesCount={rulesCountByCategory[deleteDialogState.categoryName] || 0}
+            categories={cats}
+            onConfirm={(target) => handleConfirmDelete(target)}
+            onCancel={() => setDeleteDialogState(null)}
+            onAddCategory={(cat) => {
+              if (onAddCategoryProp) onAddCategoryProp(cat);
+              const updated = [...cats, cat];
+              setCats(updated);
+              handleChangeAndNotify(updated);
+            }}
+            isLoading={isLoading}
+          />
+        )}
+        {undoToast && (
+          <UndoToast
+            message={<>הקטגוריה <strong>'{undoToast.categoryName}'</strong> נמחקה</>}
+            onUndo={handleUndoDelete}
+            onDismiss={() => setUndoToast(null)}
+          />
+        )}
+      </>
+    );
   }
 
   return (
     <div className="edit-dialog-overlay category-manager-overlay">
       {content}
+      {deleteDialogState && (
+        <DeleteCategoryDialog
+          categoryName={deleteDialogState.categoryName}
+          transactionsCount={categoriesCount[deleteDialogState.categoryName] || 0}
+          rulesCount={rulesCountByCategory[deleteDialogState.categoryName] || 0}
+          categories={cats}
+          onConfirm={(target) => handleConfirmDelete(target)}
+          onCancel={() => setDeleteDialogState(null)}
+          onAddCategory={(cat) => {
+            if (onAddCategoryProp) onAddCategoryProp(cat);
+            const updated = [...cats, cat];
+            setCats(updated);
+            handleChangeAndNotify(updated);
+          }}
+          isLoading={isLoading}
+        />
+      )}
+      {undoToast && (
+        <UndoToast
+          message={<>הקטגוריה <strong>'{undoToast.categoryName}'</strong> נמחקה</>}
+          onUndo={handleUndoDelete}
+          onDismiss={() => setUndoToast(null)}
+        />
+      )}
     </div>
   );
 };

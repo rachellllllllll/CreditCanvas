@@ -26,6 +26,12 @@ interface SettingsMenuProps {
   onEditRule?: (rule: CategoryRule) => void;
   // חדש: הפעלה/השבתה של כלל (מחיקה רכה)
   onToggleRule?: (ruleId: string, active: boolean) => void;
+  // Props for category delete/rename
+  onDeleteCategory?: (categoryName: string, targetCategory?: string) => void;
+  onRenameCategory?: (oldName: string, newName: string) => void;
+  rulesCountByCategory?: Record<string, number>;
+  aliasesCountByCategory?: Record<string, number>;
+  isReassigning?: boolean;
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ 
@@ -43,7 +49,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
   categoryAliases = {},
   onAliasesChange,
   onEditRule,
-  onToggleRule
+  onToggleRule,
+  onDeleteCategory,
+  onRenameCategory,
+  rulesCountByCategory = {},
+  aliasesCountByCategory = {},
+  isReassigning = false
 }) => {
   const [activePanel, setActivePanel] = useState<ActivePanel>('main');
   
@@ -163,6 +174,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
               categoriesCount={categoriesCount}
               transactionsByCategory={transactionsByCategory}
               embedded={true}
+              onDeleteCategory={onDeleteCategory}
+              onRenameCategory={onRenameCategory}
+              rulesCountByCategory={rulesCountByCategory}
+              aliasesCountByCategory={aliasesCountByCategory}
+              isLoading={isReassigning}
+              onAddCategory={onAddCategory}
             />
           </div>
         </div>

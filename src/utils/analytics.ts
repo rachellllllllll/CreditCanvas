@@ -446,6 +446,24 @@ export async function trackCategoryAssigned(
 }
 
 /**
+ * שליחת מיפויי סוחר→קטגוריה אנונימיים (ללא סכומים, תאריכים או נתוני עסקאות)
+ * נשלח כשהמשתמש מסווג סוחרים ללא קטגוריה במסך הסוחרים
+ */
+export async function trackMerchantCategorization(
+  profile: UserProfile | null,
+  data: {
+    sessionId: string;
+    merchantMappings: Array<{
+      merchantName: string;   // שם סוחר מנורמל (ללא מידע אישי)
+      category: string;       // הקטגוריה שנבחרה
+      source: 'manual' | 'propagation';  // ידני או אוטומטי
+    }>;
+  }
+): Promise<void> {
+  await trackEvent('merchant_categorization', profile, data, true);
+}
+
+/**
  * שימוש בפיצ'ר
  */
 export async function trackFeatureUsage(

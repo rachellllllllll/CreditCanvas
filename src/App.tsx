@@ -12,6 +12,7 @@ import type { CreditDetail, AnalysisResult } from './types';
 import { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
 import EditCategoryDialog, { type EditDialogState, type SearchFiltersForRule } from './components/EditCategoryDialog';
+import EditCategoryDefDialog from './components/EditCategoryDefDialog';
 import Footer from './components/Footer';
 import './App.css';
 import './index.css';
@@ -49,6 +50,7 @@ import { findOverlappingDateRanges, type DuplicateFilesInfo } from './utils/dupl
 import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule, type RuleChangeResult } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
+import { propagateMerchantCategories, type PropagationResult, type UncategorizedMerchant } from './utils/merchantCategoryPropagation';
 import {
   loadIncomeSourceRules,
   saveIncomeSourceRules,
@@ -335,7 +337,7 @@ const App: React.FC = () => {
   const initialAppPrefs = React.useMemo(() => loadAppPrefs(), []);
 
   // --- מצב חדש: בחירת בסיס תאריך להצגה ---
-  const [dateMode, setDateMode] = useState<'transaction' | 'charge'>(initialAppPrefs.dateMode ?? 'transaction');
+  const [dateMode, setDateMode] = useState<'transaction' | 'charge'>(initialAppPrefs.dateMode ?? 'charge');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   
@@ -354,6 +356,12 @@ const App: React.FC = () => {
   
   // ref למניעת הרצה כפולה של auto-merge (מוגדר כאן כדי שיהיה זמין ל-callbacks של Tour)
   const autoMergeRunRef = React.useRef(false);
+  
+  // שמור תוצאות הפצת קטגוריות לפי סוחר (propagation) לשימוש בדיאלוג
+  const propagationResultRef = React.useRef<{
+    propagations: PropagationResult[];
+    uncategorizedCreditMerchants: UncategorizedMerchant[];
+  }>({ propagations: [], uncategorizedCreditMerchants: [] });
   
   // בדוק אם המשתמש כבר סיים את הטור - מבוסס תיקייה
   // אם יש קבצי הגדרות (כמו categories.json) - זה משתמש קיים
@@ -796,6 +804,13 @@ const App: React.FC = () => {
       const loadedCategoryRules = await loadCategoryRules(dir);
       setCategoryRules(loadedCategoryRules); // שמור ב-state
       allDetails = applyCategoryRules(allDetails, loadedCategoryRules);
+      // הפצת קטגוריות לפי סוחר מוכר (cross-file propagation)
+      const propagationResult = propagateMerchantCategories(allDetails);
+      allDetails = propagationResult.updatedDetails;
+      propagationResultRef.current = {
+        propagations: propagationResult.propagations,
+        uncategorizedCreditMerchants: propagationResult.uncategorizedCreditMerchants,
+      };
       const directionOverrides = await loadDirectionOverridesFromDir(dir);
       allDetails = applyDirectionOverrides(allDetails, directionOverrides);
       const { details: finalDetails, creditChargeCycles: finalCycles } = await processCreditChargeMatching(allDetails, dir);
@@ -1370,7 +1385,10 @@ const App: React.FC = () => {
   const [newCategoriesPrompt, setNewCategoriesPrompt] = useState<null | { 
     names: string[], 
     onConfirm: (mapping: Record<string, CategoryDef>) => void,
-    onConflictsResolved?: (resolved: Record<string, string>) => void 
+    onConflictsResolved?: (resolved: Record<string, string>) => void,
+    propagationResults?: PropagationResult[],
+    uncategorizedMerchants?: UncategorizedMerchant[],
+    onUncategorizedResolved?: (resolved: Record<string, string>) => void 
   }>(null);
 
   // --- Feedback Popup ---
@@ -1620,12 +1638,12 @@ const App: React.FC = () => {
     // אם הדיאלוג כבר הוצג בסשן הזה - לא מציגים שוב (למנוע הצגה אחרי מחיקת קטגוריה)
     if (initialPromptShown) return;
     
-    // אם auto-merge כבר רץ — לא לרוץ שוב (כדי למנוע לולאה מ-setAnalysis/setCategoryAliases)
-    if (autoMergeRunRef.current) return;
-    
     // 🆕 חכה שה-Tour יסתיים/ידולג לפני הצגת דיאלוג קטגוריות/קונפליקטים
     // אם יש Tour בהמתנה (לפני או במהלך התצוגה) - לא להציג דיאלוג נוסף במקביל
     if (tourPending) return;
+    
+    // אם auto-merge כבר רץ — דלג רק על שלב האיחוד (לא על כל ה-effect)
+    const skipAutoMerge = autoMergeRunRef.current;
     
     // מצא קטגוריות מהאקסל שלא קיימות ב-categoriesList וגם לא ב-categoryAliases (כבר מופו)
     const excelCats = Array.from(new Set(analysis.details.map(d => d.category).filter(Boolean)));
@@ -1638,12 +1656,14 @@ const App: React.FC = () => {
     // בדוק גם קונפליקטים בין בתי עסק (גם אם אין קטגוריות חדשות)
     let conflictCount = detectMerchantConflicts(analysis.details, categoryRules);
     
-    // אם אין קטגוריות חדשות ואין קונפליקטים - אין צורך בדיאלוג
-    if (missingCats.length === 0 && conflictCount === 0) return;
+    // אם אין קטגוריות חדשות ואין קונפליקטים - בדוק אם יש הפצה/סוחרים ללא קטגוריה
+    const earlyHasPropagation = propagationResultRef.current.propagations.length > 0;
+    const earlyHasUncategorized = propagationResultRef.current.uncategorizedCreditMerchants.length > 0;
+    if (missingCats.length === 0 && conflictCount === 0 && !earlyHasPropagation && !earlyHasUncategorized) return;
     
-    // אם יש רק קונפליקטים (ללא קטגוריות חדשות) והמשתמש כבר דילג עליהם - אל תציג שוב
+    // אם יש רק קונפליקטים (ללא קטגוריות חדשות ו-ללא סוחרים חדשים) והמשתמש כבר דילג עליהם - אל תציג שוב
     // (אלא אם מספר הקונפליקטים השתנה, מה שמעיד על שינוי בנתונים)
-    if (missingCats.length === 0 && conflictCount > 0 && dismissedConflictCount === conflictCount) {
+    if (missingCats.length === 0 && conflictCount > 0 && dismissedConflictCount === conflictCount && !earlyHasPropagation && !earlyHasUncategorized) {
       return;
     }
     
@@ -1659,6 +1679,9 @@ const App: React.FC = () => {
       }
     }
     
+    let autoMergedAliases: Record<string, string> = {}; // חדשה → קיימת (מוגדרת בחוץ כי משמשת גם אחרי)
+    
+    if (!skipAutoMerge) {
     // --- שלב א: איחוד אוטומטי של קטגוריות מאותה קבוצה (תמיד, גם כשיש קונפליקטים) ---
     const getGroupKeyForCat = (catName: string): string | null => {
       const lower = catName.toLowerCase();
@@ -1671,7 +1694,7 @@ const App: React.FC = () => {
       return chosen;
     };
     
-    const autoMergedAliases: Record<string, string> = {}; // חדשה → קיימת
+    autoMergedAliases = {}; // חדשה → קיימת
     
     // מצא קטגוריות חדשות (עם דיפולט) שיש להן קיימת באותה קבוצה → alias
     for (const cat of catsWithDefaults) {
@@ -1749,8 +1772,8 @@ const App: React.FC = () => {
       conflictCount = detectMerchantConflicts(mergedDetails, categoryRules);
     }
     
-    // אם אחרי האיחוד אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
-    if (missingCats.length === 0 && conflictCount === 0) return;
+    // אם אחרי האיחוד אין קטגוריות חדשות ואין קונפליקטים — בדוק אם יש הפצה/סוחרים ללא קטגוריה
+    if (missingCats.length === 0 && conflictCount === 0 && !earlyHasPropagation && !earlyHasUncategorized) return;
     
     // --- שלב ב: אישור אוטומטי של קטגוריות עם דיפולט (תמיד, לא תלוי בקונפליקטים) ---
     // קונפליקטים הם בין בתי עסק, לא בין קיומן של קטגוריות — לכן אפשר לאשר קטגוריות במקביל
@@ -1783,14 +1806,17 @@ const App: React.FC = () => {
       missingCats.length = 0;
       missingCats.push(...stillMissing);
     }
+    } // end if (!skipAutoMerge)
     
-    // אחרי אישור אוטומטי — אם אין קטגוריות חדשות ואין קונפליקטים — אין מה להציג
-    if (missingCats.length === 0 && conflictCount === 0) return;
+    // אחרי אישור אוטומטי — בדוק אם יש מה להציג (קטגוריות חדשות / קונפליקטים / הפצה / סוחרים ללא קטגוריה)
+    const hasPropagation = propagationResultRef.current.propagations.length > 0;
+    const hasUncategorized = propagationResultRef.current.uncategorizedCreditMerchants.length > 0;
+    if (missingCats.length === 0 && conflictCount === 0 && !hasPropagation && !hasUncategorized) return;
     
-    // הצג דיאלוג אם יש קטגוריות חדשות (ללא דיפולט) או קונפליקטים
+    // הצג דיאלוג אם יש קטגוריות חדשות (ללא דיפולט) או קונפליקטים או הפצת סוחרים
     // קטגוריות עם דיפולט כבר אושרו אוטומטית למעלה
     const hasNewCats = missingCats.length > 0; // רק קטגוריות שלא אושרו אוטומטית (ללא דיפולט)
-    const shouldShowDialog = hasNewCats || conflictCount > 0;
+    const shouldShowDialog = hasNewCats || conflictCount > 0 || hasPropagation || hasUncategorized;
     
     if (shouldShowDialog) {
       // סמן שהדיאלוג הוצג בסשן הזה
@@ -1804,6 +1830,9 @@ const App: React.FC = () => {
       const namesToPass = missingCats.length > 0 ? missingCats : filteredExcelCats;
       setNewCategoriesPrompt({
         names: namesToPass,
+        // תוצאות הפצת קטגוריות לפי סוחר מוכר
+        propagationResults: propagationResultRef.current.propagations,
+        uncategorizedMerchants: propagationResultRef.current.uncategorizedCreditMerchants,
         // טיפול בקונפליקטים שנפתרו - יצירת כללי קטגוריה שישמרו את הבחירות
         onConflictsResolved: async (resolved: Record<string, string>) => {
           if (!dirHandle || Object.keys(resolved).length === 0) return;
@@ -1844,6 +1873,32 @@ const App: React.FC = () => {
             setDismissedConflictCount(0);
           } catch { /* ignore */ }
           
+        },
+        // טיפול בסוחרים ללא קטגוריה שסווגו ידנית — יצירת כללי descriptionContains
+        onUncategorizedResolved: async (resolved: Record<string, string>) => {
+          if (!dirHandle || Object.keys(resolved).length === 0) return;
+          
+          const rules = await loadCategoryRules(dirHandle);
+          let rulesChanged = false;
+          
+          for (const [merchantName, targetCategory] of Object.entries(resolved)) {
+            const cleanName = merchantName.trim().toLowerCase();
+            const exists = rules.some(r => r.conditions.descriptionContains === cleanName && r.category === targetCategory);
+            if (!exists) {
+              rules.push(createRule({ category: targetCategory, conditions: { descriptionContains: cleanName } }));
+              rulesChanged = true;
+            }
+          }
+          
+          if (rulesChanged) {
+            await saveCategoryRules(dirHandle, rules);
+          }
+          
+          setCategoryRules([...rules]);
+          setAnalysis(a => a ? ({
+            ...a,
+            details: applyCategoryRules(a.details, rules)
+          }) : a);
         },
         onConfirm: async (mapping: Record<string, CategoryDef>) => {
           // דלג אם ה-mapping ריק (קריאה אוטומטית מ-hasNothingToShow)
@@ -2001,6 +2056,162 @@ const App: React.FC = () => {
     }
     return map;
   }, [analysis]);
+
+  // ספירת כללים לפי קטגוריה
+  const rulesCountByCategory: Record<string, number> = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const rule of categoryRules) {
+      counts[rule.category] = (counts[rule.category] || 0) + 1;
+    }
+    return counts;
+  }, [categoryRules]);
+
+  // ספירת aliases לפי קטגוריה
+  const aliasesCountByCategory: Record<string, number> = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const targetCategory of Object.values(categoryAliases)) {
+      counts[targetCategory] = (counts[targetCategory] || 0) + 1;
+    }
+    return counts;
+  }, [categoryAliases]);
+
+  // --- Loading state for category reassignment ---
+  const [isReassigning, setIsReassigning] = useState(false);
+
+  // --- State for EditCategoryDefDialog (from context menu) ---
+  const [editCategoryDefDialog, setEditCategoryDefDialog] = useState<{ categoryName: string } | null>(null);
+
+  // --- Core function: reassignCategory ---
+  const reassignCategory = React.useCallback(async (oldName: string, newName: string): Promise<boolean> => {
+    if (!dirHandle) return false;
+    try {
+      setIsReassigning(true);
+
+      // 1. Update category rules (file + state)
+      const rules = await loadCategoryRules(dirHandle);
+      const updatedRules = rules.map(r =>
+        r.category === oldName ? { ...r, category: newName, updatedAt: new Date().toISOString() } : r
+      );
+      await saveCategoryRules(dirHandle, updatedRules);
+      setCategoryRules(updatedRules);
+
+      // 2. Update category aliases (file + state)
+      const aliases = await loadAliasesFromDir(dirHandle, 'category');
+      const updatedAliases: Record<string, string> = {};
+      for (const [key, val] of Object.entries(aliases)) {
+        updatedAliases[key] = val === oldName ? newName : val;
+      }
+      await saveAliasesToDir(dirHandle, updatedAliases, 'category');
+      setCategoryAliases(updatedAliases);
+
+      // 3. Update description-categories.json (file only, no active state)
+      try {
+        const descMappings = await loadAliasesFromDir(dirHandle, 'description');
+        const updatedDescMappings: Record<string, string> = {};
+        for (const [key, val] of Object.entries(descMappings)) {
+          updatedDescMappings[key] = val === oldName ? newName : val;
+        }
+        await saveAliasesToDir(dirHandle, updatedDescMappings, 'description');
+      } catch {
+        // description-categories.json may not exist — that's OK
+      }
+
+      // 4. Update analysis details in memory
+      setAnalysis(a => {
+        if (!a) return a;
+        const updatedDetails = a.details.map(d =>
+          d.category === oldName ? { ...d, category: newName } : d
+        );
+        return { ...a, details: updatedDetails };
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to reassign category:', error);
+      return false;
+    } finally {
+      setIsReassigning(false);
+    }
+  }, [dirHandle]);
+
+  // --- Handler: delete category (called from CategoryManager) ---
+  const handleDeleteCategory = React.useCallback(async (categoryName: string, targetCategory?: string) => {
+    if (targetCategory) {
+      // Category has dependencies — reassign first
+      const success = await reassignCategory(categoryName, targetCategory);
+      if (!success) {
+        showAppToast({ action: 'unchanged' } as RuleChangeResult, '');
+        return;
+      }
+    }
+    // Remove the category definition
+    setCategoriesList(prev => {
+      const updated = prev.filter(c => c.name !== categoryName);
+      if (dirHandle) saveCategoriesToDir(dirHandle, updated);
+      return updated;
+    });
+    setAppToast({ message: targetCategory
+      ? `✅ הקטגוריה "${categoryName}" נמחקה והעסקאות הועברו ל-"${targetCategory}"`
+      : `✅ הקטגוריה "${categoryName}" נמחקה`
+    });
+    if (appToastTimeoutRef.current) clearTimeout(appToastTimeoutRef.current);
+    appToastTimeoutRef.current = setTimeout(() => setAppToast(null), 4000);
+  }, [reassignCategory, dirHandle, showAppToast]);
+
+  // --- Handler: rename category (called from CategoryManager / EditCategoryDefDialog) ---
+  const handleRenameCategory = React.useCallback(async (oldName: string, newName: string) => {
+    const success = await reassignCategory(oldName, newName);
+    if (success) {
+      setAppToast({ message: `✅ שם הקטגוריה עודכן: "${oldName}" → "${newName}"` });
+      if (appToastTimeoutRef.current) clearTimeout(appToastTimeoutRef.current);
+      appToastTimeoutRef.current = setTimeout(() => setAppToast(null), 4000);
+    } else {
+      setAppToast({ message: `❌ שגיאה בשמירת השינויים. נסה שוב.` });
+      if (appToastTimeoutRef.current) clearTimeout(appToastTimeoutRef.current);
+      appToastTimeoutRef.current = setTimeout(() => setAppToast(null), 4000);
+    }
+  }, [reassignCategory]);
+
+  // --- Handler: save from EditCategoryDefDialog (context menu edit) ---
+  const handleEditCategoryDefSave = React.useCallback(async (oldName: string, newDef: CategoryDef) => {
+    const nameChanged = oldName !== newDef.name;
+    const existingCat = categoriesList.find(c => c.name === newDef.name && c.name !== oldName);
+    
+    if (nameChanged && existingCat) {
+      // Merge: reassign old → existing, then delete old definition
+      const success = await reassignCategory(oldName, newDef.name);
+      if (success) {
+        setCategoriesList(prev => {
+          const updated = prev.filter(c => c.name !== oldName);
+          if (dirHandle) saveCategoriesToDir(dirHandle, updated);
+          return updated;
+        });
+        setAppToast({ message: `✅ הקטגוריה "${oldName}" אוחדה עם "${newDef.name}"` });
+      } else {
+        setAppToast({ message: `❌ שגיאה בשמירת השינויים. נסה שוב.` });
+      }
+    } else if (nameChanged) {
+      // Rename: update definition + reassign
+      setCategoriesList(prev => {
+        const updated = prev.map(c => c.name === oldName ? newDef : c);
+        if (dirHandle) saveCategoriesToDir(dirHandle, updated);
+        return updated;
+      });
+      await reassignCategory(oldName, newDef.name);
+      setAppToast({ message: `✅ שם הקטגוריה עודכן: "${oldName}" → "${newDef.name}"` });
+    } else {
+      // Only icon/color changed
+      setCategoriesList(prev => {
+        const updated = prev.map(c => c.name === oldName ? newDef : c);
+        if (dirHandle) saveCategoriesToDir(dirHandle, updated);
+        return updated;
+      });
+      setAppToast({ message: `✅ הקטגוריה "${oldName}" עודכנה` });
+    }
+    if (appToastTimeoutRef.current) clearTimeout(appToastTimeoutRef.current);
+    appToastTimeoutRef.current = setTimeout(() => setAppToast(null), 4000);
+    setEditCategoryDefDialog(null);
+  }, [reassignCategory, categoriesList, dirHandle]);
 
 
   // עדכון ושמירה של כללי alias
@@ -2223,7 +2434,7 @@ const App: React.FC = () => {
     // הסר את ההדגשה אחרי כמה שניות
     setTimeout(() => {
       setHighlightedTransactionId(null);
-    }, 3000);
+    }, 5000);
   }, []);
 
   // --- מעקב על global errors (unhandled rejections וbrower runtime errors) ---
@@ -2337,6 +2548,7 @@ const App: React.FC = () => {
             unmatchedCreditCharges={unmatchedCreditCharges}
             unmatchedBankStatements={unmatchedBankStatements}
             duplicateFilesInfo={duplicateFilesInfo}
+            onEditCategoryDefinition={(categoryName) => setEditCategoryDefDialog({ categoryName })}
           />
         </>
       )}
@@ -2374,6 +2586,9 @@ const App: React.FC = () => {
           categoriesList={categoriesList}
           onConfirm={newCategoriesPrompt.onConfirm}
           onConflictsResolved={newCategoriesPrompt.onConflictsResolved}
+          propagationResults={newCategoriesPrompt.propagationResults}
+          uncategorizedMerchants={newCategoriesPrompt.uncategorizedMerchants}
+          onUncategorizedResolved={newCategoriesPrompt.onUncategorizedResolved}
           onCancel={() => {
             // שמור את מספר הקונפליקטים הנוכחי כדי לא להציג שוב את אותם קונפליקטים
             if (analysis) {
@@ -2414,6 +2629,22 @@ const App: React.FC = () => {
             setSettingsOpen(false);
           }}
           onToggleRule={handleToggleRule}
+          onDeleteCategory={handleDeleteCategory}
+          onRenameCategory={handleRenameCategory}
+          rulesCountByCategory={rulesCountByCategory}
+          aliasesCountByCategory={aliasesCountByCategory}
+          isReassigning={isReassigning}
+        />
+      )}
+      {/* EditCategoryDefDialog — from context menu */}
+      {editCategoryDefDialog && (
+        <EditCategoryDefDialog
+          categoryName={editCategoryDefDialog.categoryName}
+          categoryDef={categoriesList.find(c => c.name === editCategoryDefDialog.categoryName) || { name: editCategoryDefDialog.categoryName, icon: '🏷️', color: '#36A2EB' }}
+          categories={categoriesList}
+          onSave={handleEditCategoryDefSave}
+          onCancel={() => setEditCategoryDefDialog(null)}
+          isLoading={isReassigning}
         />
       )}
       {/* Terms Modal */}

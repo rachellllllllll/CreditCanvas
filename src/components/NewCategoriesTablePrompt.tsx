@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import CategorySelectOrAdd from './CategorySelectOrAdd';
 import type { CategoryDef } from './CategoryManager';
 import type { CreditDetail, CategoryRule } from '../types';
+import type { PropagationResult, UncategorizedMerchant } from '../utils/merchantCategoryPropagation';
 import './NewCategoriesTablePrompt.css';
 
 interface NewCategoriesTablePromptProps {
@@ -15,6 +16,12 @@ interface NewCategoriesTablePromptProps {
   categoryRules?: CategoryRule[];
   // callback לקונפליקטים שנפתרו (בית עסק -> קטגוריה שנבחרה)
   onConflictsResolved?: (resolved: Record<string, string>) => void;
+  // תוצאות הפצת קטגוריות אוטומטית (סוחר מוכר → קטגוריה)
+  propagationResults?: PropagationResult[];
+  // סוחרי אשראי שנשארו ללא קטגוריה אחרי הפצה
+  uncategorizedMerchants?: UncategorizedMerchant[];
+  // callback לסיווג סוחרים ללא קטגוריה (merchantName → category)
+  onUncategorizedResolved?: (resolved: Record<string, string>) => void;
 }
 
 // קונפליקט של בית עסק בקטגוריות שונות
@@ -36,28 +43,26 @@ interface AutoMergeInfo {
 // הפוך את מיפוי הקבוצות לקבוע גלובלי לשימוש חוזר
 const CATEGORY_MAPPINGS: Record<string, { icon: string; color: string; recommendedIcons: string[] }> = {
   'אופנה': { icon: '👗', color: '#00a3ad', recommendedIcons: ['👗', '👔', '👠', '👜', '🧣', '👒'] },
-  // 'בידור': { icon: '🎭', color: '#ff7121', recommendedIcons: ['🎭', '🎬', '🎪', '🎨', '🎤', '🎸'] },
   'ביטוח': { icon: '🛡️', color: '#2550ff', recommendedIcons: ['🛡️', '🔒', '📋', '✅', '🏛️', '⚖️', '💼'] },
+  'בית': { icon: '🛋️', color: '#c20017', recommendedIcons: ['🛋️', '🖌️', '🎨', '🏠', '📐', '🖼️'] },
+  'חינוך': { icon: '🎓', color: '#7b68ee', recommendedIcons: ['🎓', '📚', '🏫', '📝', '📖', '🖊️'] },
   'חשמל': { icon: '💡', color: '#ffb300', recommendedIcons: ['💡', '🔌', '⚡', '🌡️', '🔥', '💧'] },
   'כספים': { icon: '💰', color: '#aa82ff', recommendedIcons: ['💰', '💵', '💴', '💶', '🏦', '💳'] },
+  'מזומן': { icon: '💵', color: '#4caf50', recommendedIcons: ['💵', '💰', '💳', '🏦', '🪙', '💸'] },
   'מזון': { icon: '🛒', color: '#ff3f9b', recommendedIcons: ['🛒', '🛍️', '🍎', '🥦', '🍞', '🧴'] },
+  'מזל': { icon: '🎰', color: '#d4af37', recommendedIcons: ['🎰', '🎲', '🃏', '♠️', '♥️', '🎯'] },
   'מסעדות': { icon: '🍴', color: '#13e2bf', recommendedIcons: ['🍴', '🍽️', '🍕', '🍔', '🍜', '☕'] },
-  // 'ספורט': { icon: '🏅', color: '#ff7121', recommendedIcons: ['🏅', '⚽', '🏀', '🎾', '🏐', '⛳'] },
+  'משרד': { icon: '📋', color: '#607d8b', recommendedIcons: ['📋', '🖊️', '📐', '📂', '🗂️', '📁'] },
   'ספרים': { icon: '📚', color: '#8bc34a', recommendedIcons: ['📚', '📖', '📝', '📓', '📒', '📕'] },
-  'בית': { icon: '🛋️', color: '#c20017', recommendedIcons: ['🛋️', '🖌️', '🎨', '🏠', '📐', '🖼️'] },
   'עירייה': { icon: '🏛️', color: '#ff6f61', recommendedIcons: ['🏛️', '🏢', '🏙️', '🌆', '📜', '🗳️'] },
   'פנאי': { icon: '🎉', color: '#ff7121', recommendedIcons: ['🎉', '🎊', '🎁', '🎈', '🎪', '🎭'] },
   'קוסמטיקה': { icon: '💄', color: '#ff8dab', recommendedIcons: ['💄', '💅', '🧴', '🪮', '🧼', '✨'] },
   'רפואה': { icon: '💊', color: '#879aff', recommendedIcons: ['💊', '🏥', '⚕️', '🩺', '💉', '🧬'] },
   'שונות': { icon: '🔖', color: '#ecd400', recommendedIcons: ['🔖', '🏷️', '📌', '📍', '🔔', '⚙️'] },
   'תחבורה': { icon: '🚗', color: '#009950', recommendedIcons: ['🚗', '🚙', '🚕', '🛣️', '⛽', '🅿️'] },
-  'תקשורת': { icon: '📱', color: '#b6c700', recommendedIcons: ['📱', '📞', '📧', '💬', '📡', '📶'] },
   'תיירות': { icon: '✈️', color: '#4a90d9', recommendedIcons: ['✈️', '🛳️', '🏨', '🧳', '🌍', '📸'] },
+  'תקשורת': { icon: '📱', color: '#b6c700', recommendedIcons: ['📱', '📞', '📧', '💬', '📡', '📶'] },
   'תרומות': { icon: '💰', color: '#e57373', recommendedIcons: ['💰', '💵', '🎗️', '🤝', '🌍', '💖'] },
-  'חינוך': { icon: '🎓', color: '#7b68ee', recommendedIcons: ['🎓', '📚', '🏫', '📝', '📖', '🖊️'] },
-  'משרד': { icon: '📋', color: '#607d8b', recommendedIcons: ['📋', '🖊️', '📐', '📂', '🗂️', '📁'] },
-  'מזל': { icon: '🎰', color: '#d4af37', recommendedIcons: ['🎰', '🎲', '🃏', '♠️', '♥️', '🎯'] },
-  'מזומן': { icon: '💵', color: '#4caf50', recommendedIcons: ['💵', '💰', '💳', '🏦', '🪙', '💸'] },
 };
 
 // const getDefaultIconAndColor = (categoryName: string): { icon: string; color: string; recommendedIcons?: string[] } | undefined => {
@@ -304,7 +309,7 @@ const isTransactionCoveredByRule = (tx: CreditDetail, rules: CategoryRule[]): bo
   return false;
 };
 
-const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ names, categoriesList, onConfirm, onCancel, allDetails = [], categoryRules = [], onConflictsResolved }) => {
+const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ names, categoriesList, onConfirm, onCancel, allDetails = [], categoryRules = [], onConflictsResolved, propagationResults = [], uncategorizedMerchants = [], onUncategorizedResolved }) => {
   // חשב ספירת עסקאות לכל קטגוריה (נדרש לפני findIdenticalCategories)
   const initialTransactionCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -328,11 +333,16 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   const [autoMergedGroups] = useState<AutoMergeInfo[]>(autoMerges);
   const [cancelledMerges, setCancelledMerges] = useState<Set<string>>(new Set());
 
-  // מצב תצוגה: 'summary' | 'table' | 'conflicts'
-  const [viewMode, setViewMode] = useState<'summary' | 'table' | 'conflicts'>('summary');
+  // מצב תצוגה: 'summary' | 'table' | 'conflicts' | 'uncategorized'
+  const [viewMode, setViewMode] = useState<'summary' | 'table' | 'conflicts' | 'uncategorized'>('summary');
 
   // State לפתרון קונפליקטים (מוגדר כאן כדי שיהיה זמין ל-useEffect)
   const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, string>>({});
+
+  // State לסיווג סוחרים ללא קטגוריה (merchantName → categoryName)
+  const [uncategorizedSelections, setUncategorizedSelections] = useState<Record<string, string>>({});
+  // State להרחבת עסקאות של סוחרים ללא קטגוריה
+  const [expandedUncategorized, setExpandedUncategorized] = useState<Record<string, boolean>>({});
 
   // שמור את הקטגוריות המקוריות משמורה בנפרד - בשביל הבדיקה אם קטגוריה כבר קיימת בקובץ JSON
   const originalCategoriesRef = React.useRef<Set<string>>(new Set(categoriesList.map(c => c.name)));
@@ -590,6 +600,11 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     }
 
     onConfirm(mapping);
+
+    // שלח סיווגי סוחרים ללא קטגוריה (merchantName → category)
+    if (onUncategorizedResolved && Object.keys(uncategorizedSelections).length > 0) {
+      await onUncategorizedResolved(uncategorizedSelections);
+    }
   };
 
   // נטרל כפתור אישור אם יש טיוטות פתוחות או קטגוריה ללא ברירת מחדל שלא אושרה
@@ -878,6 +893,13 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     return conflicts;
   }, [allDetails, categoryRules, autoMergedGroups, cancelledMerges]);
 
+  // סנן סוחרים ללא קטגוריה — הסר כאלה שכבר מטופלים בקונפליקטים
+  // (סוחר עם קונפליקט = יש לו עסקאות בכמה קטגוריות, ייפתר שם)
+  const filteredUncategorizedMerchants = React.useMemo(() => {
+    const conflictMerchantNames = new Set(merchantConflicts.map(c => c.merchantName));
+    return uncategorizedMerchants.filter(m => !conflictMerchantNames.has(m.merchantName));
+  }, [uncategorizedMerchants, merchantConflicts]);
+
   // סטטיסטיקות לסיכום
   const summaryStats = React.useMemo(() => {
     const totalTransactions = allDetails.length;
@@ -885,6 +907,8 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     const autoMergedCount = autoMergedGroups.filter(m => !cancelledMerges.has(m.target)).length;
     const conflictsCount = merchantConflicts.filter(c => !resolvedConflicts[c.merchantName]).length;
     const newCategories = activeNames.filter(n => !originalCategoriesRef.current.has(n)).length;
+    const propagatedCount = propagationResults.reduce((sum, p) => sum + p.propagatedCount, 0);
+    const uncategorizedCount = filteredUncategorizedMerchants.filter(m => !uncategorizedSelections[m.merchantName]).length;
 
     return {
       totalTransactions,
@@ -892,9 +916,54 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
       autoMergedCount,
       conflictsCount,
       newCategories,
-      totalNewFromExcel: names.length
+      totalNewFromExcel: names.length,
+      propagatedCount,
+      propagatedMerchants: propagationResults.length,
+      uncategorizedCount,
     };
-  }, [names, allDetails, autoMergedGroups, cancelledMerges, merchantConflicts, resolvedConflicts, activeNames]);
+  }, [names, allDetails, autoMergedGroups, cancelledMerges, merchantConflicts, resolvedConflicts, activeNames, propagationResults, filteredUncategorizedMerchants, uncategorizedSelections]);
+
+  // --- Progress Indicator דינמי: מציג רק שלבים רלוונטיים ---
+  const renderProgressIndicator = (currentStep: 'summary' | 'conflicts' | 'uncategorized' | 'table') => {
+    const steps: Array<{ id: string; label: string; show: boolean }> = [
+      { id: 'summary', label: 'סיכום', show: true },
+      { id: 'conflicts', label: 'קונפליקטים', show: merchantConflicts.length > 0 },
+      { id: 'uncategorized', label: 'בתי עסק', show: filteredUncategorizedMerchants.length > 0 },
+      { id: 'table', label: 'הגדרה', show: activeNames.length > 0 },
+    ];
+    const visibleSteps = steps.filter(s => s.show);
+    const currentIndex = visibleSteps.findIndex(s => s.id === currentStep);
+
+    return (
+      <div className="progress-indicator">
+        {visibleSteps.map((step, i) => {
+          const isCompleted = i < currentIndex;
+          const isActive = i === currentIndex;
+          const stepNumber = i + 1;
+
+          return (
+            <React.Fragment key={step.id}>
+              {i > 0 && <div className={`progress-line ${isCompleted || isActive ? 'completed' : ''}`}></div>}
+              <div className="progress-step-wrapper">
+                <div
+                  className={`progress-step ${isCompleted ? 'completed' : isActive ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!isCompleted) return;
+                    setViewMode(step.id as typeof currentStep);
+                  }}
+                  style={{ cursor: isCompleted ? 'pointer' : 'default' }}
+                  title={isCompleted ? `חזור ל${step.label}` : ''}
+                >
+                  {isCompleted ? '✓' : stepNumber}
+                </div>
+                <span className="progress-label">{step.label}</span>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
 
   // פונקציה לביטול איחוד
   const handleUndoMerge = (merge: AutoMergeInfo) => {
@@ -909,7 +978,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
   // מסך סיכום בכניסה ראשונה
   // אם אין קונפליקטים ואין קטגוריות חדשות להגדרה — אין מה להציג, סגור אוטומטית
-  const hasNothingToShow = summaryStats.conflictsCount === 0 && summaryStats.newCategories === 0 && activeNames.length === 0;
+  const hasNothingToShow = summaryStats.conflictsCount === 0 && summaryStats.newCategories === 0 && activeNames.length === 0 && summaryStats.uncategorizedCount === 0 && summaryStats.propagatedCount === 0;
   const autoConfirmedRef = React.useRef(false);
   React.useEffect(() => {
     if (hasNothingToShow && !autoConfirmedRef.current) {
@@ -933,38 +1002,9 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     return (
       <div className="new-cats-overlay">
         <div className="new-cats-dialog new-cats-summary">
-          <div className="progress-indicator">
-            <div className="progress-step-wrapper">
-              <div className="progress-step active">1</div>
-              <span className="progress-label">סיכום</span>
-            </div>
-            <div className={`progress-line ${summaryStats.conflictsCount === 0 ? 'completed' : ''}`}></div>
-            <div className="progress-step-wrapper">
-              <div
-                className={`progress-step ${summaryStats.conflictsCount === 0 ? 'completed' : ''}`}
-                onClick={() => summaryStats.conflictsCount > 0 && setViewMode('conflicts')}
-                style={{ cursor: summaryStats.conflictsCount > 0 ? 'pointer' : 'default' }}
-                title={summaryStats.conflictsCount > 0 ? 'עבור לפתרון קונפליקטים' : 'אין קונפליקטים'}
-              >
-                {summaryStats.conflictsCount === 0 ? '✓' : '2'}
-              </div>
-              <span className="progress-label">קונפליקטים</span>
-            </div>
-            <div className="progress-line"></div>
-            <div className="progress-step-wrapper">
-              <div
-                className="progress-step"
-                onClick={() => activeNames.length > 0 && setViewMode('table')}
-                style={{ cursor: activeNames.length > 0 ? 'pointer' : 'default' }}
-                title={activeNames.length > 0 ? 'עבור להגדרת קטגוריות' : ''}
-              >
-                3
-              </div>
-              <span className="progress-label">הגדרה</span>
-            </div>
-          </div>
+          {renderProgressIndicator('summary')}
           <h3 className="new-cats-title">
-            ברוכים הבאים! 👋
+            📋 סריקת קבצי אשראי הושלמה
           </h3>
           <p className="new-cats-subtitle">
             נמצאו <strong>{summaryStats.totalTransactions}</strong> עסקאות בקבצי האשראי
@@ -974,9 +1014,8 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
             <div className="summary-step completed">
               <span className="step-icon">✅</span>
               <div className="step-content">
-                <div className="step-title">שלב 1: זיהוי קטגוריות</div>
+                <div className="step-title">זוהו {summaryStats.totalNewFromExcel} קטגוריות מהאקסל</div>
                 <ul className="step-details">
-                  <li>📦 {summaryStats.totalNewFromExcel} קטגוריות מהאקסל</li>
                   {summaryStats.autoMergedCount > 0 && (
                     <li>🔄 {summaryStats.autoMergedCount} קטגוריות אוחדו אוטומטית</li>
                   )}
@@ -993,6 +1032,40 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                 <div className="step-content">
                   <div className="step-title">נמצאו {summaryStats.conflictsCount} חוסר עקביות</div>
                   <p className="step-desc">בתי עסק שמופיעים בקטגוריות שונות</p>
+                </div>
+              </div>
+            )}
+
+            {summaryStats.propagatedCount > 0 && (
+              <div className="summary-step completed">
+                <span className="step-icon">🏪</span>
+                <div className="step-content">
+                  <div className="step-title">זוהו {summaryStats.propagatedMerchants} בתי עסק מוכרים מקבצים אחרים</div>
+                  <p className="step-desc">
+                    {propagationResults
+                      .slice(0, 3)
+                      .map(p => p.merchantName)
+                      .join(', ')}
+                    {propagationResults.length > 3 && ' ועוד...'}
+                    {' · '}{summaryStats.propagatedCount} עסקאות סווגו אוטומטית
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {summaryStats.uncategorizedCount > 0 && (
+              <div className="summary-step info">
+                <span className="step-icon">❓</span>
+                <div className="step-content">
+                  <div className="step-title">{summaryStats.uncategorizedCount} בתי עסק עדיין ללא קטגוריה</div>
+                  <p className="step-desc">
+                    {filteredUncategorizedMerchants
+                      .filter(m => !uncategorizedSelections[m.merchantName])
+                      .slice(0, 3)
+                      .map(m => m.displayName || m.merchantName)
+                      .join(', ')}
+                    {summaryStats.uncategorizedCount > 3 && ' ועוד...'}
+                  </p>
                 </div>
               </div>
             )}
@@ -1035,6 +1108,13 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
               >
                 המשך לפתרון {summaryStats.conflictsCount} קונפליקטים
               </button>
+            ) : summaryStats.uncategorizedCount > 0 ? (
+              <button
+                className="new-cats-confirm-btn"
+                onClick={() => setViewMode('uncategorized')}
+              >
+                המשך לסיווג {summaryStats.uncategorizedCount} בתי עסק
+              </button>
             ) : activeNames.length > 0 ? (
               <button
                 className="new-cats-confirm-btn"
@@ -1050,7 +1130,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                 סיום ✓
               </button>
             )}
-            <button className="new-cats-cancel-btn" onClick={onCancel}>דלג לעכשיו</button>
+            <button className="new-cats-cancel-btn" onClick={onCancel}>דלג — העסקאות יישארו ללא קטגוריה</button>
           </div>
 
           <p className="summary-tip">
@@ -1072,7 +1152,14 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
           <div className="new-cats-dialog new-cats-conflicts">
             <h3 className="new-cats-title">✅ כל הקונפליקטים נפתרו!</h3>
             <div className="summary-actions">
-              {activeNames.length > 0 ? (
+              {summaryStats.uncategorizedCount > 0 ? (
+                <button
+                  className="new-cats-confirm-btn"
+                  onClick={() => setViewMode('uncategorized')}
+                >
+                  המשך לסיווג {summaryStats.uncategorizedCount} בתי עסק
+                </button>
+              ) : activeNames.length > 0 ? (
                 <button
                   className="new-cats-confirm-btn"
                   onClick={() => setViewMode('table')}
@@ -1096,32 +1183,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
     return (
       <div className="new-cats-overlay">
         <div className="new-cats-dialog new-cats-conflicts">
-          <div className="progress-indicator">
-            <div className="progress-step-wrapper">
-              <div
-                className="progress-step completed"
-                onClick={() => setViewMode('summary')}
-                style={{ cursor: 'pointer' }}
-                title="חזור לסיכום"
-              >✓</div>
-              <span className="progress-label">סיכום</span>
-            </div>
-            <div className="progress-line completed"></div>
-            <div className="progress-step-wrapper">
-              <div className="progress-step active">2</div>
-              <span className="progress-label">קונפליקטים</span>
-            </div>
-            <div className="progress-line"></div>
-            <div className="progress-step-wrapper">
-              <div
-                className="progress-step"
-                onClick={() => setViewMode('table')}
-                style={{ cursor: 'pointer' }}
-                title="עבור להגדרת קטגוריות"
-              >3</div>
-              <span className="progress-label">הגדרה</span>
-            </div>
-          </div>
+          {renderProgressIndicator('conflicts')}
           <h3 className="new-cats-title">
             ⚠️ נמצאו חוסר עקביות
           </h3>
@@ -1163,7 +1225,14 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
           <div className="new-cats-btns-row">
             <button className="new-cats-cancel-btn" onClick={() => setViewMode('summary')}>חזור</button>
-            {activeNames.length > 0 ? (
+            {summaryStats.uncategorizedCount > 0 ? (
+              <button
+                className="new-cats-confirm-btn"
+                onClick={() => setViewMode('uncategorized')}
+              >
+                המשך לסיווג בתי עסק ({summaryStats.uncategorizedCount})
+              </button>
+            ) : activeNames.length > 0 ? (
               <button
                 className="new-cats-confirm-btn"
                 onClick={() => setViewMode('table')}
@@ -1176,6 +1245,135 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                 onClick={handleConfirm}
               >
                 סיום ✓
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // מסך סוחרים ללא קטגוריה
+  if (viewMode === 'uncategorized' && filteredUncategorizedMerchants.length > 0) {
+    const allCategories = [...localCategories];
+    const resolvedCount = Object.keys(uncategorizedSelections).length;
+    const totalUncategorized = filteredUncategorizedMerchants.length;
+
+    return (
+      <div className="new-cats-overlay">
+        <div className="new-cats-dialog new-cats-uncategorized">
+          {renderProgressIndicator('uncategorized')}
+
+          <h3 className="new-cats-title">
+            🏪 סיווג בתי עסק ללא קטגוריה
+          </h3>
+          <p className="new-cats-subtitle">
+            בתי העסק הבאים מקבצי האשראי לא סווגו אוטומטית. בחר קטגוריה לכל בית עסק:
+          </p>
+
+          {resolvedCount > 0 && (
+            <div className="uncategorized-progress-bar">
+              <div className="uncategorized-progress-fill" style={{ width: `${(resolvedCount / totalUncategorized) * 100}%` }}></div>
+              <span className="uncategorized-progress-text">{resolvedCount} / {totalUncategorized} סווגו</span>
+            </div>
+          )}
+
+          <div className="uncategorized-list">
+            {filteredUncategorizedMerchants.map((merchant) => {
+              const selected = uncategorizedSelections[merchant.merchantName];
+              const isExpanded = expandedUncategorized[merchant.merchantName];
+              const txList = merchant.transactions || [];
+              const name = merchant.displayName || merchant.merchantName;
+              return (
+                <div key={merchant.merchantName} className={`uncategorized-card ${selected ? 'resolved' : ''}`}>
+                  <div className="uncategorized-header">
+                    <div className="uncategorized-header-right">
+                      <button
+                        className="uncategorized-expand-btn"
+                        onClick={() => setExpandedUncategorized(prev => ({ ...prev, [merchant.merchantName]: !prev[merchant.merchantName] }))}
+                        title={isExpanded ? 'סגור עסקאות' : 'הצג עסקאות'}
+                      >{isExpanded ? '▲' : '▼'}</button>
+                      <span className="uncategorized-merchant">🏪 {name}</span>
+                    </div>
+                    <span className="uncategorized-meta">
+                      {merchant.transactionCount} עסקאות · ₪{merchant.totalAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="uncategorized-select">
+                    <CategorySelectOrAdd
+                      key={`uncat-${merchant.merchantName}`}
+                      categories={allCategories}
+                      value={selected || ''}
+                      onChange={(catName) => setUncategorizedSelections(prev => ({ ...prev, [merchant.merchantName]: catName }))}
+                      onAddCategory={(cat) => {
+                        setLocalCategories(prev => {
+                          if (prev.find(c => c.name === cat.name)) return prev;
+                          return [...prev, cat];
+                        });
+                        setUncategorizedSelections(prev => ({ ...prev, [merchant.merchantName]: cat.name }));
+                      }}
+                      allowAdd={true}
+                      placeholder="בחר קטגוריה..."
+                    />
+                    {selected && (
+                      <button
+                        className="undo-merge-btn"
+                        onClick={() => setUncategorizedSelections(prev => {
+                          const next = { ...prev };
+                          delete next[merchant.merchantName];
+                          return next;
+                        })}
+                        title="שנה בחירה"
+                      >↩️</button>
+                    )}
+                  </div>
+                  {isExpanded && txList.length > 0 && (
+                    <div className="uncategorized-details">
+                      <table className="new-cats-table-details">
+                        <thead>
+                          <tr>
+                            <th>תאריך</th>
+                            <th>תיאור</th>
+                            <th>סכום</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {txList.map((tx, idx) => (
+                            <tr key={idx}>
+                              <td>{tx.date}</td>
+                              <td>{tx.description}</td>
+                              <td>₪{tx.amount.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {merchant.transactionCount > txList.length && (
+                        <div className="details-more">
+                          ועוד {merchant.transactionCount - txList.length} עסקאות...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="new-cats-btns-row">
+            <button className="new-cats-cancel-btn" onClick={() => setViewMode('summary')}>חזור</button>
+            {activeNames.length > 0 ? (
+              <button
+                className="new-cats-confirm-btn"
+                onClick={() => setViewMode('table')}
+              >
+                {resolvedCount > 0 ? `המשך (${resolvedCount} סווגו)` : 'דלג להגדרת קטגוריות'}
+              </button>
+            ) : (
+              <button
+                className="new-cats-confirm-btn"
+                onClick={handleConfirm}
+              >
+                {resolvedCount > 0 ? `סיום (${resolvedCount} סווגו) ✓` : 'סיום ✓'}
               </button>
             )}
           </div>
@@ -1207,32 +1405,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
   return (
     <div className="new-cats-overlay" key={`dialog-${viewMode}-${activeNames.length}`}>
       <div className="new-cats-dialog">
-        <div className="progress-indicator">
-          <div className="progress-step-wrapper">
-            <div
-              className="progress-step completed"
-              onClick={() => setViewMode('summary')}
-              style={{ cursor: 'pointer' }}
-              title="חזור לסיכום"
-            >✓</div>
-            <span className="progress-label">סיכום</span>
-          </div>
-          <div className="progress-line completed"></div>
-          <div className="progress-step-wrapper">
-            <div
-              className="progress-step completed"
-              onClick={() => summaryStats.conflictsCount > 0 && setViewMode('conflicts')}
-              style={{ cursor: summaryStats.conflictsCount > 0 ? 'pointer' : 'default' }}
-              title={summaryStats.conflictsCount > 0 ? 'חזור לקונפליקטים' : 'אין קונפליקטים'}
-            >✓</div>
-            <span className="progress-label">קונפליקטים</span>
-          </div>
-          <div className="progress-line completed"></div>
-          <div className="progress-step-wrapper">
-            <div className="progress-step active">3</div>
-            <span className="progress-label">הגדרה</span>
-          </div>
-        </div>
+        {renderProgressIndicator('table')}
         <h3 className="new-cats-title">
           הגדרת קטגוריות חדשות
         </h3>

@@ -724,3 +724,216 @@
   outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
+
+/* כפתור מחיקה אדום */
+.delete-btn-danger {
+  background: #dc2626 !important;
+  color: #fff !important;
+  border: none;
+}
+.delete-btn-danger:hover:not(:disabled) {
+  background: #b91c1c !important;
+}
+.delete-btn-danger:disabled {
+  background: #fca5a5 !important;
+  cursor: not-allowed;
+}
+
+/* ===== EditCategoryDefDialog (ecdd) ===== */
+
+.ecdd-dialog-box {
+  max-width: 440px;
+}
+
+/* תצוגה מקדימה חיה */
+.ecdd-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  padding: 14px 16px;
+  margin: 0 0 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  direction: rtl;
+}
+
+.ecdd-preview-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: background 0.2s ease;
+}
+
+.ecdd-preview-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* שדה שם הקטגוריה */
+.ecdd-field-group {
+  margin: 16px 0 12px;
+  direction: rtl;
+}
+
+.ecdd-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #374151;
+}
+
+.ecdd-name-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1.5px solid #d1d5db;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+  direction: rtl;
+}
+
+.ecdd-name-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.ecdd-name-input.ecdd-input-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.ecdd-error-msg {
+  font-size: 13px;
+  color: #ef4444;
+  margin-top: 6px;
+  animation: ecdd-fadeIn 0.2s ease-out;
+}
+
+.ecdd-warning-msg {
+  font-size: 13px;
+  color: #d97706;
+  margin-top: 6px;
+}
+
+@keyframes ecdd-fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* שורת אייקון + צבע */
+.ecdd-icon-color-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: center;
+  margin: 20px 0;
+  direction: rtl;
+}
+
+.ecdd-icon-section {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ecdd-color-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ecdd-label-small {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #374151;
+  text-align: center;
+}
+
+.ecdd-icon-btn {
+  padding: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ecdd-icon-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ecdd-icon-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #fff;
+  transition: background 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* כפתורי פעולה */
+.ecdd-actions {
+  margin-top: 20px;
+}
+
+/* אזור merge */
+.ecdd-merge-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+  direction: rtl;
+  animation: ecdd-fadeIn 0.25s ease-out;
+}
+
+.ecdd-merge-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #92400e;
+}
+
+.ecdd-merge-desc {
+  font-size: 14px;
+  color: #78350f;
+  margin-bottom: 12px;
+}
+
+.ecdd-merge-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.ecdd-merge-btn {
+  background: #d97706 !important;
+}
+
+.ecdd-merge-btn:hover:not(:disabled) {
+  background: #b45309 !important;
+}

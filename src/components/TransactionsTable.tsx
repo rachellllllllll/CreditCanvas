@@ -181,7 +181,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
 
   // סנכרון חיפוש חיצוני
   React.useEffect(() => {
-    if (externalSearchTerm !== undefined && externalSearchTerm !== searchTerm) {
+    if (externalSearchTerm !== undefined) {
       setSearchTerm(externalSearchTerm);
     }
   }, [externalSearchTerm]);
@@ -442,12 +442,20 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
           return a.localeCompare(b, 'he') * dir;
         case 'count':
           return (groupCounts[b] - groupCounts[a]) * dir;
+        case 'category': {
+          // מיון לפי קטגוריה דומיננטית (רק בקיבוץ לפי בית עסק)
+          const catA = dominantCategoryByBusiness[a]?.category || '';
+          const catB = dominantCategoryByBusiness[b]?.category || '';
+          const cmp = catA.localeCompare(catB, 'he') * dir;
+          // secondary sort: סכום (ערך מוחלט) בתוך אותה קטגוריה
+          return cmp !== 0 ? cmp : (Math.abs(categoryTotals[b]) - Math.abs(categoryTotals[a]));
+        }
         default:
           return (Math.abs(categoryTotals[b]) - Math.abs(categoryTotals[a])) * dir;
       }
     });
     return groups;
-  }, [allCategories, categoryTotals, groupCounts, sortOption]);
+  }, [allCategories, categoryTotals, groupCounts, sortOption, dominantCategoryByBusiness]);
 
   // מיון כל העסקאות (ללא קיבוץ) - based on sortOption
   // מיון לפי סכום משתמש בערך מוחלט - הסכומים הגדולים ביותר קודם (בלי קשר לכיוון)
@@ -983,32 +991,32 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
 
   // Reusable component for expand/collapse buttons
   const ExpandCollapseButtons = () => (
-    <span style={{ marginRight: 4, display: 'flex', gap: 2 }}>
+    <span className="TransactionsTable-expand-collapse-group">
       <button
-        className="TransactionsTable-expand-collapse-btn TransactionsTable-expand-collapse-btn-icon"
-        title="פתח את כל הקטגוריות"
-        aria-label="פתח את כל הקטגוריות"
+        className="TransactionsTable-expand-collapse-btn-new"
+        title="פתח הכל"
+        aria-label="פתח את כל הקבוצות"
         onClick={() => {
           const newState: Record<string, boolean> = {};
           sortedCategories.forEach(cat => { newState[cat] = true; });
           setOpenGroups(newState);
         }}
-        style={{ padding: 2, background: 'transparent', border: 'none', cursor: 'pointer' }}
       >
-        <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 8l5 5 5-5" stroke="#444" strokeWidth="2" fill="none" /></svg>
+        <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2.5" fill="none" /></svg>
+        <span>פתח</span>
       </button>
       <button
-        className="TransactionsTable-expand-collapse-btn TransactionsTable-expand-collapse-btn-icon"
-        title="סגור את כל הקטגוריות"
-        aria-label="סגור את כל הקטגוריות"
+        className="TransactionsTable-expand-collapse-btn-new"
+        title="סגור הכל"
+        aria-label="סגור את כל הקבוצות"
         onClick={() => {
           const newState: Record<string, boolean> = {};
           sortedCategories.forEach(cat => { newState[cat] = false; });
           setOpenGroups(newState);
         }}
-        style={{ padding: 2, background: 'transparent', border: 'none', cursor: 'pointer' }}
       >
-        <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M15 12l-5-5-5 5" stroke="#444" strokeWidth="2" fill="none" /></svg>
+        <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M15 12l-5-5-5 5" stroke="currentColor" strokeWidth="2.5" fill="none" /></svg>
+        <span>סגור</span>
       </button>
     </span>
   );
@@ -1136,6 +1144,12 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                   <option value="name-desc">שם (ת ← א)</option>
                   <option value="count-desc">כמות (מעט ← רב)</option>
                   <option value="count-asc">כמות (רב ← מעט)</option>
+                  {groupBy === 'business' && (
+                    <>
+                      <option value="category-asc">קטגוריה (א ← ת)</option>
+                      <option value="category-desc">קטגוריה (ת ← א)</option>
+                    </>
+                  )}
                 </>
               )}
             </select>
@@ -1249,7 +1263,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                 </th>
                 <th className="TransactionsTable-th TransactionsTable-th-date">תאריך</th>
                   {showChargeDate && <th className="TransactionsTable-th TransactionsTable-th-date" style={{ width: '100px' }}>תאריך חיוב</th>}
-                <th className="TransactionsTable-th">תיאור</th>
+                {groupBy !== 'business' && <th className="TransactionsTable-th">תיאור</th>}
                 {/* עמודת ספרות כרטיס הוסרה; badge מוצג ליד תג אשראי */}
                 <th className="TransactionsTable-th TransactionsTable-th-top-left TransactionsTable-th-amount">סכום</th>
               </>
@@ -1281,6 +1295,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
               const businessesByMonth: Record<number, Record<string, number>> = {};
               for (let m = 0; m < 12; m++) businessesByMonth[m] = {};
               (grouped[cat] || []).forEach(tx => {
+                if (shouldSkipInCalculation(tx)) return;
                 const effDate = getEffectiveDate(tx);
                 const parts = effDate.split('/') || [];
                 let monthIdx = 0;
@@ -1313,6 +1328,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                         {getCategoryDef(cat)?.icon && <span className="TransactionsTable-category-icon">{getCategoryDef(cat)?.icon}</span>}
                         {isCategoryIncomeYearly && <span className="TransactionsTable-income-icon" title="מקור הכנסה">💰</span>}
                         {cat}
+                        <span className="TransactionsTable-group-count">({groupCounts[cat]})</span>
                       </span>
                     </td>
                     {monthlyTotalsByCategory[cat].map((amt, i) => (
@@ -1334,13 +1350,30 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                         {amt ? amt.toLocaleString() : ''}
                       </td>
                     ))}
-                    <td className="TransactionsTable-group-total">{categoryTotals[cat].toLocaleString()}</td>
+                    <td className="TransactionsTable-group-total" style={{
+                      color: categoryTotals[cat] > 0 ? '#16a34a' : categoryTotals[cat] < 0 ? '#dc2626' : undefined
+                    }}>{categoryTotals[cat] > 0 ? '+' : ''}{categoryTotals[cat].toLocaleString()}</td>
                   </tr>
                   {expanded && (
                     Object.values(businessesByMonth).some(monthObj => Object.keys(monthObj).length > 0) ? (
-                      Object.keys(
-                        Object.values(businessesByMonth).reduce((acc, monthObj) => ({ ...acc, ...monthObj }), {})
-                      ).map(business => {
+                      (() => {
+                        const allBusinesses = Object.keys(
+                          Object.values(businessesByMonth).reduce((acc, monthObj) => ({ ...acc, ...monthObj }), {})
+                        );
+                        // מיון בתי עסק מסונכרן עם sortOption
+                        const [sortField, sortDirection] = (sortOption as string).split('-');
+                        const dir = sortDirection === 'asc' ? 1 : -1;
+                        allBusinesses.sort((a, b) => {
+                          if (sortField === 'name') {
+                            return a.localeCompare(b, 'he') * dir;
+                          }
+                          // ברירת מחדל: סכום שנתי מוחלט, מסונכרן עם כיוון המיון
+                          const sumA = Math.abs(Object.values(businessesByMonth).reduce((s, m) => s + (m[a] || 0), 0));
+                          const sumB = Math.abs(Object.values(businessesByMonth).reduce((s, m) => s + (m[b] || 0), 0));
+                          return (sumB - sumA) * dir;
+                        });
+                        return allBusinesses;
+                      })().map(business => {
                         const isBusinessIncome = isIncomeSource(business, 'business');
                         return (
                           <tr
@@ -1385,9 +1418,16 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                                 {businessesByMonth[i][business] ? businessesByMonth[i][business].toLocaleString() : ''}
                               </td>
                             ))}
-                            <td className="TransactionsTable-group-total">
-                              {Object.values(businessesByMonth).reduce((sum, monthObj) => sum + (monthObj[business] || 0), 0).toLocaleString()}
-                            </td>
+                            {(() => {
+                              const businessYearlyTotal = Object.values(businessesByMonth).reduce((sum, monthObj) => sum + (monthObj[business] || 0), 0);
+                              return (
+                                <td className="TransactionsTable-group-total" style={{
+                                  color: businessYearlyTotal > 0 ? '#16a34a' : businessYearlyTotal < 0 ? '#dc2626' : undefined
+                                }}>
+                                  {businessYearlyTotal > 0 ? '+' : ''}{businessYearlyTotal.toLocaleString()}
+                                </td>
+                              );
+                            })()}
                           </tr>
                         )
                       })
@@ -1433,11 +1473,43 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                         {openGroups[cat] ? '▼' : '►'}
                       </span>
                       {groupBy === 'business' ? (
-                        // בית עסק - ללא עיצוב
+                        // בית עסק - שם בצד ימין, badge קטגוריה בצד שמאל
                         <>
-                          {isIncome && <span className="TransactionsTable-income-icon" title="מקור הכנסה">💰</span>}
-                          {cat}
-                          <span className="TransactionsTable-group-count" style={{ marginRight: 4 }}>({groupCounts[cat]})</span>
+                          <span className="TransactionsTable-business-name-section">
+                            {isIncome && <span className="TransactionsTable-income-icon" title="מקור הכנסה">💰</span>}
+                            {cat}
+                            <span className="TransactionsTable-group-count" style={{ marginRight: 4 }}>({groupCounts[cat]})</span>
+                          </span>
+                          {/* הצגת קטגוריה דומיננטית - מוצמד לצד שמאל */}
+                          {domCatInfo && (() => {
+                            const catDef = getCategoryDef(domCatInfo.category);
+                            const catBgColor = catDef?.color || categoryColors[domCatInfo.category] || '#ddd';
+                            const catTextColor = getReadableTextColor(catBgColor);
+                            return (
+                              <span 
+                                className="TransactionsTable-business-category-badge"
+                                style={{ 
+                                  background: catBgColor, 
+                                  color: catTextColor,
+                                  padding: '2px 8px',
+                                  borderRadius: 6,
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  marginLeft: 'auto'
+                                }}
+                                title={domCatInfo.totalCategories > 1 
+                                  ? `קטגוריה עיקרית: ${domCatInfo.category} (${domCatInfo.count} עסקאות מתוך ${groupCounts[cat]}). יש עוד ${domCatInfo.totalCategories - 1} קטגוריות.`
+                                  : `קטגוריה: ${domCatInfo.category}`
+                                }
+                              >
+                                {catDef?.icon && <span style={{ marginLeft: 4 }}>{catDef.icon}</span>}
+                                {domCatInfo.category}
+                                {domCatInfo.totalCategories > 1 && (
+                                  <span style={{ opacity: 0.7, marginRight: 4 }}>+{domCatInfo.totalCategories - 1}</span>
+                                )}
+                              </span>
+                            );
+                          })()}
                         </>
                       ) : (
                         // קטגוריה - תווית צבעונית
@@ -1448,43 +1520,28 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                           <span className="TransactionsTable-group-count">({groupCounts[cat]})</span>
                         </span>
                       )}
-                      {/* הצגת קטגוריה דומיננטית כשמקובצים לפי בית עסק */}
-                      {groupBy === 'business' && domCatInfo && (() => {
-                        const catDef = getCategoryDef(domCatInfo.category);
-                        const catBgColor = catDef?.color || categoryColors[domCatInfo.category] || '#ddd';
-                        const catTextColor = getReadableTextColor(catBgColor);
-                        return (
-                          <span 
-                            className="TransactionsTable-business-category-badge"
-                            style={{ 
-                              background: catBgColor, 
-                              color: catTextColor,
-                              marginRight: 8,
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 500
-                            }}
-                            title={domCatInfo.totalCategories > 1 
-                              ? `קטגוריה עיקרית: ${domCatInfo.category} (${domCatInfo.count} עסקאות מתוך ${groupCounts[cat]}). יש עוד ${domCatInfo.totalCategories - 1} קטגוריות.`
-                              : `קטגוריה: ${domCatInfo.category}`
-                            }
-                          >
-                            {catDef?.icon && <span style={{ marginLeft: 4 }}>{catDef.icon}</span>}
-                            {domCatInfo.category}
-                            {domCatInfo.totalCategories > 1 && (
-                              <span style={{ opacity: 0.7, marginRight: 4 }}>+{domCatInfo.totalCategories - 1}</span>
-                            )}
-                          </span>
-                        );
-                      })()}
+                      {/* badge קטגוריה דומיננטית כבר מוצמד בתוך ה-business branch למעלה */}
                     </td>
                     <td></td>
                     {showChargeDate && <td></td>}
-                    <td></td>
-                    <td className="TransactionsTable-group-total">{categoryTotals[cat].toLocaleString()}</td>
+                    {groupBy !== 'business' && <td></td>}
+                    <td className="TransactionsTable-group-total" style={{
+                      color: categoryTotals[cat] > 0 ? '#16a34a' : categoryTotals[cat] < 0 ? '#dc2626' : undefined
+                    }}>{categoryTotals[cat] > 0 ? '+' : ''}{categoryTotals[cat].toLocaleString()}</td>
                   </tr>
-                  {openGroups[cat] && grouped[cat].sort((a, b) => parseDate(b.date) - parseDate(a.date)).map((d, idx) => {
+                  {openGroups[cat] && [...grouped[cat]].sort((a, b) => {
+                    const [sortField, sortDirection] = (sortOption as string).split('-');
+                    if (sortField === 'sum' || sortField === 'amount') {
+                      const dir = sortDirection === 'asc' ? 1 : -1;
+                      return (Math.abs(signedAmount(b)) - Math.abs(signedAmount(a))) * dir;
+                    }
+                    if (sortField === 'name' && groupBy === 'category') {
+                      const dir = sortDirection === 'asc' ? 1 : -1;
+                      return (a.description || '').localeCompare(b.description || '', 'he') * dir;
+                    }
+                    // ברירת מחדל: תאריך יורד
+                    return parseDate(b.date) - parseDate(a.date);
+                  }).map((d, idx) => {
                     const isHighlighted = d.id === highlightedTransactionId;
                     return (
                     <tr
@@ -1579,7 +1636,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                         )}
                       </td>
                       {showChargeDate && <td className="TransactionsTable-td TransactionsTable-td-date">{d.chargeDate ? formatDate(d.chargeDate) : ''}</td>}
-                      <td className="TransactionsTable-td">{highlightText(d.description)}</td>
+                      {groupBy !== 'business' && <td className="TransactionsTable-td">{highlightText(d.description)}</td>}
                       <td 
                         className="TransactionsTable-td TransactionsTable-td-amount" 
                         style={{ 
@@ -1731,11 +1788,15 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
         {isYearlyView && (
           <tfoot>
             <tr className="TransactionsTable-summary-row" style={{ background: '#fafafa', fontWeight: 700 }}>
-              <td className="TransactionsTable-category-column">סיכום</td>
+              <td className="TransactionsTable-category-column">סיכום ({displayDetails.length} עסקאות)</td>
               {monthlyTotalsAll.map((amt, i) => (
-                <td key={i} className="TransactionsTable-td TransactionsTable-td-amount">{amt ? amt.toLocaleString() : ''}</td>
+                <td key={i} className="TransactionsTable-td TransactionsTable-td-amount" style={{
+                  color: amt > 0 ? '#16a34a' : amt < 0 ? '#dc2626' : undefined
+                }}>{amt ? ((amt > 0 ? '+' : '') + amt.toLocaleString()) : ''}</td>
               ))}
-              <td className="TransactionsTable-group-total">{grandTotalAll.toLocaleString()}</td>
+              <td className="TransactionsTable-group-total" style={{
+                color: grandTotalAll > 0 ? '#16a34a' : grandTotalAll < 0 ? '#dc2626' : undefined
+              }}>{grandTotalAll > 0 ? '+' : ''}{grandTotalAll.toLocaleString()}</td>
             </tr>
           </tfoot>
         )}
@@ -1743,7 +1804,18 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
         {!isYearlyView && displayDetails.length > 0 && (
           <tfoot>
             <tr className="TransactionsTable-summary-row" style={{ background: '#fafafa', fontWeight: 700 }}>
-              {groupBy !== 'none' ? (
+              {groupBy === 'business' ? (
+                <>
+                  <td colSpan={showChargeDate ? 3 : 2} style={{ textAlign: 'right', paddingRight: 16 }}>
+                    סיכום: {sortedCategories.length} בתי עסק · {displayDetails.length} עסקאות
+                  </td>
+                  <td className="TransactionsTable-td TransactionsTable-td-amount TransactionsTable-group-total" style={{
+                    color: displayDetails.reduce((sum, d) => shouldSkipInCalculation(d) ? sum : sum + signedAmount(d), 0) > 0 ? '#16a34a' : '#dc2626'
+                  }}>
+                    {(() => { const total = displayDetails.reduce((sum, d) => shouldSkipInCalculation(d) ? sum : sum + signedAmount(d), 0); return (total > 0 ? '+' : '') + total.toLocaleString(); })()}
+                  </td>
+                </>
+              ) : groupBy !== 'none' ? (
                 <>
                   <td colSpan={showChargeDate ? 4 : 3} style={{ textAlign: 'right', paddingRight: 16 }}>
                     סיכום ({displayDetails.length} עסקאות)
