@@ -1,0 +1,110 @@
+/* ===== ColorPalettePicker ===== */
+.ColorPalettePicker {
+  direction: rtl;
+}
+
+.ColorPalettePicker-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #374151;
+}
+
+.ColorPalettePicker-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 26px);
+  gap: 6px;
+  position: relative;
+  justify-content: start;
+}
+
+.ColorPalettePicker-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid #e5e7eb;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: unset;
+}
+
+.ColorPalettePicker-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.ColorPalettePicker-swatch.selected {
+  border-color: #1e40af;
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(30, 64, 175, 0.25);
+}
+
+/* ===== Custom color button — full width ===== */
+.ColorPalettePicker-custom-btn {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 0;
+  margin-top: 2px;
+  border: 1.5px dashed #d1d5db;
+  border-radius: 6px;
+  background: #fafbfc;
+  color: #6b7280;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.ColorPalettePicker-custom-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.ColorPalettePicker-custom-btn.selected {
+  border-color: #1e40af;
+  border-style: solid;
+  background: #eef2ff;
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.ColorPalettePicker-custom-preview {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #1e40af;
+  flex-shrink: 0;
+}
+
+.ColorPalettePicker-hidden-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ===== Compact mode ===== */
+.ColorPalettePicker.compact .ColorPalettePicker-swatch {
+  width: 22px;
+  height: 22px;
+}
+
+.ColorPalettePicker.compact .ColorPalettePicker-grid {
+  grid-template-columns: repeat(6, 22px);
+  gap: 4px;
+}
+
+.ColorPalettePicker.compact .ColorPalettePicker-custom-icon {
+  font-size: 11px;
+}
