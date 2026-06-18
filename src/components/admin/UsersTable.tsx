@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { AnalyticsEvent } from './types';
 import { aggregateUsers, deviceIcon, formatShortDuration } from './userDataUtils';
-import UserTimeline from './UserTimeline';
+import UserTimelineTabs from './UserTimelineTabs';
 
 interface UsersTableProps {
   events: AnalyticsEvent[];
@@ -344,7 +344,7 @@ export default function UsersTable({ events, loadUserFullHistory, userRealDates,
                           <span style={{ color: 'var(--admin-text-secondary)' }}>טוען היסטוריה מלאה...</span>
                         </div>
                       ) : selectedUser ? (
-                        <UserTimeline
+                        <UserTimelineTabs
                           user={selectedUser}
                           onClose={() => setSelectedUserId(null)}
                         />

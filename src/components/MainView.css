@@ -96,6 +96,7 @@
 .content-with-sidebar .main-table {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .chart-sidebar {
@@ -307,6 +308,81 @@
   justify-content: center;
   box-shadow: 0 2px 6px rgba(0,0,0,0.15);
   border: 2px solid #6366f1;
+}
+
+/* Active category filter tag */
+.active-category-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin: 0 16px 8px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  direction: rtl;
+}
+
+.active-category-filter .filter-label {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.active-category-filter .filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  background: #6366f1;
+  color: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.active-category-filter .filter-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: rgba(255,255,255,0.25);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.15s ease;
+}
+
+.active-category-filter .filter-clear-btn:hover {
+  background: rgba(255,255,255,0.4);
+}
+
+.active-category-filter .filter-clear-btn:focus {
+  outline: 2px solid white;
+  outline-offset: 1px;
+}
+
+.active-category-filter .filter-clear-all-btn {
+  padding: 4px 10px;
+  margin-right: 4px;
+  background: transparent;
+  color: #6366f1;
+  border: 1px solid #6366f1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.active-category-filter .filter-clear-all-btn:hover {
+  background: #6366f1;
+  color: white;
 }
 
 /* Header popovers */
@@ -1454,29 +1530,108 @@
 .dn-months button.available-month:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
 .dn-hint { margin:0; font-size:11px; text-align:center; color:#64748b; }
 
-/* Responsive Design */
+/* ==================== Responsive Design - Mobile Optimizations ==================== */
+
 @media (max-width: 768px) {
   .main-view {
-    padding: 10px;
+    padding: 8px;
   }
   
+  /* Header improvements */
   .header-top {
     flex-direction: column;
     align-items: stretch;
-    gap: 15px;
+    gap: 12px;
     text-align: center;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border-radius: 10px;
   }
   
   .header-top h1 {
-    font-size: 1.8rem;
+    font-size: 1.6rem;
+  }
+
+  .header-top-new {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .header-right-group,
+  .header-left-group {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-center-group {
+    order: -1; /* Date navigator first on mobile */
+    width: 100%;
+  }
+
+  /* Smaller icon buttons on mobile */
+  .header-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
   }
   
   .view-toggle {
     align-self: center;
+    width: 100%;
+  }
+
+  .view-toggle button {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 12px;
   }
   
   .header-controls {
     justify-content: center;
+  }
+
+  /* Display mode toggle responsive */
+  .display-mode-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .display-mode-toggle button {
+    flex: 1;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  /* Date Navigator mobile improvements */
+  .segmented-date-toggle {
+    flex-wrap: nowrap;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .segmented-date-toggle .dn-btn,
+  .segmented-date-toggle .dn-current {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .dn-popover {
+    width: calc(100vw - 32px);
+    max-width: 320px;
+    left: 50%;
+    transform: translateX(-50%);
+    inset-inline-start: unset;
+  }
+
+  .dn-months {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .dn-months button {
+    padding: 12px 6px;
+    font-size: 13px;
   }
   
   .summary-cards {
@@ -1489,7 +1644,7 @@
   
   .month-nav-container {
     flex-direction: column;
-    gap: 15px;
+    gap: 12px;
   }
   
   .month-nav-btn {
@@ -1503,6 +1658,39 @@
   
   .search-input {
     min-width: auto;
+  }
+
+  /* Active category filter mobile */
+  .active-category-filter {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    margin: 0 8px 8px;
+    gap: 6px;
+  }
+
+  .active-category-filter .filter-tag {
+    font-size: 12px;
+    padding: 3px 8px 3px 5px;
+  }
+
+  /* Popovers mobile */
+  .header-popover {
+    min-width: unset;
+    width: calc(100vw - 24px);
+    max-width: 320px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 12px;
+  }
+
+  /* Charts sidebar - stack vertically */
+  .content-with-sidebar {
+    flex-direction: column;
+  }
+
+  .chart-sidebar {
+    width: 100%;
+    order: -1; /* Chart above table on mobile */
   }
 }
 
@@ -1536,6 +1724,63 @@
 }
 
 @media (max-width: 480px) {
+  .main-view {
+    padding: 4px;
+  }
+
+  .header-top {
+    padding: 10px;
+    gap: 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .header-top h1 {
+    font-size: 1.4rem;
+  }
+
+  .header-top-new {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .header-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .view-toggle button {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .display-mode-toggle button {
+    padding: 8px 8px;
+    font-size: 11px;
+  }
+
+  .segmented-date-toggle .dn-btn,
+  .segmented-date-toggle .dn-current {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .dn-popover {
+    width: calc(100vw - 16px);
+    padding: 8px 10px 12px;
+  }
+
+  .dn-months {
+    gap: 6px;
+  }
+
+  .dn-months button {
+    padding: 10px 4px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+  
   .header-controls {
     flex-direction: column;
     width: 100%;
@@ -1544,5 +1789,63 @@
   .export-btn, .filter-toggle {
     width: 100%;
     justify-content: center;
+  }
+
+  /* Metric cards mobile */
+  .metrics-cards {
+    gap: 10px;
+    padding: 8px 2px;
+  }
+
+  .metric-card {
+    padding: 12px 14px;
+    border-radius: 16px;
+    min-height: 100px;
+  }
+
+  .mc-value {
+    font-size: 20px;
+  }
+
+  .mc-label {
+    font-size: 11px;
+  }
+
+  .mc-badge {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+
+  /* Active category filter very small screens */
+  .active-category-filter {
+    padding: 6px 10px;
+    margin: 0 4px 6px;
+    gap: 4px;
+  }
+
+  .active-category-filter .filter-label {
+    font-size: 11px;
+  }
+
+  .active-category-filter .filter-tag {
+    font-size: 11px;
+    padding: 2px 6px 2px 4px;
+  }
+
+  /* Header popovers very small screens */
+  .header-popover {
+    width: calc(100vw - 16px);
+    max-width: 100%;
+    border-radius: 10px;
+  }
+
+  .popover-section-title {
+    font-size: 12px;
+  }
+
+  /* Folder display */
+  .folder-display {
+    font-size: 12px;
+    padding: 8px 10px;
   }
 }

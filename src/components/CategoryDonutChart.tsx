@@ -17,16 +17,16 @@ interface CategoryDonutChartProps {
   categories: Record<string, number>;
   /** רשימת הגדרות קטגוריות (לצבעים ואייקונים) */
   categoriesList?: CategoryDef[];
-  /** callback בלחיצה על קטגוריה (לסינון) */
-  onCategoryClick?: (category: string | null) => void;
-  /** הקטגוריה שנבחרה כרגע (להדגשה) */
-  selectedCategory?: string | null;
-  /** האם להציג בצורה מקופלת כברירת מחדל */
-  defaultCollapsed?: boolean;
+  /** callback בלחיצה על קטגוריה (לסינון)
+   * @param displayName - שם הקטגוריה להצגה (לתג הסינון)
+   * @param filterCategories - רשימת קטגוריות בפועל לסינון (לתמיכה ב"אחר" ו"לא מסווג")
+   * @param isAdditive - האם להוסיף לבחירה (עם Ctrl/Cmd)
+   */
+  onCategoryClick?: (displayName: string | null, filterCategories?: string[], isAdditive?: boolean) => void;
+  /** רשימת קטגוריות נבחרות (להדגשה - תמיכה בריבוי בחירות) */
+  selectedCategories?: string[];
   /** סף אחוז מינימלי להצגה נפרדת (קטגוריות קטנות יותר יוצגו ב"אחר") */
   minPercentage?: number;
-  /** כותרת מותאמת */
-  title?: string;
   /** מצב תצוגה נוכחי מה-App */
   displayMode?: 'all' | 'income' | 'expense';
   /** מצב קומפקטי - layout אנכי עם legend מקוצר */
@@ -81,16 +81,13 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
   categories,
   categoriesList = [],
   onCategoryClick,
-  selectedCategory,
-  defaultCollapsed = true,
+  selectedCategories = [],
   minPercentage = 3,
-  title = 'התפלגות הוצאות',
   displayMode = 'expense',
   compact = false,
   maxCompactCategories = 4,
   maxVisibleCategories = 6,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   // האם הלגנדה מורחבת (מציגה את כל הקטגוריות)
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
@@ -128,6 +125,7 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
     const mainCategories: typeof sorted = [];
     let otherAmount = 0;
     let otherCount = 0;
+    const otherCategoryNames: string[] = []; // שמירת שמות הקטגוריות הקטנות
 
     sorted.forEach(cat => {
       if (cat.percentage >= minPercentage) {
@@ -135,6 +133,7 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
       } else {
         otherAmount += cat.amount;
         otherCount++;
+        otherCategoryNames.push(cat.name); // שמור את שם הקטגוריה
       }
     });
 
@@ -170,6 +169,7 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
     return {
       total: displayTotal, // סה"כ נטו (להצגה במרכז) - יתאים לכרטיס למעלה
       chartTotal, // סה"כ לגרף (לחישוב אחוזים)
+      otherCategoryNames, // רשימת הקטגוריות שנכללו ב"אחר"
       categories: mainCategories.map((cat, index) => ({
         ...cat,
         color: getColor(cat.name, index),
@@ -191,30 +191,38 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
         data: chartData.categories.map(c => c.amount),
         backgroundColor: chartData.categories.map(c => {
           // הדגשה לקטגוריה נבחרת/נוכחית
-          const isActive = selectedCategory === c.name || hoveredCategory === c.name;
+          const isSelected = selectedCategories.includes(c.name);
+          const isActive = isSelected || hoveredCategory === c.name;
           return isActive ? c.color : `${c.color}cc`; // מעט שקיפות אם לא פעיל
         }),
         borderColor: chartData.categories.map(c => {
-          const isActive = selectedCategory === c.name || hoveredCategory === c.name;
+          const isSelected = selectedCategories.includes(c.name);
+          const isActive = isSelected || hoveredCategory === c.name;
           // גבול ירוק לקטגוריות עם עודף החזרים
           if (c.isNegative) return REFUND_GREEN;
+          // גבול מודגש לקטגוריות נבחרות
+          if (isSelected) return '#1e293b';
           return isActive ? c.color : 'transparent';
         }),
         borderWidth: chartData.categories.map(c => {
-          const isActive = selectedCategory === c.name || hoveredCategory === c.name;
+          const isSelected = selectedCategories.includes(c.name);
+          const isActive = isSelected || hoveredCategory === c.name;
           // גבול תמיד מוצג לקטגוריות שליליות
           if (c.isNegative) return 2;
+          // גבול עבה יותר לקטגוריות נבחרות
+          if (isSelected) return 4;
           return isActive ? 3 : 0;
         }),
         hoverBorderWidth: 3,
         hoverBorderColor: chartData.categories.map(c => c.isNegative ? REFUND_GREEN : c.color),
         offset: chartData.categories.map(c => {
-          const isActive = selectedCategory === c.name || hoveredCategory === c.name;
+          const isSelected = selectedCategories.includes(c.name);
+          const isActive = isSelected || hoveredCategory === c.name;
           return isActive ? 8 : 0;
         }),
       }],
     };
-  }, [chartData, selectedCategory, hoveredCategory]);
+  }, [chartData, selectedCategories, hoveredCategory]);
 
   // אפשרויות לגרף
   const chartOptions = useMemo(() => ({
@@ -245,14 +253,32 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
         },
       },
     },
-    onClick: (_event: unknown, elements: Array<{ index: number }>) => {
+    onClick: (event: unknown, elements: Array<{ index: number }>) => {
       if (elements.length > 0 && chartData && onCategoryClick) {
         const clickedCategory = chartData.categories[elements[0].index].name;
-        // Toggle: אם לוחצים על אותה קטגוריה - בטל סינון
-        if (selectedCategory === clickedCategory) {
-          onCategoryClick(null);
+        const isAlreadySelected = selectedCategories.includes(clickedCategory);
+        // בדיקה אם לחצו עם Ctrl/Cmd (לבחירה מרובה)
+        const nativeEvent = (event as { native?: MouseEvent })?.native;
+        const isAdditive = nativeEvent?.ctrlKey || nativeEvent?.metaKey;
+        
+        // קבע רשימת קטגוריות לסינון בהתאם לסוג הקטגוריה
+        let filterCategories: string[];
+        if (clickedCategory.startsWith('אחר (')) {
+          // "אחר" - סנן לפי כל הקטגוריות הקטנות
+          filterCategories = chartData.otherCategoryNames;
+        } else if (clickedCategory === 'לא מסווג') {
+          // "לא מסווג" - סמן מיוחד לעסקאות ללא קטגוריה
+          filterCategories = ['__uncategorized__'];
         } else {
-          onCategoryClick(clickedCategory);
+          // קטגוריה רגילה
+          filterCategories = [clickedCategory];
+        }
+        
+        // Toggle: אם כבר נבחר - הסר, אחרת הוסף
+        if (isAlreadySelected) {
+          onCategoryClick(clickedCategory, filterCategories, false); // remove
+        } else {
+          onCategoryClick(clickedCategory, filterCategories, isAdditive); // add (with additive flag)
         }
       }
     },
@@ -263,18 +289,35 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
         setHoveredCategory(null);
       }
     },
-  }), [chartData, selectedCategory, onCategoryClick]);
+  }), [chartData, selectedCategories, onCategoryClick]);
 
   // לחיצה על פריט בלגנדה
-  const handleLegendClick = useCallback((categoryName: string) => {
+  const handleLegendClick = useCallback((categoryName: string, event?: React.MouseEvent) => {
     if (onCategoryClick) {
-      if (selectedCategory === categoryName) {
-        onCategoryClick(null);
+      const isAlreadySelected = selectedCategories.includes(categoryName);
+      const isAdditive = event?.ctrlKey || event?.metaKey;
+      
+      // קבע רשימת קטגוריות לסינון בהתאם לסוג הקטגוריה
+      let filterCategories: string[];
+      if (categoryName.startsWith('אחר (') && chartData) {
+        // "אחר" - סנן לפי כל הקטגוריות הקטנות
+        filterCategories = chartData.otherCategoryNames;
+      } else if (categoryName === 'לא מסווג') {
+        // "לא מסווג" - סמן מיוחד לעסקאות ללא קטגוריה
+        filterCategories = ['__uncategorized__'];
       } else {
-        onCategoryClick(categoryName);
+        // קטגוריה רגילה
+        filterCategories = [categoryName];
+      }
+      
+      // Toggle: אם כבר נבחר - הסר, אחרת הוסף
+      if (isAlreadySelected) {
+        onCategoryClick(categoryName, filterCategories, false); // remove
+      } else {
+        onCategoryClick(categoryName, filterCategories, isAdditive); // add
       }
     }
-  }, [onCategoryClick, selectedCategory]);
+  }, [onCategoryClick, selectedCategories, chartData]);
 
   // קטגוריות להצגה במצב קומפקטי
   const displayCategories = useMemo(() => {
@@ -336,42 +379,21 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
   }
 
   return (
-    <div className={`category-donut-chart ${isCollapsed ? 'collapsed' : 'expanded'} ${compact ? 'compact-mode' : ''}`}>
-      {/* כותרת - ללא פעולת סגירה */}
+    <div className={`category-donut-chart expanded ${compact ? 'compact-mode' : ''}`}>
+      {/* כותרת */}
       <div className="donut-header-wrapper">
-        <div 
-          className="donut-header"
-          aria-expanded={!isCollapsed}
-          aria-controls="donut-content"
-        >
+        <div className="donut-header">
           <div className="donut-header-left">
             <span className="donut-icon">{effectiveMode === 'income' ? '💰' : '📊'}</span>
             <span className="donut-title">
               {effectiveMode === 'income' ? 'התפלגות הכנסות' : 'התפלגות הוצאות'}
             </span>
           </div>
-        <div className="donut-header-right">
-          {isCollapsed && chartData && (
-            <span className="donut-preview">
-              {chartData.categories.slice(0, 2).map((c, i) => (
-                <span key={c.name} className="preview-item" style={{ color: c.color }}>
-                  {c.icon} {c.name.length > 8 ? c.name.slice(0, 8) + '…' : c.name} {c.percentage.toFixed(0)}%
-                  {i < Math.min(1, chartData.categories.length - 1) && ' · '}
-                </span>
-              ))}
-              {chartData.categories.length > 2 && <span className="preview-more">+{chartData.categories.length - 2}</span>}
-            </span>
-          )}
-          {/* הסרת חץ הקיפול - כבר לא ניתן ללחוץ על הכותרת */}
         </div>
-      </div>
       </div>
 
       {/* תוכן הגרף */}
-      <div 
-        id="donut-content"
-        className={`donut-content ${isCollapsed ? 'hidden' : 'visible'}`}
-      >
+      <div id="donut-content" className="donut-content visible">
         <div className="donut-layout">
           {/* הגרף */}
           <div className="donut-chart-container">
@@ -390,8 +412,8 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
             {visibleCategories.map((cat) => (
               <button
                 key={cat.name}
-                className={`legend-item ${selectedCategory === cat.name ? 'selected' : ''} ${hoveredCategory === cat.name ? 'hovered' : ''} ${cat.isNegative ? 'is-refund' : ''}`}
-                onClick={() => handleLegendClick(cat.name)}
+                className={`legend-item ${selectedCategories.includes(cat.name) ? 'selected' : ''} ${hoveredCategory === cat.name ? 'hovered' : ''} ${cat.isNegative ? 'is-refund' : ''}`}
+                onClick={(e) => handleLegendClick(cat.name, e)}
                 onMouseEnter={() => setHoveredCategory(cat.name)}
                 onMouseLeave={() => setHoveredCategory(null)}
                 style={{
@@ -453,9 +475,9 @@ const CategoryDonutChart: React.FC<CategoryDonutChartProps> = ({
         </div>
 
         {/* הודעה על סינון פעיל */}
-        {selectedCategory && (
+        {selectedCategories.length > 0 && (
           <div className="filter-active-notice">
-            <span>🔍 מציג רק: <strong>{selectedCategory}</strong></span>
+            <span>🔍 מציג רק: <strong>{selectedCategories.join(', ')}</strong></span>
             <button 
               className="clear-filter-btn"
               onClick={() => onCategoryClick?.(null)}

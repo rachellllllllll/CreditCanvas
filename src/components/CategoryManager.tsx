@@ -11,6 +11,31 @@ export interface CategoryDef {
   icon: string;
 }
 
+// Types for AI suggestions
+interface MergeSuggestion {
+  categories: string[];
+  mergedName: string;
+  reason: string;
+}
+
+interface RenameSuggestion {
+  oldName: string;
+  newName: string;
+  reason: string;
+}
+
+interface CategorySuggestion {
+  mergeSuggestions?: MergeSuggestion[];
+  renameSuggestions?: RenameSuggestion[];
+  error?: string;
+  limited?: boolean;
+}
+
+interface SuggestionsState {
+  categories: Record<string, CategorySuggestion>;
+  error?: string;
+}
+
 import type { CreditDetail } from '../types';
 
 interface CategoryManagerProps {
@@ -39,7 +64,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
   const [saveStatus, setSaveStatus] = useState<'idle'|'success'|'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
   // הצעות לאיחוד/שמות חדשים
-  const [suggestions, setSuggestions] = useState<Record<string, any> | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestionsState | null>(null);
   const [showSuggestionsDialog, setShowSuggestionsDialog] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
@@ -139,7 +164,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
   // בקשת הצעות מהשרת – לכל קטגוריה בנפרד, הצג תוצאה מידית, דלג על מאוחדות
   const fetchSuggestions = async () => {
     setLoadingSuggestions(true);
-    setSuggestions({});
+    setSuggestions({ categories: {} });
     setShowSuggestionsDialog(true);
     
     // סנן קטגוריות ללא עסקאות כדי להקטין את גודל הבקשה לשרת
@@ -150,7 +175,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
     
     // בדוק אם יש מספיק נתונים
     if (catsWithTransactions.length === 0) {
-      setSuggestions({ error: 'לא נמצאו קטגוריות עם עסקאות להצעת שיפורים' });
+      setSuggestions({ categories: {}, error: 'לא נמצאו קטגוריות עם עסקאות להצעת שיפורים' });
       setLoadingSuggestions(false);
       return;
     }
@@ -214,20 +239,22 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
           
           const retryData = await retryRes.json();
           setSuggestions(prev => ({
-            ...(prev || {}),
-            [cat.name]: {
-              ...retryData,
-              limited: true // סמן שזו תוצאה מוגבלת
+            categories: {
+              ...(prev?.categories || {}),
+              [cat.name]: {
+                ...retryData,
+                limited: true // סמן שזו תוצאה מוגבלת
+              }
             }
           }));
         } else {
           const data = await res.json();
           setSuggestions(prev => {
-            const next = { ...(prev || {}) };
-            next[cat.name] = data;
+            const next = { categories: { ...(prev?.categories || {}) } };
+            next.categories[cat.name] = data;
             // אם יש הצעת איחוד, דלג על הקטגוריה השנייה
             if (data.mergeSuggestions && Array.isArray(data.mergeSuggestions)) {
-              data.mergeSuggestions.forEach((merge: any) => {
+              data.mergeSuggestions.forEach((merge: MergeSuggestion) => {
                 merge.categories.forEach((mergeCat: string) => {
                   if (mergeCat !== cat.name) mergedWith.add(mergeCat);
                 });
@@ -239,10 +266,12 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
       } catch (error) {
         console.error(`שגיאה בקבלת הצעות עבור ${cat.name}:`, error);
         setSuggestions(prev => ({ 
-          ...(prev || {}), 
-          [cat.name]: { 
-            error: 'שגיאה בקבלת הצעות. ייתכן שגודל הבקשה גדול מדי.' 
-          } 
+          categories: {
+            ...(prev?.categories || {}),
+            [cat.name]: { 
+              error: 'שגיאה בקבלת הצעות. ייתכן שגודל הבקשה גדול מדי.' 
+            }
+          }
         }));
       }
     }
@@ -386,7 +415,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
               </h4>
               
               {/* כשאין הצעות ועדיין טוען */}
-              {loadingSuggestions && Object.keys(suggestions || {}).length === 0 && (
+              {loadingSuggestions && Object.keys(suggestions?.categories || {}).length === 0 && (
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: '24px', marginBottom: '10px' }}>⏳</div>
                   <div>מאתר הצעות מתאימות...</div>
@@ -407,7 +436,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
               )}
               
               {/* יש הצעות - מציג גם אם עדיין טוען */}
-              {suggestions && !suggestions.error && Object.keys(suggestions).length > 0 && (
+              {suggestions && !suggestions.error && Object.keys(suggestions.categories).length > 0 && (
                 <div className="category-manager-suggestions-content">
                   {/* אינדיקטור טעינה */}
                   {loadingSuggestions && (
@@ -418,21 +447,21 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
                   )}
                   
                   {/* הצעות שכבר הגיעו */}
-                  {Object.entries(suggestions).map(([catName, sug]: [string, any]) => (
+                  {Object.entries(suggestions.categories).map(([catName, sug]) => (
                     <div key={catName} className="category-manager-suggestion-group">
                       <div className="category-manager-suggestion-title">
-                        {sug.mergeSuggestions?.length > 0 || sug.renameSuggestions?.length > 0 ? '✨' : '🔍'} 
+                        {(sug.mergeSuggestions?.length ?? 0) > 0 || (sug.renameSuggestions?.length ?? 0) > 0 ? '✨' : '🔍'} 
                         <b> קטגוריה:</b> {catName}
                         {sug.limited && <span style={{fontSize: '0.8em', color: '#7986cb', marginRight: '5px'}}> (מידע מוגבל)</span>}
                       </div>
                       
-                      {sug.mergeSuggestions?.length > 0 && (
+                      {(sug.mergeSuggestions?.length ?? 0) > 0 && (
                         <div>
                           <b style={{ color: '#0d47a1', display: 'block', margin: '12px 0 8px', fontSize: '15px' }}>
                             🔀 הצעות לאיחוד קטגוריות:
                           </b>
                           <ul>
-                            {sug.mergeSuggestions.map((s: any, i: number) => (
+                            {sug.mergeSuggestions?.map((s, i) => (
                               <li key={i}>
                                 <span style={{ fontWeight: 500 }}>
                                   איחוד: {s.categories.join(', ')} → <b style={{ color: '#0d47a1' }}>{s.mergedName}</b>
@@ -455,13 +484,13 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
                         </div>
                       )}
                       
-                      {sug.renameSuggestions?.length > 0 && (
+                      {(sug.renameSuggestions?.length ?? 0) > 0 && (
                         <div>
                           <b style={{ color: '#0d47a1', display: 'block', margin: '12px 0 8px', fontSize: '15px' }}>
                             🏷️ הצעות לשינוי שמות:
                           </b>
                           <ul>
-                            {sug.renameSuggestions.map((s: any, i: number) => (
+                            {sug.renameSuggestions?.map((s, i) => (
                               <li key={i}>
                                 <span style={{ fontWeight: 500 }}>
                                   החלף <b>{s.oldName}</b> ל-<b style={{ color: '#0d47a1' }}>{s.newName}</b>
@@ -483,7 +512,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
                         </div>
                       )}
                       
-                      {(!sug.mergeSuggestions?.length && !sug.renameSuggestions?.length) && (
+                      {(!(sug.mergeSuggestions?.length) && !(sug.renameSuggestions?.length)) && (
                         <div style={{ color: '#777', fontSize: '0.95em', padding: '8px 10px', background: '#f1f3f5', borderRadius: '6px', margin: '8px 0' }}>
                           <span style={{ marginLeft: '5px' }}>ℹ️</span>
                           לא נמצאו הצעות רלוונטיות עבור קטגוריה זו.
@@ -495,7 +524,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, onChange,
               )}
               
               {/* מצב שיש הצעות שנטענו אבל הן ריקות */}
-              {suggestions && !suggestions.error && Object.keys(suggestions).length === 0 && !loadingSuggestions && (
+              {suggestions && !suggestions.error && Object.keys(suggestions.categories).length === 0 && !loadingSuggestions && (
                 <div style={{ color: '#555', fontSize: '0.95em', padding: '16px', background: '#f8f9fa', borderRadius: '8px', textAlign: 'center', margin: '20px 0' }}>
                   <span style={{ fontSize: '24px', display: 'block', margin: '0 0 10px' }}>🔍</span>
                   לא נמצאו הצעות לאף קטגוריה. הקטגוריות הנוכחיות נראות מאורגנות היטב.

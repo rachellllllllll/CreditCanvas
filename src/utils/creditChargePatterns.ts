@@ -2,12 +2,35 @@ import type { CreditDetail, CreditChargeCycleSummary } from '../types';
 import { computeCreditChargeCycles } from './creditCycles';
 
 // --- רשימת תיאורים ידועים של חיובי אשראי בדפי חשבון בנק ---
-// כל ערך הוא מחרוזת שמחפשים ב-includes (case-insensitive) בתיאור עסקת הבנק
-const KNOWN_CREDIT_CHARGE_DESCRIPTIONS: string[] = [
-  'מקס',
-  'כרטיסי אשראי ל',
-  'דיינרס קלוב יש'
+// wordBoundary=true: התאמה רק כמילה שלמה (מופרדת ברווח/סימן) — מונע false-positive כמו "סופרמקס", "מקסימום"
+interface KnownCreditChargeEntry {
+  text: string;
+  wordBoundary?: boolean;
+}
+
+const KNOWN_CREDIT_CHARGE_DESCRIPTIONS: KnownCreditChargeEntry[] = [
+  { text: 'מקס', wordBoundary: true },   // "מקס" / "מקס איט" ✓ | "סופרמקס" ✗
+  { text: 'כרטיסי אשראי ל' },
+  { text: 'דיינרס קלוב יש' },
 ];
+
+/**
+ * בודק אם מחרוזת word מופיעה כמילה שלמה בתוך desc —
+ * דהיינו מופרדת ברווח, סימן פיסוק, או קצה מחרוזת.
+ */
+function matchesAsWord(desc: string, word: string): boolean {
+  const SEP = /[\s\-/,.:;()\u200f\u200e]/; // רווח, מקף, סלאש, פיסוק, LRM/RLM
+  let start = 0;
+  while (true) {
+    const idx = desc.indexOf(word, start);
+    if (idx === -1) return false;
+    const beforeOk = idx === 0 || SEP.test(desc[idx - 1]);
+    const endIdx = idx + word.length;
+    const afterOk = endIdx >= desc.length || SEP.test(desc[endIdx]);
+    if (beforeOk && afterOk) return true;
+    start = idx + 1;
+  }
+}
 
 /**
  * בודק אם תיאור עסקת בנק הוא חיוב אשראי ידוע
@@ -15,7 +38,10 @@ const KNOWN_CREDIT_CHARGE_DESCRIPTIONS: string[] = [
 export function isKnownCreditChargeDescription(description: string): boolean {
   const desc = description.trim().toLowerCase();
   if (!desc) return false;
-  return KNOWN_CREDIT_CHARGE_DESCRIPTIONS.some(known => desc.includes(known.toLowerCase()));
+  return KNOWN_CREDIT_CHARGE_DESCRIPTIONS.some(entry => {
+    const known = entry.text.toLowerCase();
+    return entry.wordBoundary ? matchesAsWord(desc, known) : desc.includes(known);
+  });
 }
 
 /**
@@ -170,6 +196,9 @@ const PATTERNS_JSON_FILENAME = 'creditChargePatterns.json';
 // (בוטל שימוש בקובץ עבור חלון ימים – ערכי ברירת מחדל קבועים בקוד)
 // daysBeforeCharge=7: בנקים מחייבים חשבון כמה ימים לפני תאריך החיוב הרשמי של המחזור
 const DEFAULT_WINDOW_CONFIG: WindowConfig = { daysBeforeCharge: 7, daysAfterCharge: 6 };
+// חלון רחב יותר לעסקאות עם תיאור מוכר של חברת אשראי — מפחית החמצה בגלל תזמון בנקאי חריג
+// daysAfterCharge=21: יש בנקים שמחייבים עד ~18 יום אחרי תאריך החיוב הרשמי של המחזור
+const WIDE_WINDOW_CONFIG: WindowConfig = { daysBeforeCharge: 14, daysAfterCharge: 21 };
 
 // Base patterns (seed) – כרגע ריק כדי לא להכניס רעש אוטומטי
 const BASE_FALLBACK_PATTERN_STRINGS: string[] = [];
@@ -342,8 +371,14 @@ export async function markBankCreditChargesExactWithPatterns(
     if (d.neutral) return;
     const desc = d.description || '';
 
+    // חלון ימים רחב יותר לעסקאות עם תיאור מוכר — מפחית החמצת התאמה בגלל תזמון בנקאי חריג
+    const isKnownDesc = isKnownCreditChargeDescription(desc);
+    const effectiveWindow: WindowConfig = isKnownDesc
+      ? { daysBeforeCharge: Math.max(daysBeforeCharge, WIDE_WINDOW_CONFIG.daysBeforeCharge), daysAfterCharge: Math.max(daysAfterCharge, WIDE_WINDOW_CONFIG.daysAfterCharge) }
+      : { daysBeforeCharge, daysAfterCharge };
+
     // רשימת מחזורים בטווח ימים עבור העסקה הזו
-    let windowCycles = perCardCycles.filter(c => c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, { daysBeforeCharge, daysAfterCharge }));
+    let windowCycles = perCardCycles.filter(c => c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, effectiveWindow));
     if (!windowCycles.length) return;
 
     // סינון לפי מיפוי כרטיס↔חברה: אם ידוע שeDesc שייך לכרטיסים מסוימים, הגבל
@@ -498,9 +533,14 @@ export function markBankCombinedCreditCharges(
     const allowedCards = companyToCards.get(descLower);
     const isKnownDesc = isKnownCreditChargeDescription(d.description || '');
 
+    // חלון ימים רחב יותר לעסקאות עם תיאור מוכר — מפחית החמצת התאמה
+    const effectiveWindow: WindowConfig = isKnownDesc
+      ? { daysBeforeCharge: Math.max(daysBeforeCharge, WIDE_WINDOW_CONFIG.daysBeforeCharge), daysAfterCharge: Math.max(daysAfterCharge, WIDE_WINDOW_CONFIG.daysAfterCharge) }
+      : { daysBeforeCharge, daysAfterCharge };
+
     // אסוף את כל המחזורים הפנויים שתאריך החיוב שלהם בחלון של עסקת הבנק – ללא תלות בתאריך חיוב
     let windowCycles = eligibleCycles.filter(c =>
-      c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, { daysBeforeCharge, daysAfterCharge })
+      c.chargeDate && isBankChargeInWindow(d.date, c.chargeDate, effectiveWindow)
     );
     if (!windowCycles.length) return;
 

@@ -116,8 +116,44 @@ const MainView: React.FC<MainViewProps> = ({
   duplicateFilesInfo,
   onEditCategoryDefinition
 }) => {
-  // State לניהול סינון קטגוריה (מגרף הדונאט)
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // State לניהול סינון קטגוריות (מגרף הדונאט) - תמיכה בבחירה מרובה
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  // רשימת קטגוריות בפועל לסינון (תומך ב"אחר" ו"לא מסווג")
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string[]>([]);
+  
+  // Handler ללחיצה על קטגוריה בגרף - תמיכה ב-toggle ובחירה מרובה
+  const handleCategoryClick = useCallback((displayName: string | null, filterCategories?: string[], isAdditive?: boolean) => {
+    if (displayName === null) {
+      // איפוס - ניקוי כל הבחירות
+      setSelectedCategories([]);
+      setSelectedCategoryFilter([]);
+      return;
+    }
+    
+    const isAlreadySelected = selectedCategories.includes(displayName);
+    
+    if (isAlreadySelected) {
+      // הסרה מהבחירה
+      setSelectedCategories(prev => prev.filter(c => c !== displayName));
+      // הסר את הקטגוריות מהפילטר
+      if (filterCategories) {
+        setSelectedCategoryFilter(prev => prev.filter(c => !filterCategories.includes(c)));
+      }
+    } else {
+      // הוספה לבחירה
+      if (isAdditive) {
+        // בחירה מרובה - הוסף לקיים
+        setSelectedCategories(prev => [...prev, displayName]);
+        if (filterCategories) {
+          setSelectedCategoryFilter(prev => [...prev, ...filterCategories]);
+        }
+      } else {
+        // בחירה יחידה - החלף
+        setSelectedCategories([displayName]);
+        setSelectedCategoryFilter(filterCategories || []);
+      }
+    }
+  }, [selectedCategories]);
   
   // State לחיפוש גלובלי
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
@@ -131,7 +167,10 @@ const MainView: React.FC<MainViewProps> = ({
   const tableRef = React.useRef<HTMLDivElement>(null);
 
   const handleSearchCreditCompany = useCallback((companyName: string) => {
-    setCreditSearchTerm(companyName);
+    // איפוס קודם כדי שלחיצה חוזרת על אותו שם תמיד תפעיל את ה-effect
+    setCreditSearchTerm('');
+    // שימוש ב-setTimeout כדי שהאיפוס ייקלט לפני הקביעה החדשה
+    setTimeout(() => setCreditSearchTerm(companyName), 0);
   }, []);
   
   // פונקציה לפתיחת חיפוש גלובלי עם טקסט התחלתי
@@ -339,30 +378,23 @@ const MainView: React.FC<MainViewProps> = ({
     return false;
   };
 
-  // סינון העסקאות לפי הקטגוריה הנבחרת וחיפוש
-  // מועבר למעלה כי summary צריך להתבסס על filteredTransactions
-  const filteredTransactions = useMemo(() => {
+  // סינון העסקאות לפי מקורות וחיפוש - לגרף הדונאט (ללא סינון קטגוריה)
+  // הגרף תמיד מציג את כל הנתונים, רק הטבלה מסוננת לפי קטגוריה נבחרת
+  const transactionsForChart = useMemo(() => {
     let filtered = filteredDetails;
 
     // סינון לפי מקורות (כרטיסים / בנק)
     filtered = filtered.filter(tx => {
       if (tx.source === 'credit') {
-        // אם אין cardLast4 נתייחס כאילו תמיד מוצג
         if (!tx.cardLast4) return true;
-        // אם לא נבחר אף כרטיס – לא להציג כרטיסים בכלל
         if (selectedCards.length === 0) return false;
         return selectedCards.includes(tx.cardLast4);
       }
       if (tx.source === 'bank') {
-        return includeBank; // האם להציג בנק
+        return includeBank;
       }
       return true;
     });
-
-    // סינון לפי קטגוריה
-    if (selectedCategory) {
-      filtered = filtered.filter(tx => tx.category === selectedCategory);
-    }
 
     // סינון לפי חיפוש
     if (searchTerm) {
@@ -387,7 +419,27 @@ const MainView: React.FC<MainViewProps> = ({
     }
 
     return filtered;
-  }, [filteredDetails, selectedCategory, searchTerm, amountFilter, selectedCards, includeBank]);
+  }, [filteredDetails, searchTerm, amountFilter, selectedCards, includeBank]);
+
+  // סינון העסקאות לטבלה - כולל סינון קטגוריה נבחרת
+  const filteredTransactions = useMemo(() => {
+    // בסיס הוא transactionsForChart - כל הסינונים חוץ מקטגוריה
+    let filtered = transactionsForChart;
+
+    // סינון לפי קטגוריה (רק לטבלה, לא לגרף)
+    if (selectedCategoryFilter && selectedCategoryFilter.length > 0) {
+      filtered = filtered.filter(tx => {
+        // בדיקה מיוחדת לעסקאות ללא קטגוריה ("לא מסווג")
+        if (selectedCategoryFilter.includes('__uncategorized__')) {
+          return !tx.category;
+        }
+        // סינון לפי רשימת קטגוריות (תומך ב"אחר")
+        return tx.category && selectedCategoryFilter.includes(tx.category);
+      });
+    }
+
+    return filtered;
+  }, [transactionsForChart, selectedCategoryFilter]);
 
   const summary = useMemo(() => {
     // הסיכום מחושב מ-filteredTransactions - אותם נתונים שמוצגים בטבלה
@@ -459,13 +511,13 @@ const MainView: React.FC<MainViewProps> = ({
   }, [filteredTransactions, displayMode]);
 
   // חישוב קטגוריות לפי direction (הוצאות/הכנסות) - לדונאט ולגרף עמודות
-  // זה מבטיח עקביות עם הסיכומים למעלה
+  // משתמש ב-transactionsForChart כדי שהגרף יציג תמיד את כל הנתונים
   const categoriesByDirection = useMemo(() => {
     const catCounts: Record<string, number> = {};
     
     if (displayMode === 'income') {
       // במצב הכנסות: רק הכנסות אמיתיות (transactionNature === 'income')
-      filteredTransactions.forEach(d => {
+      transactionsForChart.forEach(d => {
         if (shouldSkipInCalculation(d)) return;
         if (d.transactionNature !== 'income') return;
         
@@ -474,7 +526,7 @@ const MainView: React.FC<MainViewProps> = ({
       });
     } else if (displayMode === 'expense') {
       // במצב הוצאות: הוצאות נטו לפי קטגוריה (כולל החזרים שמקטינים)
-      filteredTransactions.forEach(d => {
+      transactionsForChart.forEach(d => {
         if (shouldSkipInCalculation(d)) return;
         
         const categoryName = d.category || 'לא מסווג';
@@ -488,7 +540,7 @@ const MainView: React.FC<MainViewProps> = ({
       });
     } else {
       // במצב "הכל": הוצאות נטו לפי קטגוריה (רק מה שלא הכנסה אמיתית)
-      filteredTransactions.forEach(d => {
+      transactionsForChart.forEach(d => {
         if (shouldSkipInCalculation(d)) return;
         if (d.transactionNature === 'income') return; // דלג על הכנסות אמיתיות
         
@@ -504,7 +556,7 @@ const MainView: React.FC<MainViewProps> = ({
     }
     
     return catCounts;
-  }, [filteredTransactions, displayMode]);
+  }, [transactionsForChart, displayMode]);
 
   // חישוב הקטגוריה הגדולה ביותר (משתמש ב-categoriesByDirection לעקביות)
   const topCategoryData = useMemo(() => {
@@ -648,14 +700,15 @@ const MainView: React.FC<MainViewProps> = ({
     if (selectedCards.length < availableCards.length) count++;
     // בנק מוסתר
     if (!includeBank) count++;
-    // קטגוריה נבחרת מגרף הדונאט
-    if (selectedCategory) count++;
+    // קטגוריות נבחרות מגרף הדונאט
+    if (selectedCategories.length > 0) count++;
     return count;
-  }, [selectedCards, availableCards, includeBank, selectedCategory]);
+  }, [selectedCards, availableCards, includeBank, selectedCategories]);
 
   // איפוס סינון קטגוריה כשמחליפים חודש/שנה/תצוגה
   useEffect(() => {
-    setSelectedCategory(null);
+    setSelectedCategories([]);
+    setSelectedCategoryFilter([]);
   }, [selectedMonth, selectedYear, view]);
 
   // Close popovers when clicking outside
@@ -856,6 +909,35 @@ const MainView: React.FC<MainViewProps> = ({
         </div>
       </div>
 
+      {/* תג סינון קטגוריה פעיל + כפתור ביטול */}
+      {selectedCategories.length > 0 && (
+        <div className="active-category-filter">
+          <span className="filter-label">מסונן לפי:</span>
+          {selectedCategories.map((cat, index) => (
+            <span key={index} className="filter-tag">
+              {cat}
+              <button
+                className="filter-clear-btn"
+                onClick={() => handleCategoryClick(cat)}
+                aria-label={`בטל סינון ${cat}`}
+                title="הסר סינון"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          {selectedCategories.length > 1 && (
+            <button
+              className="filter-clear-all-btn"
+              onClick={() => handleCategoryClick(null)}
+              title="נקה הכל"
+            >
+              נקה הכל
+            </button>
+          )}
+        </div>
+      )}
+
       {/* התראה על נתונים חסרים */}
       <MissingDataAlert
         availableMonths={sortedMonths}
@@ -1022,11 +1104,9 @@ const MainView: React.FC<MainViewProps> = ({
                 <CategoryDonutChart
                   categories={categoriesByDirection}
                   categoriesList={categoriesList}
-                  onCategoryClick={setSelectedCategory}
-                  selectedCategory={selectedCategory}
-                  defaultCollapsed={false}
+                  onCategoryClick={handleCategoryClick}
+                  selectedCategories={selectedCategories}
                   minPercentage={3}
-                  title={displayMode === 'income' ? 'התפלגות הכנסות' : 'התפלגות הוצאות'}
                   displayMode={displayMode}
                   maxVisibleCategories={6}
                 />
@@ -1160,11 +1240,9 @@ const MainView: React.FC<MainViewProps> = ({
                   <CategoryDonutChart
                     categories={categoriesByDirection}
                     categoriesList={categoriesList}
-                    onCategoryClick={setSelectedCategory}
-                    selectedCategory={selectedCategory}
-                    defaultCollapsed={false}
+                    onCategoryClick={handleCategoryClick}
+                    selectedCategories={selectedCategories}
                     minPercentage={2}
-                    title={displayMode === 'income' ? 'התפלגות הכנסות' : 'התפלגות הוצאות'}
                     displayMode={displayMode}
                   />
                 </div>

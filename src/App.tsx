@@ -11,6 +11,7 @@ import { parseBankStatementFromSheet } from './utils/bankParser';
 import type { CreditDetail, AnalysisResult } from './types';
 import { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
+import AccountsManager from './components/AccountsManager';
 import EditCategoryDialog, { type EditDialogState, type SearchFiltersForRule } from './components/EditCategoryDialog';
 import EditCategoryDefDialog from './components/EditCategoryDefDialog';
 import Footer from './components/Footer';
@@ -44,6 +45,7 @@ import {
   saveSessionDurationForLater
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
+import { loadScrapedJsonFiles } from './utils/scrapedJsonParser';
 import { processCreditChargeMatching, detectUnmatchedCreditCharges, detectMissingBankStatements, isKnownCreditChargeDescription } from './utils/creditChargePatterns';
 import type { UnmatchedCreditCharge, UnmatchedBankStatement } from './utils/creditChargePatterns';
 import { findOverlappingDateRanges, type DuplicateFilesInfo } from './utils/duplicateDetection';
@@ -787,6 +789,16 @@ const App: React.FC = () => {
         } catch (err) {
           console.warn('לא ניתן לשמור sheet type overrides:', err);
         }
+      }
+
+      // טעינת עסקאות מקבצי JSON (שהגיעו מסנכרון אוטומטי)
+      try {
+        const scrapedDetails = await loadScrapedJsonFiles(dir);
+        if (scrapedDetails.length > 0) {
+          allDetails = allDetails.concat(scrapedDetails);
+        }
+      } catch (err) {
+        console.warn('שגיאה בטעינת קבצי JSON:', err);
       }
 
       if (allDetails.length === 0) {
@@ -2634,6 +2646,26 @@ const App: React.FC = () => {
           rulesCountByCategory={rulesCountByCategory}
           aliasesCountByCategory={aliasesCountByCategory}
           isReassigning={isReassigning}
+        />
+      )}
+      {/* AccountsManager — סנכרון אוטומטי מבנק/אשראי */}
+      {settingsOpen && dirHandle && (
+        <AccountsManager
+          dirHandle={dirHandle}
+          existingDetails={analysis?.details || []}
+          onSyncComplete={(newDetails) => {
+            if (analysis) {
+              const merged = [...analysis.details, ...newDetails];
+              // dedupe by id
+              const seen = new Set<string>();
+              const deduped = merged.filter(d => {
+                if (seen.has(d.id)) return false;
+                seen.add(d.id);
+                return true;
+              });
+              setAnalysis({ ...analysis, details: deduped });
+            }
+          }}
         />
       )}
       {/* EditCategoryDefDialog — from context menu */}

@@ -3,6 +3,7 @@ import './TransactionsTable.css';
 import './TransactionsTable-enhanced.css';
 import type { CreditChargeCycleSummary, CreditDetail, IncomeSourceRule } from '../types';
 import { signedAmount } from '../utils/money';
+import { formatHebrewDate } from '../utils/hebrewDate';
 
 interface TransactionsTableProps {
   details: CreditDetail[];
@@ -514,16 +515,17 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
   // Add support for displaying chargeDate and card last4 badge (hover vs always visible)
   const [showChargeDate, setShowChargeDate] = React.useState(initialPrefs.showChargeDate ?? false);
   const [showCardLast4, setShowCardLast4] = React.useState(initialPrefs.showCardLast4 ?? false); // when true: always show badge
+  const [showHebrewDate, setShowHebrewDate] = React.useState(initialPrefs.showHebrewDate ?? false); // הצגת תאריך עברי
 
   // Save preferences to localStorage when they change
   React.useEffect(() => {
-    const prefs = { groupBy, sortOption, showChargeDate, showCardLast4 };
+    const prefs = { groupBy, sortOption, showChargeDate, showCardLast4, showHebrewDate };
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
     } catch {
       // Ignore localStorage errors
     }
-  }, [groupBy, sortOption, showChargeDate, showCardLast4]);
+  }, [groupBy, sortOption, showChargeDate, showCardLast4, showHebrewDate]);
 
   // Fallback: if yearly view and groupBy is 'business', reset to 'category'
   React.useEffect(() => {
@@ -1092,6 +1094,18 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                       <span className="TransactionsTable-toggle-slider"></span>
                     </div>
                   </label>
+
+                  <label className="TransactionsTable-toggle-row">
+                    <span className="TransactionsTable-toggle-label">הצג תאריך עברי</span>
+                    <div className="TransactionsTable-toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={showHebrewDate}
+                        onChange={(e) => setShowHebrewDate(e.target.checked)}
+                      />
+                      <span className="TransactionsTable-toggle-slider"></span>
+                    </div>
+                  </label>
                 </div>
               )}
             </div>
@@ -1588,6 +1602,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                       </td>
                       <td className="TransactionsTable-td TransactionsTable-td-date">
                         {formatDate(d.date)}
+                        {showHebrewDate && <span className="hebrew-date-badge">{formatHebrewDate(d.date)}</span>}
                         {/* Source badge + optional card name/last4 badge */}
                         <span
                           className={'source-badge' + (d.source === 'bank' ? ' source-bank' : ' source-credit')}
@@ -1684,6 +1699,7 @@ const TransactionsTable: React.FC<TransactionsTableProps> = ({
                 >
                   <td className="TransactionsTable-td TransactionsTable-td-date">
                     {formatDate(d.date)}
+                    {showHebrewDate && <span className="hebrew-date-badge">{formatHebrewDate(d.date)}</span>}
                     <span
                       className={'source-badge' + (d.source === 'bank' ? ' source-bank' : ' source-credit')}
                       style={{ marginRight: 6, fontSize: 12, padding: '2px 6px', borderRadius: 6, background: d.source === 'bank' ? '#e0f2fe' : '#fce7f3', color: d.source === 'bank' ? '#0369a1' : '#9d174d', display: 'inline-block' }}
