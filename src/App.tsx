@@ -2646,17 +2646,10 @@ const App: React.FC = () => {
           rulesCountByCategory={rulesCountByCategory}
           aliasesCountByCategory={aliasesCountByCategory}
           isReassigning={isReassigning}
-        />
-      )}
-      {/* AccountsManager — סנכרון אוטומטי מבנק/אשראי */}
-      {settingsOpen && dirHandle && (
-        <AccountsManager
-          dirHandle={dirHandle}
-          existingDetails={analysis?.details || []}
+          allDetails={analysis?.details || []}
           onSyncComplete={(newDetails) => {
             if (analysis) {
               const merged = [...analysis.details, ...newDetails];
-              // dedupe by id
               const seen = new Set<string>();
               const deduped = merged.filter(d => {
                 if (seen.has(d.id)) return false;
