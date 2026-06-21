@@ -5,8 +5,7 @@
 import type { CreditDetail } from '../types';
 import type { ScrapedResult } from './scrapedJsonParser';
 import { saveScrapedResult } from './scrapedJsonParser';
-import { loadCredentialsFile, verifyCredentialsPin, decryptProvider } from './encryption';
-import type { CredentialsFile, ProviderCredentials } from './encryption';
+import { loadAccounts, getAccountCredentials } from './encryption';
 
 // --- API Communication ---
 
@@ -142,66 +141,62 @@ export type SyncProgressCallback = (progress: SyncProgress) => void;
 
 /**
  * ביצוע סנכרון מלא:
- * 1. בדיקה שהתוסף מותקן
- * 2. טעינת credentials
- * 3. לכל provider — בדיקה אם חסר מידע → scrape → שמירה
+ * 1. בדיקה שה-API זמין
+ * 2. טעינת חשבונות מ-localStorage
+ * 3. לכל חשבון — בדיקה אם חסר מידע → scrape → שמירה
  */
 export async function performSync(
   dirHandle: FileSystemDirectoryHandle,
   existingDetails: CreditDetail[],
-  pin: string,
   onProgress?: SyncProgressCallback
 ): Promise<{ newDetails: CreditDetail[]; filesCreated: string[] }> {
   const newDetails: CreditDetail[] = [];
   const filesCreated: string[] = [];
 
-  // 1. בדיקת תוסף
-  onProgress?.({ status: 'checking', message: 'בודק תוסף...' });
+  // 1. בדיקת API
+  onProgress?.({ status: 'checking', message: 'בודק חיבור...' });
   const extensionReady = await isExtensionInstalled();
   if (!extensionReady) {
-    onProgress?.({ status: 'no-extension', message: 'התוסף לא מותקן' });
+    onProgress?.({ status: 'no-extension', message: 'ה-API לא זמין' });
     return { newDetails, filesCreated };
   }
 
-  // 2. טעינת credentials
-  const credentialsFile = await loadCredentialsFile(dirHandle);
-  if (!credentialsFile || credentialsFile.providers.length === 0) {
+  // 2. טעינת חשבונות מ-localStorage
+  const accountsData = loadAccounts();
+  if (accountsData.accounts.length === 0) {
     onProgress?.({ status: 'no-credentials', message: 'לא הוגדרו חשבונות' });
     return { newDetails, filesCreated };
   }
 
-  // 3. אימות PIN
-  const pinValid = await verifyCredentialsPin(credentialsFile, pin);
-  if (!pinValid) {
-    onProgress?.({ status: 'error', message: 'PIN שגוי' });
-    return { newDetails, filesCreated };
-  }
-
-  // 4. טעינת sync state
+  // 3. טעינת sync state
   const syncState = await loadSyncState(dirHandle);
 
-  // 5. סנכרון כל provider
-  const providers = credentialsFile.providers;
-  for (let i = 0; i < providers.length; i++) {
-    const provider = providers[i];
+  // 4. סנכרון כל חשבון
+  const accounts = accountsData.accounts;
+  for (let i = 0; i < accounts.length; i++) {
+    const account = accounts[i];
     onProgress?.({
       status: 'syncing',
-      message: `מסנכרן ${provider.label}...`,
-      provider: provider.id,
+      message: `מסנכרן ${account.label}...`,
+      provider: account.id,
       current: i + 1,
-      total: providers.length,
+      total: accounts.length,
     });
 
     try {
       // חישוב תאריך התחלה
-      const startDate = getScrapeStartDate(syncState, provider.id);
+      const startDate = getScrapeStartDate(syncState, account.id);
 
-      // פענוח credentials
-      const creds = await decryptProvider(provider, pin);
+      // קריאת credentials מ-localStorage
+      const creds = getAccountCredentials(account.id);
+      if (!creds) {
+        console.warn(`[Sync] No credentials for ${account.id}`);
+        continue;
+      }
 
-      // שליחת בקשה לתוסף
+      // שליחת בקשה ל-API
       const result = await requestScrapeFromExtension(
-        provider.id,
+        account.id,
         creds,
         { startDate }
       );
@@ -218,7 +213,7 @@ export async function performSync(
           .sort();
         const latestTxnDate = allTxnDates[allTxnDates.length - 1];
         if (latestTxnDate) {
-          syncState.providerLastDates[provider.id] = latestTxnDate;
+          syncState.providerLastDates[account.id] = latestTxnDate;
         }
 
         // פרסור לפורמט CreditDetail
@@ -228,11 +223,11 @@ export async function performSync(
       }
     } catch (err) {
       const error = err as Error;
-      console.warn(`[Sync] Failed for ${provider.id}:`, error.message);
+      console.warn(`[Sync] Failed for ${account.id}:`, error.message);
       onProgress?.({
         status: 'error',
-        message: `שגיאה בסנכרון ${provider.label}: ${error.message}`,
-        provider: provider.id,
+        message: `שגיאה בסנכרון ${account.label}: ${error.message}`,
+        provider: account.id,
       });
     }
   }
