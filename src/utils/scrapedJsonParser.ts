@@ -151,7 +151,8 @@ export async function loadScrapedJsonFiles(
       entry.name === 'direction-overrides.json' ||
       entry.name === 'credit-charge-matching.json' ||
       entry.name === 'user-profile.json' ||
-      entry.name === 'sync-state.json'
+      entry.name === 'sync-state.json' ||
+      entry.name === 'transactions.json'
     ) continue;
 
     try {

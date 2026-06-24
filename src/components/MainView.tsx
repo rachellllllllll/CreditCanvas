@@ -89,6 +89,10 @@ interface MainViewProps {
   duplicateFilesInfo?: DuplicateFilesInfo | null;
   // עריכת הגדרת קטגוריה מתפריט ימני
   onEditCategoryDefinition?: (categoryName: string) => void;
+  // גרירת קבצים לעדכון עסקאות
+  onDropFiles?: (files: File[]) => void;
+  dropStatus?: { type: 'success' | 'error' | 'info'; message: string } | null;
+  isProcessingDrop?: boolean;
 }
 
 const MainView: React.FC<MainViewProps> = ({
@@ -114,8 +118,50 @@ const MainView: React.FC<MainViewProps> = ({
   unmatchedCreditCharges,
   unmatchedBankStatements,
   duplicateFilesInfo,
-  onEditCategoryDefinition
+  onEditCategoryDefinition,
+  onDropFiles,
+  dropStatus,
+  isProcessingDrop
 }) => {
+  // --- Global drag & drop ---
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleGlobalDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDraggingOver(true);
+    }
+  }, []);
+
+  const handleGlobalDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      setIsDraggingOver(false);
+      dragCounterRef.current = 0;
+    }
+  }, []);
+
+  const handleGlobalDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handleGlobalDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    dragCounterRef.current = 0;
+    if (!onDropFiles) return;
+    const files = Array.from(e.dataTransfer.files).filter(f => {
+      const n = f.name.toLowerCase();
+      return n.endsWith('.xlsx') || n.endsWith('.xls') || n.endsWith('.csv');
+    });
+    if (files.length > 0) {
+      onDropFiles(files);
+    }
+  }, [onDropFiles]);
+
   // State לניהול סינון קטגוריות (מגרף הדונאט) - תמיכה בבחירה מרובה
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   // רשימת קטגוריות בפועל לסינון (תומך ב"אחר" ו"לא מסווג")
@@ -726,7 +772,33 @@ const MainView: React.FC<MainViewProps> = ({
   }, []);
 
   return (
-    <div className="main-view">
+    <div
+      className="main-view"
+      onDragEnter={handleGlobalDragEnter}
+      onDragLeave={handleGlobalDragLeave}
+      onDragOver={handleGlobalDragOver}
+      onDrop={handleGlobalDrop}
+    >
+      {/* Global drop overlay */}
+      {isDraggingOver && onDropFiles && (
+        <div className="global-drop-overlay">
+          <div className="global-drop-overlay__content">
+            <span className="global-drop-overlay__icon">📂</span>
+            <span className="global-drop-overlay__text">שחרר כאן לעדכון עסקאות</span>
+          </div>
+        </div>
+      )}
+      {/* Drop status toast */}
+      {dropStatus && (
+        <div className={`global-drop-toast global-drop-toast--${dropStatus.type}`}>
+          {dropStatus.message}
+        </div>
+      )}
+      {isProcessingDrop && (
+        <div className="global-drop-toast global-drop-toast--info">
+          ⏳ מעבד קבצים...
+        </div>
+      )}
       {/* 1. כותרת ראשית מחודשת - שורה אחת נקייה */}
       <div ref={headerRef} className="header-top header-top-new" role="toolbar" aria-label="סרגל ראשי של סינון וניווט">
         {/* צד ימין: ניווט תאריך + תצוגה */}
@@ -769,6 +841,23 @@ const MainView: React.FC<MainViewProps> = ({
 
         {/* צד שמאל: כפתורי חיפוש, פילטר והגדרות */}
         <div className="header-left-group">
+          {/* כפתור עדכון עסקאות */}
+          {onOpenAdvancedSettings && (
+            <div className="header-btn-wrapper">
+              <button
+                className="header-icon-btn update-btn"
+                onClick={() => { onOpenAdvancedSettings(); onTrackFeature?.('update_transactions_btn'); }}
+                aria-label="עדכון עסקאות"
+                title="עדכון עסקאות — גרור קבצים או לחץ כאן"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </button>
+            </div>
+          )}
           {/* כפתור חיפוש גלובלי */}
           <div className="header-btn-wrapper">
             <button

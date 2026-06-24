@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import DescriptionCategoriesMappingDialog from './DescriptionCategoriesMappingDialog';
 import CategoryManager, { type CategoryDef } from './CategoryManager';
 import CategoryAliasesManager from './CategoryAliasesManager';
-import AccountsManager from './AccountsManager';
+import UpdateTransactions from './UpdateTransactions';
 import type { CreditDetail, CategoryRule } from '../types';
 
 type ActivePanel = 'main' | 'categories' | 'aliases' | 'businessMapping';
@@ -33,9 +33,9 @@ interface SettingsMenuProps {
   rulesCountByCategory?: Record<string, number>;
   aliasesCountByCategory?: Record<string, number>;
   isReassigning?: boolean;
-  // Props for AccountsManager (sync)
+  // Props for UpdateTransactions
   allDetails?: CreditDetail[];
-  onSyncComplete?: (newDetails: CreditDetail[]) => void;
+  onSyncComplete?: () => void;
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ 
@@ -167,13 +167,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
               </button>
             </div>
 
-            {/* סנכרון אוטומטי */}
+            {/* עדכון עסקאות */}
             <div className="settings-section">
-              <div className="settings-section-title">סנכרון מבנק / אשראי</div>
-              <AccountsManager
+              <div className="settings-section-title">עדכון עסקאות</div>
+              <UpdateTransactions
                 dirHandle={dirHandle}
                 existingDetails={allDetails}
-                onSyncComplete={onSyncComplete}
+                onFilesAdded={() => onSyncComplete?.()}
               />
             </div>
           </div>
