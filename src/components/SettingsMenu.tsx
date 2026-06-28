@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import DescriptionCategoriesMappingDialog from './DescriptionCategoriesMappingDialog';
 import CategoryManager, { type CategoryDef } from './CategoryManager';
 import CategoryAliasesManager from './CategoryAliasesManager';
+import UpdateTransactions from './UpdateTransactions';
 import type { CreditDetail, CategoryRule } from '../types';
 
 type ActivePanel = 'main' | 'categories' | 'aliases' | 'businessMapping';
@@ -32,6 +33,9 @@ interface SettingsMenuProps {
   rulesCountByCategory?: Record<string, number>;
   aliasesCountByCategory?: Record<string, number>;
   isReassigning?: boolean;
+  // Props for UpdateTransactions
+  allDetails?: CreditDetail[];
+  onSyncComplete?: () => void;
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ 
@@ -54,7 +58,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
   onRenameCategory,
   rulesCountByCategory = {},
   aliasesCountByCategory = {},
-  isReassigning = false
+  isReassigning = false,
+  allDetails = [],
+  onSyncComplete
 }) => {
   const [activePanel, setActivePanel] = useState<ActivePanel>('main');
   
@@ -159,6 +165,16 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
                   <polyline points="15 18 9 12 15 6"/>
                 </svg>
               </button>
+            </div>
+
+            {/* עדכון עסקאות */}
+            <div className="settings-section">
+              <div className="settings-section-title">עדכון עסקאות</div>
+              <UpdateTransactions
+                dirHandle={dirHandle}
+                existingDetails={allDetails}
+                onFilesAdded={() => onSyncComplete?.()}
+              />
             </div>
           </div>
         </div>

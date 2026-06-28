@@ -8,77 +8,37 @@ interface CategoryAliasesManagerProps {
   categories: CategoryDef[];
   onChange: (newAliases: Record<string, string>) => void;
   onClose: () => void;
-  onAliasAdded?: (category: string) => void; // חדש
+  onAliasAdded?: (category: string) => void;
+  embedded?: boolean;
 }
 
-const CategoryAliasesManager: React.FC<CategoryAliasesManagerProps> = ({ aliases, categories, onChange, onClose, onAliasAdded }) => {
-  const [localAliases, setLocalAliases] = useState<Record<string, string>>({ ...aliases });
-  const [editKey, setEditKey] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
-
+const CategoryAliasesManager: React.FC<CategoryAliasesManagerProps> = ({ aliases, categories, onChange, onClose, onAliasAdded, embedded = false }) => {
   // Helper: get category def by name
   const getCategoryDef = (name: string) => categories.find(c => c.name === name);
-  const getTextColor = (bg: string) => {
-    // Simple luminance check for contrast
-    if (!bg) return '#222';
-    const hex = bg.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance < 0.5 ? '#fff' : '#222';
-  };
 
   // State for adding a new alias
   const [newFrom, setNewFrom] = useState<string>('');
   const [newTo, setNewTo] = useState<string>('');
   const [showAddRow, setShowAddRow] = useState<boolean>(false);
-  const [showEditWarning, setShowEditWarning] = useState(false);
-  const [showSaveWarning, setShowSaveWarning] = useState(false);
   const addRowRef = useRef<HTMLTableRowElement>(null);
 
-  // Utility: check if there are unsaved edits
-  const hasUnsavedEdit = editKey !== null;
-
-  const handleEdit = (key: string) => {
-    if (editKey && editKey !== key) {
-      setShowEditWarning(true);
-      return;
+  // Update alias value directly (auto-save)
+  const handleUpdateAlias = (from: string, newTo: string) => {
+    if (newTo && newTo !== from) {
+      onChange({ ...aliases, [from]: newTo });
     }
-    setEditKey(key);
-    setEditValue(localAliases[key] || '');
-  };
-
-  const handleSave = () => {
-    if (editKey && editValue) {
-      setLocalAliases(prev => ({ ...prev, [editKey]: editValue }));
-      setEditKey(null);
-      setEditValue('');
-      setShowEditWarning(false); // Hide edit warning after save
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditKey(null);
-    setEditValue('');
-    setShowEditWarning(false); // Hide edit warning after cancel
   };
 
   const handleDelete = (key: string) => {
-    const updated = { ...localAliases };
+    const updated = { ...aliases };
     delete updated[key];
-    setLocalAliases(updated);
-  };
-
-  const handleApply = () => {
-    onChange(localAliases);
-    onClose();
+    onChange(updated);
   };
 
   const handleAddAlias = () => {
-    if (newFrom && newTo && !localAliases[newFrom]) {
-      setLocalAliases(prev => ({ ...prev, [newFrom]: newTo }));
-      if (onAliasAdded) onAliasAdded(newTo); // חדש
+    if (newFrom && newTo && !aliases[newFrom]) {
+      onChange({ ...aliases, [newFrom]: newTo });
+      if (onAliasAdded) onAliasAdded(newTo);
       setNewFrom('');
       setNewTo('');
     }
@@ -90,10 +50,9 @@ const CategoryAliasesManager: React.FC<CategoryAliasesManagerProps> = ({ aliases
     }
   }, [showAddRow]);
 
-  return (
-    <div className="edit-dialog-overlay category-aliases-overlay">
-      <div className="edit-dialog-box category-aliases-box">
-        <div className="category-aliases-header">
+  const content = (
+    <div className={`edit-dialog-box category-aliases-box ${embedded ? 'embedded' : ''}`}>
+      <div className="category-aliases-header">
           <h3>ניהול כללי החלפת קטגוריות</h3>
           <button
             onClick={() => {
@@ -107,149 +66,128 @@ const CategoryAliasesManager: React.FC<CategoryAliasesManagerProps> = ({ aliases
             <span>＋</span>
           </button>
         </div>
-        <div className="category-aliases-table-wrapper">
-          <table className="category-aliases-table">
-            <thead>
-              <tr>
-                <th className="category-aliases-th-from">קטגוריה מקורית</th>
-                <th className="category-aliases-th-to">החלף לקטגוריה</th>
-                <th className="category-aliases-th-actions"></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {showAddRow && (
-                <tr ref={addRowRef} className="category-aliases-add-row">
-                  <td className="category-aliases-td-from">
-                    <CategorySelectOrAdd
-                      categories={categories.filter(cat => !localAliases[cat.name])}
-                      value={newFrom}
-                      onChange={setNewFrom}
-                      onAddCategory={() => {}}
-                      allowAdd={false}
-                      forbiddenCategoryName={newTo}
-                    />
-                  </td>
-                  <td className="category-aliases-td-to">
-                    <CategorySelectOrAdd
-                      categories={categories}
-                      value={newTo}
-                      onChange={setNewTo}
-                      onAddCategory={() => {}}
-                      allowAdd={false}
-                      forbiddenCategoryName={newFrom}
-                    />
-                  </td>
-                  <td className="category-aliases-td-actions">
-                    <button
-                      onClick={() => {
-                        handleAddAlias();
-                        setShowAddRow(false);
-                      }}
-                      disabled={!newFrom || !newTo}
-                      className="category-aliases-confirm-btn"
-                      title="אשר הוספה"
-                    >
-                      ✔️
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddRow(false);
-                        setNewFrom('');
-                        setNewTo('');
-                      }}
-                      className="category-aliases-cancel-btn"
-                      title="ביטול הוספה"
-                    >
-                      ✖️
-                    </button>
-                  </td>
-                  <td></td>
-                </tr>
-              )}
-              {Object.entries(localAliases).map(([from, to]) => {
-                const toCat = getCategoryDef(to);
-                const isEditing = editKey === from;
-                return (
-                  <tr key={from} style={isEditing ? { background: '#fffbe6' } : {}}>
-                    <td className="category-aliases-td-from" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {from}
-                    </td>
-                    <td className="category-aliases-td-to">
-                      {isEditing ? (
+        
+        <div className="category-aliases-content">
+          {/* Empty State */}
+          {Object.keys(aliases).length === 0 && !showAddRow ? (
+            <div className="category-aliases-empty">
+              <div className="category-aliases-empty-icon">🔄</div>
+              <div className="category-aliases-empty-title">אין כללי החלפה עדיין</div>
+              <div className="category-aliases-empty-desc">
+                הגדר כללים להחלפה אוטומטית של קטגוריות - לדוגמה, החלף את "מזון" ל"סופר"
+              </div>
+              <button className="category-aliases-empty-btn" onClick={() => {
+                setNewFrom('');
+                setNewTo('');
+                setShowAddRow(true);
+              }}>
+                + הוסף כלל ראשון
+              </button>
+            </div>
+          ) : (
+            <div className="category-aliases-table-wrapper">
+              <table className="category-aliases-table">
+                <thead>
+                  <tr>
+                    <th className="category-aliases-th-from">קטגוריה מקורית</th>
+                    <th className="category-aliases-th-to">החלף לקטגוריה</th>
+                    <th className="category-aliases-th-actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {showAddRow && (
+                    <tr ref={addRowRef} className="category-aliases-add-row">
+                      <td className="category-aliases-td-from">
                         <CategorySelectOrAdd
-                          categories={categories}
-                          value={editValue}
-                          onChange={setEditValue}
+                          categories={categories.filter(cat => !aliases[cat.name])}
+                          value={newFrom}
+                          onChange={setNewFrom}
                           onAddCategory={() => {}}
                           allowAdd={false}
-                          forbiddenCategoryName={from}
+                          forbiddenCategoryName={newTo}
                         />
-                      ) : toCat ? (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          background: toCat.color,
-                          color: getTextColor(toCat.color),
-                          borderRadius: 6,
-                          padding: '2px 8px',
-                          gap: 6,
-                          fontWeight: 500
-                        }}>
-                          <span style={{ fontSize: 18 }}>{toCat.icon}</span>
-                          {toCat.name}
-                        </span>
-                      ) : (
-                        <span>{to}</span>
-                      )}
-                    </td>
-                    <td className="category-aliases-td-actions">
-                      {isEditing ? (
-                        <>
-                          <button onClick={handleSave} title="שמור" className="category-aliases-confirm-btn">✔️</button>
-                          <button onClick={handleCancelEdit} title="ביטול" className="category-aliases-cancel-btn">✖️</button>
-                        </>
-                      ) : (
-                        <span style={{ display: 'inline-flex', gap: 2 }}>
-                          <button onClick={() => handleEdit(from)} title="ערוך" className="category-aliases-edit-btn">✏️</button>
+                      </td>
+                      <td className="category-aliases-td-to">
+                        <CategorySelectOrAdd
+                          categories={categories}
+                          value={newTo}
+                          onChange={setNewTo}
+                          onAddCategory={() => {}}
+                          allowAdd={false}
+                          forbiddenCategoryName={newFrom}
+                        />
+                      </td>
+                      <td className="category-aliases-td-actions">
+                        <button
+                          onClick={() => {
+                            handleAddAlias();
+                            setShowAddRow(false);
+                          }}
+                          disabled={!newFrom || !newTo}
+                          className="category-aliases-confirm-btn"
+                          title="אשר הוספה"
+                        >
+                          ✔️
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowAddRow(false);
+                            setNewFrom('');
+                            setNewTo('');
+                          }}
+                          className="category-aliases-cancel-btn"
+                          title="ביטול הוספה"
+                        >
+                          ✖️
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                  {Object.entries(aliases).map(([from, to]) => {
+                    const toCat = getCategoryDef(to);
+                    return (
+                      <tr key={from}>
+                        <td className="category-aliases-td-from" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {from}
+                        </td>
+                        <td className="category-aliases-td-to">
+                          <CategorySelectOrAdd
+                            categories={categories}
+                            value={to}
+                            onChange={(newTo) => handleUpdateAlias(from, newTo)}
+                            onAddCategory={() => {}}
+                            allowAdd={false}
+                            forbiddenCategoryName={from}
+                            defaultIcon={toCat?.icon}
+                            defaultColor={toCat?.color}
+                          />
+                        </td>
+                        <td className="category-aliases-td-actions">
                           <button onClick={() => handleDelete(from)} title="מחק" className="category-aliases-delete-btn">🗑️</button>
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-        {/* Show warning only after clicking save with unsaved edits */}
-        {showSaveWarning && hasUnsavedEdit && (
-          <div className="category-aliases-warning">
-            יש שינויים שלא אושרו. יש לאשר כל שורה בנפרד (✔️) לפני שמירה.
+        {!embedded && (
+          <div className="category-aliases-footer">
+            <button onClick={onClose} className="category-aliases-close-btn">סגור</button>
           </div>
         )}
-        {showEditWarning && (
-          <div className="category-aliases-warning">
-            יש שורה אחרת בעריכה. יש לאשר (✔️) או לבטל (✖️) לפני עריכת שורה נוספת.
-            <button onClick={() => setShowEditWarning(false)} className="category-aliases-warning-close">✖️</button>
-          </div>
-        )}
-        <div className="category-aliases-footer">
-          <button onClick={onClose}>סגור</button>
-          <button
-            onClick={() => {
-              if (hasUnsavedEdit) {
-                setShowSaveWarning(true);
-                return;
-              }
-              handleApply();
-            }}
-            className="category-aliases-save-btn"
-          >
-            שמור שינויים
-          </button>
-        </div>
       </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="edit-dialog-overlay category-aliases-overlay">
+      {content}
     </div>
   );
 };

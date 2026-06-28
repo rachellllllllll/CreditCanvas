@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { readXLSX, readXLS, isXLSFile, sheetToArray } from './utils/xlsxMinimal';
 import { 
-  getSheetType, 
+  getSheetType,
+  detectSheetTypeFromSheet,
   askUserSheetType, 
   loadSheetTypeOverridesFromDir, 
   saveSheetTypeOverridesToDir,
   type SheetTypeOverrides 
 } from './utils/sheetType';
 import { parseBankStatementFromSheet } from './utils/bankParser';
+import { parseCreditDetailsFromSheet } from './utils/creditParser';
 import type { CreditDetail, AnalysisResult } from './types';
 import { type CategoryDef } from './components/CategoryManager';
 import SettingsMenu from './components/SettingsMenu';
@@ -44,9 +46,12 @@ import {
   saveSessionDurationForLater
 } from './utils/analytics';
 import { signedAmount } from './utils/money';
+import { loadScrapedJsonFiles } from './utils/scrapedJsonParser';
 import { processCreditChargeMatching, detectUnmatchedCreditCharges, detectMissingBankStatements, isKnownCreditChargeDescription } from './utils/creditChargePatterns';
 import type { UnmatchedCreditCharge, UnmatchedBankStatement } from './utils/creditChargePatterns';
 import { findOverlappingDateRanges, type DuplicateFilesInfo } from './utils/duplicateDetection';
+import { deduplicateTransactions } from './utils/deduplicateTransactions';
+import { loadTransactionStore, saveTransactionStore, cleanupStoreTransactions, findNewTransactions } from './utils/transactionStore';
 import { loadCategoryRules, applyCategoryRules, addDescriptionEqualsRule, addDescriptionContainsRule, addTransactionCategoryRule, addRuleWithAmountRange, addAdvancedRule, updateCategoryRule, saveCategoryRules, createRule, type RuleChangeResult } from './utils/categoryRules';
 import type { CategoryRule, IncomeSourceRule } from './types';
 import { loadDirectionOverridesFromDir, applyDirectionOverrides } from './utils/directionOverrides';
@@ -124,192 +129,6 @@ function applyAliases(details: CreditDetail[], categoryAliases: Record<string, s
     return { ...d, category: category || d.category };
   });
 }
-
-const parseCreditDetailsFromSheet = async (sheetData: unknown[][], fileName: string): Promise<CreditDetail[]> => {
-  // sheetData הוא כבר מערך דו-ממדי (לא sheet של XLSX)
-  const json: unknown[][] = sheetData;
-  // Find the header row index by searching for a row with known column names
-  let headerIdx = -1;
-  let headers: string[] = [];
-  let chargeDateFromHeader = '';
-  let cardLast4FromHeader = '';
-  for (let i = 0; i < json.length; i++) {
-    // נרמל שבירות שורה (Alt+Enter באקסל) לרווח - חשוב לפורמט כאל ופועלים
-    const row = json[i].map((cell) => (cell != null ? String(cell) : '').replace(/\r?\n/g, ' ').trim());
-    // --- extract charge date and card last 4 from header lines if present ---
-    if (!chargeDateFromHeader) {
-      const match = row.join(' ').match(/עסקאות לחיוב ב-(\d{2}\/\d{2}\/\d{4})/);
-      if (match) chargeDateFromHeader = match[1];
-    }
-    if (!cardLast4FromHeader) {
-      const joined = row.join(' ');
-      // פורמט ישראכרט/מקס: "המסתיים ב-1234"
-      // פורמט כאל: "לכרטיס ויזה 1234" או "כאל 123456 לכרטיס ויזה 1234"
-      const match = joined.match(/המסתיים ב-(\d{4})/) ||
-                    joined.match(/לכרטיס\s+\S+\s+(\d{4})\b/);
-      if (match) cardLast4FromHeader = match[1];
-    }
-    // Look for a row with at least 2 of the expected columns (for Poalim format)
-    if (
-      (row.some((c: string) => c.includes('תאריך') && c.includes('עסקה')) && row.includes('שם בית עסק'))
-    ) {
-      headerIdx = i;
-      headers = row;
-      break;
-    }
-    // Look for a row with at least 3 of the expected columns
-    if (
-      (row.includes('תאריך עסקה') && row.includes('שם בית העסק') && row.includes('סכום חיוב')) ||
-      (row.includes('"תאריך\nעסקה"') && row.includes('שם בית עסק') && row.some((c: string) => c.includes('סכום'))) // for the second format
-    ) {
-      headerIdx = i;
-      headers = row;
-      break;
-    }
-  }
-  if (headerIdx === -1) return [];
-  // Map the rest of the rows to CreditDetail
-  const details: CreditDetail[] = [];
-  // Normalize headers for mapping
-  const normalizedHeaders = headers.map(h => h.replace(/"/g, '').replace(/\r?\n/g, ' ').trim());
-  for (let i = headerIdx + 1; i < json.length; i++) {
-    const row = json[i];
-    if (!row || row.length < 3) continue;
-    // Map columns by normalized header
-    const rowObj: Record<string, string> = {};
-    normalizedHeaders.forEach((h, idx) => {
-      rowObj[h] = (row[idx] || '').toString().trim();
-    });
-    // Try to extract fields for all supported formats
-    let date = rowObj['תאריך עסקה'] || rowObj['תאריךעסקה'] || rowObj['תאריך'] || '';
-    const description = rowObj['שם בית העסק'] || rowObj['שם בית עסק'] || rowObj['בית עסק'] || '';
-    // העדפה לסכום חיוב - זה מה שבאמת יורד מהחשבון
-    // סכום עסקה נשמר בנפרד להצגה (תשלומים, מט"ח וכו')
-    const chargeAmountRaw = rowObj['סכום חיוב'] || rowObj['סכוםחיוב'] || rowObj['סכום בשח'] || '';
-    const transactionAmountRaw = rowObj['סכום עסקה'] || rowObj['סכוםעסקה'] || '';
-    const transactionCurrency = rowObj['מטבע עסקה'] || rowObj['מטבעעסקה'] || '';
-    
-    // אם יש סכום חיוב - השתמש בו. אם אין אבל יש סכום עסקה - בדוק אם זו עסקת צבירה
-    let amount = chargeAmountRaw;
-    if (!chargeAmountRaw && transactionAmountRaw) {
-      // בדוק אם זו עסקת צבירת נקודות (סכום עסקה קיים אבל סכום חיוב ריק)
-      // const transType = rowObj['סוג עסקה'] || rowObj['סוגעסקה'] || '';
-      // if (transType.includes('צבירה') || description.includes('צבירה')) {
-      //   // דלג על עסקאות צבירה - הן לא משפיעות על החיוב
-      //   continue;
-      // }
-      // אם זה לא צבירה, השתמש בסכום עסקה כ-fallback
-      // amount = transactionAmountRaw;
-    }
-    const category = rowObj['ענף'] || rowObj['קטגוריה'] || '';
-    // --- extract charge date and card last 4 ---
-    let chargeDate = rowObj['תאריך חיוב'] || rowObj['מועד חיוב'] || chargeDateFromHeader || '';
-    const cardLast4 = rowObj['4 ספרות אחרונות של כרטיס האשראי'] || rowObj['4 ספרות אחרונות'] || cardLast4FromHeader || '';
-    
-    // --- זיהוי עסקאות בחיוב מיידי (משיכת מזומן וכד') ---
-    const transactionType = rowObj['סוג עסקה'] || rowObj['סוגעסקה'] || '';
-    const notes = rowObj['הערות'] || '';
-    const isImmediateCharge = transactionType.includes('משיכת מזומן') 
-      || transactionType.includes('חיוב מיידי')
-      || notes.includes('מיידי') || notes.includes('מידי');
-    if (isImmediateCharge) {
-      // בחיוב מיידי: תאריך החיוב = תאריך העסקה
-      chargeDate = date;
-    }
-    // Special handling for Poalim format: amount may be in the form '₪ 11.68'
-    if (amount && amount.includes('₪')) {
-      amount = amount.replace('₪', '').trim();
-    }
-    // Remove currency symbols and spaces
-    amount = amount.replace(/[^\d.,-]/g, '').replace(',', '.');
-    // Normalize date (support both dd-mm-yyyy and dd/mm/yy and Excel serial numbers)
-    // תומך גם בסריאלים עשרוניים מ-XLS (כגון 46059.0004...)
-    {
-      const numVal = parseFloat(date);
-      if (!isNaN(numVal) && numVal > 1 && numVal < 60000 && /^\d+(\.\d+)?$/.test(date)) {
-        const excelEpoch = Date.UTC(1899, 11, 30);
-        const serial = Math.floor(numVal);
-        const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
-        date = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCFullYear()).slice(-2)}`;
-      } else {
-        date = date.replace(/\./g, '/').replace(/-/g, '/');
-      }
-    }
-
-    /**
-     *     amount = amount.replace(/[^\d.,-]/g, '').replace(',', '.');
-    // Normalize date (support both dd-mm-yyyy and dd/mm/yy and Excel serial numbers)
-    // בדוק רק אם זה בעמודת תאריך - אם מכיל רק מספרים ודרוש כמספר serial בטווח תאריכים
-    // בדוק אם זה בעמודת תאריך ואם כן, המיר אם הערך הוא מספר serial של Excel
-    const dateColumnIndex = normalizedHeaders.indexOf('תאריך עסקה');
-    const isDateColumn = dateColumnIndex >= 0;
-    
-    if (isDateColumn && /^\d{1,5}$/.test(date)) {
-      // רק בעמודת תאריך: קרא את המספר כ-Excel serial
-      const serial = parseInt(date, 10);
-      if (!isNaN(serial) && serial > 0 && serial < 60000) {
-        const excelEpoch = new Date(1899, 11, 30);
-        const d = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
-        // Format as dd/m/yy
-        date = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
-      }
-    } else if (date) {
-      date = date.replace(/\./g, '/').replace(/-/g, '/');
-    }
-     */
-    // --- normalize chargeDate ---
-    if (chargeDate) {
-      const numVal = parseFloat(chargeDate);
-      if (!isNaN(numVal) && numVal > 1 && numVal < 60000 && /^\d+(\.\d+)?$/.test(chargeDate)) {
-        const excelEpoch = Date.UTC(1899, 11, 30);
-        const serial = Math.floor(numVal);
-        const d = new Date(excelEpoch + serial * 24 * 60 * 60 * 1000);
-        chargeDate = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCFullYear()).slice(-2)}`;
-      } else {
-        chargeDate = chargeDate.replace(/\./g, '/').replace(/-/g, '/');
-      }
-    }
-    if (date && amount && description) {
-      // החזר/זיכוי/ביטול יזוהו כהכנסה גם אם המספר חיובי
-      // const refundLike = /(זיכוי|החזר|ביטול)/.test(description);
-      const raw = parseFloat(amount);
-      if (isNaN(raw)) continue;
-      const direction: 'income' | 'expense' = raw < 0 ? 'income' : 'expense';
-      // if (refundLike) direction = 'income';
-      const amountAbs = Math.abs(raw);
-      
-      // חשב סכום עסקה מקורי (אם שונה מסכום החיוב)
-      let origTransactionAmount: number | undefined;
-      if (transactionAmountRaw) {
-        const cleanTransAmount = transactionAmountRaw.replace(/[^\d.,-]/g, '').replace(',', '.');
-        const parsedTransAmount = Math.abs(parseFloat(cleanTransAmount));
-        if (!isNaN(parsedTransAmount) && parsedTransAmount !== amountAbs) {
-          origTransactionAmount = parsedTransAmount;
-        }
-      }
-      
-      details.push({
-        id: `${fileName}-${i}-${raw}-${description}`,
-        date,
-        amount: amountAbs, // סכום חיוב – ערך מוחלט, הכיוון נשמר בשדה direction
-        transactionAmount: origTransactionAmount, // סכום עסקה מקורי (רק אם שונה)
-        transactionCurrency: transactionCurrency || undefined, // מטבע מקורי (אם קיים)
-        description,
-        category,
-        chargeDate,
-        cardLast4,
-        fileName,
-        rowIndex: i,
-        headerIdx,
-        source: 'credit',
-        direction,
-        directionDetected: direction,
-        transactionType: 'regular',
-      });
-    }
-  }
-  return details;
-};
 
 const getMonthYear = (dateStr: string): string => {
   // Try to extract month/year from dd/m/yy or dd/mm/yyyy
@@ -524,6 +343,93 @@ const App: React.FC = () => {
     }
   }, [dirHandle]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // --- Global Drop Files Handler ---
+  const [dropStatus, setDropStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [isProcessingDrop, setIsProcessingDrop] = useState(false);
+
+  const handleDropFiles = useCallback(async (files: File[]) => {
+    if (!dirHandle || !analysis) return;
+    setIsProcessingDrop(true);
+    setDropStatus(null);
+    
+    try {
+      const allIncoming: CreditDetail[] = [];
+      
+      for (const file of files) {
+        try {
+          const buffer = await file.arrayBuffer();
+          const name = file.name.toLowerCase();
+          let sheets: Record<string, (string | number)[][]> = {};
+          
+          if (name.endsWith('.xlsx')) {
+            const workbook = await readXLSX(buffer);
+            for (const sheet of workbook.sheets) {
+              sheets[sheet.name] = sheetToArray(sheet);
+            }
+          } else if (name.endsWith('.xls')) {
+            const workbook = await readXLS(buffer, file.name);
+            for (const sheet of workbook.sheets) {
+              sheets[sheet.name] = sheetToArray(sheet);
+            }
+          } else {
+            continue;
+          }
+          
+          for (const [sheetName, sheetData] of Object.entries(sheets)) {
+            const type = detectSheetTypeFromSheet(sheetData);
+            let details: CreditDetail[] = [];
+            if (type === 'credit') {
+              details = await parseCreditDetailsFromSheet(sheetData, file.name);
+            } else if (type === 'bank') {
+              details = await parseBankStatementFromSheet(sheetData, file.name, sheetName);
+            }
+            allIncoming.push(...details);
+          }
+        } catch (err) {
+          console.error(`שגיאה בפרסור ${file.name}:`, err);
+        }
+      }
+      
+      if (allIncoming.length === 0) {
+        setDropStatus({ type: 'error', message: 'לא נמצאו עסקאות בקבצים שנגררו' });
+        setIsProcessingDrop(false);
+        return;
+      }
+      
+      // מצא עסקאות חדשות ביחס לקיימות (אקסל + JSON)
+      const existingDetails = analysis.details;
+      const newTransactions = findNewTransactions(allIncoming, existingDetails);
+      
+      if (newTransactions.length === 0) {
+        setDropStatus({ type: 'info', message: `כל ${allIncoming.length} העסקאות כבר קיימות` });
+        setIsProcessingDrop(false);
+        setTimeout(() => setDropStatus(null), 4000);
+        return;
+      }
+      
+      // שמור לstore
+      const existingStore = await loadTransactionStore(dirHandle);
+      const storeTransactions = existingStore?.transactions || [];
+      const trulyNew = findNewTransactions(newTransactions, storeTransactions);
+      
+      if (trulyNew.length > 0) {
+        await saveTransactionStore(dirHandle, [...storeTransactions, ...trulyNew]);
+      }
+      
+      setDropStatus({ type: 'success', message: `✅ ${trulyNew.length} עסקאות חדשות נוספו` });
+      setIsProcessingDrop(false);
+      
+      // רענן תצוגה
+      await handleRefreshDirectory();
+      setTimeout(() => setDropStatus(null), 4000);
+    } catch (err) {
+      console.error('שגיאה בעיבוד קבצים:', err);
+      setDropStatus({ type: 'error', message: 'שגיאה בעיבוד הקבצים' });
+      setIsProcessingDrop(false);
+      setTimeout(() => setDropStatus(null), 4000);
+    }
+  }, [dirHandle, analysis, handleRefreshDirectory]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // File System Access API: Pick directory and read Excel files
   const handlePickDirectory = async () => {
     try {
@@ -600,7 +506,6 @@ const App: React.FC = () => {
     
     const files: ExcelFileEntry[] = [];
     
-    // @ts-expect-error - values() exists on FileSystemDirectoryHandle but not in all TS libs
     for await (const entry of dirHandle.values()) {
       if (entry.kind === 'file') {
         // תמיכה בקריאת קבצי XLSX ישירות
@@ -649,8 +554,61 @@ const App: React.FC = () => {
       const excelFileEntries = await collectExcelFilesRecursive(dir);
       
       if (excelFileEntries.length === 0) {
+        // אין קבצי אקסל — נסה לטעון ממאגר transactions.json
+        const store = await loadTransactionStore(dir);
+        if (store && store.transactions.length > 0) {
+          // יש מאגר! טען ממנו ישירות (ללא צורך בפרסור אקסל)
+          let allDetails: CreditDetail[] = [...store.transactions];
+          
+          // טען וסנן JSON (scraped)
+          const jsonDetails = await loadScrapedJsonFiles(dir);
+          if (jsonDetails.length > 0) {
+            allDetails = [...allDetails, ...jsonDetails];
+          }
+          
+          // dedup
+          allDetails = deduplicateTransactions(allDetails);
+          
+          // טען כללי קטגוריות
+          const loadedCategoryRules = await loadCategoryRules(dir);
+          setCategoryRules(loadedCategoryRules);
+          allDetails = applyCategoryRules(allDetails, loadedCategoryRules);
+          
+          // טען aliases
+          const loadedCategoryAliases = await loadAliasesFromDir(dir, 'category');
+          if (loadedCategoryAliases && Object.keys(loadedCategoryAliases).length > 0) {
+            setCategoryAliases(loadedCategoryAliases);
+          }
+          
+          // income rules
+          let loadedIncomeRules = await loadIncomeSourceRules(dir);
+          const newAutoRules = detectAutoIncomeSources(allDetails, loadedIncomeRules);
+          if (newAutoRules.length > 0) {
+            loadedIncomeRules = [...loadedIncomeRules, ...newAutoRules];
+            await saveIncomeSourceRules(dir, loadedIncomeRules);
+          }
+          setIncomeSourceRules(loadedIncomeRules);
+          allDetails = applyIncomeSourceRules(allDetails, loadedIncomeRules);
+          
+          const uniqueMonths = Array.from(new Set(allDetails.map(d => getMonthYear(d.date)).filter(Boolean)));
+          setMonths(uniqueMonths);
+          const latest = uniqueMonths.slice().sort((a, b) => {
+            const [ma, ya] = a.split('/').map(Number);
+            const [mb, yb] = b.split('/').map(Number);
+            return ya !== yb ? ya - yb : ma - mb;
+          }).pop();
+          setSelectedMonth(latest || formatMonthYear(new Date()));
+          
+          const totalAmount = allDetails.reduce((sum, d) => sum + signedAmount(d), 0);
+          const averageAmount = allDetails.length > 0 ? totalAmount / allDetails.length : 0;
+          setAnalysis({ totalAmount, averageAmount, details: allDetails, creditChargeCycles: [] });
+          setLoadingState(null);
+          setTourPending(true);
+          return;
+        }
+        
         setLoadingState(null);
-        setError('לא נמצאו קבצי Excel (XLSX/XLS) בתיקיה או בתת-תיקיות. אנא בחר תיקיה מתאימה.');
+        setError('לא נמצאו קבצי Excel (XLSX/XLS) או מאגר עסקאות בתיקיה. אנא בחר תיקיה מתאימה.');
         return;
       }
       
@@ -789,10 +747,42 @@ const App: React.FC = () => {
         }
       }
 
+      // טעינת עסקאות מקבצי JSON (שהגיעו מסנכרון אוטומטי)
+      try {
+        const scrapedDetails = await loadScrapedJsonFiles(dir);
+        if (scrapedDetails.length > 0) {
+          allDetails = allDetails.concat(scrapedDetails);
+        }
+      } catch (err) {
+        console.warn('שגיאה בטעינת קבצי JSON:', err);
+      }
+
       if (allDetails.length === 0) {
-        setLoadingState(null);
-        setError('לא נמצאו עסקאות בקבצי Excel. ודא שהקבצים מכילים נתוני אשראי או בנק בפורמט נתמך.');
-        return;
+        // אין עסקאות מאקסל — אולי יש ב-transactions.json?
+        const store = await loadTransactionStore(dir);
+        if (!store || store.transactions.length === 0) {
+          setLoadingState(null);
+          setError('לא נמצאו עסקאות בקבצי Excel. ודא שהקבצים מכילים נתוני אשראי או בנק בפורמט נתמך.');
+          return;
+        }
+      }
+      
+      // --- מאגר דלתא: טען עסקאות שנגררו ועדיין לא בקבצי אקסל ---
+      const excelOnlyDetails = [...allDetails]; // snapshot של עסקאות מאקסלים בלבד
+      const existingStore = await loadTransactionStore(dir);
+      if (existingStore && existingStore.transactions.length > 0) {
+        // נקה מהמאגר עסקאות שכעת קיימות באקסל
+        const cleanedStoreTransactions = cleanupStoreTransactions(existingStore.transactions, excelOnlyDetails);
+        
+        // שמור מאגר מנוקה (או מחק אם ריק)
+        if (cleanedStoreTransactions.length !== existingStore.transactions.length) {
+          await saveTransactionStore(dir, cleanedStoreTransactions);
+        }
+        
+        // הוסף את עסקאות הדלתא לתצוגה
+        if (cleanedStoreTransactions.length > 0) {
+          allDetails = [...allDetails, ...cleanedStoreTransactions];
+        }
       }
       
       setLoadingState({ 
@@ -898,6 +888,9 @@ const App: React.FC = () => {
       
       // החל כללי מקורות הכנסה על העסקאות
       allDetails = applyIncomeSourceRules(allDetails, loadedIncomeRules);
+
+      // --- סינון כפילויות ברמת עסקה (קבצים חופפים) ---
+      allDetails = deduplicateTransactions(allDetails);
 
       const uniqueMonths = Array.from(new Set(allDetails.map(d => getMonthYear(d.date)).filter(Boolean)));
       setMonths(uniqueMonths);
@@ -2549,6 +2542,9 @@ const App: React.FC = () => {
             unmatchedBankStatements={unmatchedBankStatements}
             duplicateFilesInfo={duplicateFilesInfo}
             onEditCategoryDefinition={(categoryName) => setEditCategoryDefDialog({ categoryName })}
+            onDropFiles={handleDropFiles}
+            dropStatus={dropStatus}
+            isProcessingDrop={isProcessingDrop}
           />
         </>
       )}
@@ -2634,6 +2630,11 @@ const App: React.FC = () => {
           rulesCountByCategory={rulesCountByCategory}
           aliasesCountByCategory={aliasesCountByCategory}
           isReassigning={isReassigning}
+          allDetails={analysis?.details || []}
+          onSyncComplete={() => {
+            // רענון מלא מהתיקייה — כולל קבצים חדשים שנגררו + מאגר דלתא
+            handleRefreshDirectory();
+          }}
         />
       )}
       {/* EditCategoryDefDialog — from context menu */}

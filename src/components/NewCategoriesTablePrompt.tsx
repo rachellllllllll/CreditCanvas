@@ -978,15 +978,18 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
 
   // מסך סיכום בכניסה ראשונה
   // אם אין קונפליקטים ואין קטגוריות חדשות להגדרה — אין מה להציג, סגור אוטומטית
-  const hasNothingToShow = summaryStats.conflictsCount === 0 && summaryStats.newCategories === 0 && activeNames.length === 0 && summaryStats.uncategorizedCount === 0 && summaryStats.propagatedCount === 0;
+  // הערה: propagatedCount לא נבדק כי זה מידע אינפורמטיבי בלבד שלא דורש פעולה מהמשתמש
+  // הערה: לא סוגרים אוטומטית אם המשתמש נמצא כבר במסך uncategorized (הוא עדיין רוצה לוודא את הבחירות)
+  const hasNothingToShow = summaryStats.conflictsCount === 0 && summaryStats.newCategories === 0 && activeNames.length === 0 && summaryStats.uncategorizedCount === 0;
   const autoConfirmedRef = React.useRef(false);
   React.useEffect(() => {
-    if (hasNothingToShow && !autoConfirmedRef.current) {
+    // רק במצב summary נסגור אוטומטית - אם המשתמש כבר במסך אחר, נתן לו ללחוץ "סיום" ידנית
+    if (hasNothingToShow && !autoConfirmedRef.current && viewMode === 'summary') {
       autoConfirmedRef.current = true;
       handleConfirm();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasNothingToShow]);
+  }, [hasNothingToShow, viewMode]);
 
   // Create a stable mapping of names to consistent indices to prevent DOM reconciliation issues
   const stableIndices = React.useMemo(() => {
@@ -1313,7 +1316,7 @@ const NewCategoriesTablePrompt: React.FC<NewCategoriesTablePromptProps> = ({ nam
                         setUncategorizedSelections(prev => ({ ...prev, [merchant.merchantName]: cat.name }));
                       }}
                       allowAdd={true}
-                      placeholder="בחר קטגוריה..."
+                      // placeholder="בחר קטגוריה..."
                     />
                     {selected && (
                       <button

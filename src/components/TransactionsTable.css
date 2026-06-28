@@ -244,31 +244,40 @@
   width: 100%;
   padding: 12px 16px;
   box-sizing: border-box;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .TransactionsTable-title-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 12px;
   padding: 0 0 12px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
 }
 
 /* RTL Toolbar: controls on left, title on right */
 .TransactionsTable-toolbar {
-  width: 92vw;
-  min-width: 1100px;
-  max-width: 1400px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   flex-direction: row-reverse;
   justify-content: space-between;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .TransactionsTable-toolbar-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-direction: row-reverse;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 /* Dropdown wrapper */
@@ -276,6 +285,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .TransactionsTable-dropdown-label {
@@ -298,7 +309,8 @@
   background-repeat: no-repeat;
   background-position: left 10px center;
   transition: all 0.2s ease;
-  min-width: 150px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .TransactionsTable-dropdown:hover {
@@ -476,9 +488,10 @@ svg {
 
 .TransactionsTable-title {
   margin: 0;
-  font-size: 1.75em;
+  font-size: clamp(1.1em, 2vw, 1.75em);
   font-weight: 700;
-  flex: none;
+  flex-shrink: 0;
+  white-space: nowrap;
   color: #1e293b;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   -webkit-background-clip: text;
@@ -576,18 +589,17 @@ svg {
 }
 
 .TransactionsTable-table {
-  width: 92vw;
-  min-width: 1100px;
-  max-width: 1400px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   border-collapse: separate;
   border-spacing: 0;
   background: #ffffff;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border-radius: 16px;
-  /* overflow: hidden; */
   font-family: 'Heebo', 'Arial', sans-serif;
   border: 1px solid #e5e7eb;
+  table-layout: auto;
 }
 
 .TransactionsTable-thead {
@@ -595,7 +607,7 @@ svg {
   font-weight: 700;
   color: #1e293b;
   position: sticky;
-  top: var(--main-header-height, 0px);
+  /* top: var(--main-header-height, 0px); */
   z-index: 150;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
@@ -620,12 +632,12 @@ svg {
 }
 
 
-/* Amount column fixed width - monthly view */
+/* Amount column - flexible width */
 .TransactionsTable-th-amount,
 .TransactionsTable-td-amount {
-  width: 140px;
-  min-width: 140px;
-  max-width: 140px;
+  width: auto;
+  min-width: 80px;
+  white-space: nowrap;
 }
 
 /* Amount columns in yearly view - smaller to fit 12 months */
@@ -636,12 +648,12 @@ svg {
   max-width: none;
 }
 
-/* Date column fixed width - includes source badge, card digits, and transaction type badges */
+/* Date column - flexible width */
 .TransactionsTable-th-date,
 .TransactionsTable-td-date {
-  width: 270px;
-  min-width: 270px;
-  max-width: 270px;
+  width: auto;
+  min-width: 120px;
+  white-space: nowrap;
 }
 
 .TransactionsTable-th-top-right {
@@ -895,33 +907,32 @@ svg {
 .TransactionsTable-table-wrapper {
   overflow-x: auto;
   margin-top: 12px;
+  min-width: 0;
+  width: 100%;
 }
 
 .TransactionsTable-yearly-wrapper {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  width: 99vw;
-  max-width: 99vw;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   transform: none;
   overflow-x: auto;
   background: #fff;
   padding-bottom: 24px;
-  position: absolute;
-  right: 0;
+  box-sizing: border-box;
 }
 
 .TransactionsTable-yearly-table {
-  width: 92vw;
-  min-width: 1100px;
+  width: 100%;
   max-width: 1400px;
   margin: 0 auto;
-  table-layout: fixed;
+  table-layout: auto;
   border-radius: 16px;
   box-shadow: 0 2px 16px #0002;
   font-size: 0.93em;
-  right: calc((100% - 1100px) / 4);
 }
 
 .TransactionsTable-yearly-table .TransactionsTable-th,
@@ -981,6 +992,8 @@ svg {
   display: flex;
   align-items: center;
   position: relative;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 /* Search input */
@@ -990,7 +1003,9 @@ svg {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   font-size: 14px;
-  min-width: 180px;
+  min-width: 0;
+  width: 150px;
+  flex-shrink: 1;
   background: #fff;
   color: #1f2937;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -1135,8 +1150,7 @@ svg {
   background: #f9fafb;
   border-radius: 12px;
   margin: 0;
-  width: 92vw;
-  min-width: 1100px;
+  width: 100%;
   max-width: 1400px;
   margin: 0 auto;
   box-sizing: border-box;
@@ -1232,5 +1246,299 @@ svg {
     width: 100%;
     max-width: 100%;
     position: relative;
+  }
+}
+
+/* ==================== Medium Screen (Half Screen / Tablet) ==================== */
+@media (max-width: 1100px) {
+  .TransactionsTable-toolbar {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+    padding: 8px 12px;
+  }
+
+  .TransactionsTable-toolbar-controls {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .TransactionsTable-dropdown {
+    min-width: 100px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .TransactionsTable-title {
+    font-size: 1.3em;
+  }
+
+  .TransactionsTable-table {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+    table-layout: auto;
+  }
+
+  .TransactionsTable-thead {
+    position: sticky;
+    top: 0;
+  }
+
+  .TransactionsTable-yearly-wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .TransactionsTable-yearly-table {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+    table-layout: auto;
+  }
+
+  .TransactionsTable-empty-state {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+  }
+
+  /* כל העמודות גמישות - ללא min-width קשיח */
+  .TransactionsTable-th,
+  .TransactionsTable-td {
+    width: auto !important;
+    min-width: unset !important;
+    max-width: none !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* עמודת תאריך - מאפשר כיווץ */
+  .TransactionsTable-th-date,
+  .TransactionsTable-td-date {
+    width: auto !important;
+    min-width: unset !important;
+    max-width: none !important;
+  }
+
+  /* עמודת סכום - מאפשר כיווץ */
+  .TransactionsTable-th-amount,
+  .TransactionsTable-td-amount {
+    width: auto !important;
+    min-width: unset !important;
+    max-width: none !important;
+  }
+
+  /* תיאור יכול לעבור שורה */
+  .TransactionsTable-td:nth-child(2) {
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
+/* ==================== Mobile Responsive Styles ==================== */
+@media (max-width: 768px) {
+  .TransactionsTable-container {
+    padding: 8px;
+  }
+
+  .TransactionsTable-toolbar {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px;
+  }
+
+  .TransactionsTable-toolbar-controls {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .TransactionsTable-dropdown-wrapper {
+    flex: 1 1 auto;
+    min-width: 140px;
+  }
+
+  .TransactionsTable-dropdown {
+    width: 100%;
+    min-width: unset;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .TransactionsTable-title {
+    font-size: 1.3em;
+    text-align: center;
+    width: 100%;
+  }
+
+  .TransactionsTable-table {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+    font-size: 12px;
+    border-radius: 12px;
+  }
+
+  .TransactionsTable-thead {
+    position: sticky;
+    top: 0;
+  }
+
+  .TransactionsTable-th {
+    padding: 10px 8px;
+    font-size: 11px;
+  }
+
+  .TransactionsTable-td {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .TransactionsTable-td-amount {
+    font-size: 13px;
+  }
+
+  /* Removed: column hiding - show all columns */
+
+  .TransactionsTable-category-btn {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  .TransactionsTable-group-label {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+
+  .TransactionsTable-settings-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .TransactionsTable-search-input {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .TransactionsTable-yearly-wrapper {
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+    overflow-x: auto;
+  }
+
+  .TransactionsTable-yearly-table {
+    width: 100%;
+    min-width: 600px;
+    max-width: unset;
+  }
+
+  .TransactionsTable-empty-state {
+    width: 100%;
+    min-width: unset;
+    padding: 24px 16px;
+  }
+
+  .TransactionsTable-expand-collapse-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .TransactionsTable-context-menu {
+    min-width: 180px;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+@media (max-width: 480px) {
+  .TransactionsTable-container {
+    padding: 4px;
+  }
+
+  .TransactionsTable-toolbar {
+    padding: 4px;
+    gap: 8px;
+  }
+
+  .TransactionsTable-toolbar-controls {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .TransactionsTable-dropdown-wrapper {
+    width: 100%;
+  }
+
+  .TransactionsTable-title {
+    font-size: 1.1em;
+  }
+
+  .TransactionsTable-table {
+    font-size: 11px;
+    border-radius: 8px;
+  }
+
+  .TransactionsTable-th {
+    padding: 8px 6px;
+    font-size: 10px;
+  }
+
+  .TransactionsTable-td {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .TransactionsTable-td-amount {
+    font-size: 12px;
+  }
+
+  .TransactionsTable-category-btn {
+    padding: 3px 5px;
+    font-size: 10px;
+    margin-left: 2px;
+  }
+
+  .TransactionsTable-group-toggle {
+    padding: 3px 6px;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .TransactionsTable-group-label {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+
+  .TransactionsTable-settings-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .TransactionsTable-yearly-table {
+    min-width: 500px;
+    font-size: 11px;
+  }
+
+  .TransactionsTable-empty-state {
+    padding: 20px 12px;
+  }
+
+  .TransactionsTable-empty-icon {
+    font-size: 36px;
+  }
+
+  .TransactionsTable-empty-text {
+    font-size: 14px;
+  }
+
+  .TransactionsTable-expand-collapse-btn-new {
+    padding: 3px 8px;
+    font-size: 11px;
   }
 }

@@ -564,7 +564,7 @@ export async function trackConsoleError(
     errorType: errorInfo.errorType,
     errorName: errorInfo.errorName || 'Unknown',
     errorMessage: sanitizedMessage,
-    componentStack: errorInfo.componentStack?.substring(0, 100), // קטע קטן בלבד
+    componentStack: errorInfo.componentStack?.substring(0, 1500), // callstack מלא יותר לדיבאג
     isRecoverable: errorInfo.isRecoverable,
     browserInfo: errorInfo.browserInfo || browserInfo
   }, true); // תמיד שומרים (אנונימי)

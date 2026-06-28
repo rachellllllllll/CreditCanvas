@@ -507,6 +507,7 @@ export default function AdminDashboardV2() {
                   errors={errors}
                   eventsByType={stats?.eventsByType || {}}
                   loading={dataLoading}
+                  onDeleted={refresh}
                 />
               ) : fileErrors.length === 0 ? (
                 <div className="admin-empty-tab">

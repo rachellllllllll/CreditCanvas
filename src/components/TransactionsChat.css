@@ -230,7 +230,7 @@
 
 .transactions-chat-message.user {
   align-self: flex-end;
-  background: #36A2EB;
+  background: #6366f1;
   color: white;
   border-bottom-right-radius: 4px;
 }
@@ -267,7 +267,7 @@
 }
 
 .transactions-chat-send-btn {
-  background: #36A2EB;
+  background: #6366f1;
   color: white;
   border: none;
   border-radius: 8px;
@@ -277,7 +277,7 @@
   transition: background 0.2s;
 }
 .transactions-chat-send-btn:disabled {
-  background: #b3d7f4;
+  background: #c7d2fe;
   cursor: not-allowed;
 }
 
@@ -291,7 +291,7 @@
 
 .transactions-chat-spinner .loader {
   border: 4px solid #eaeaea;
-  border-top: 4px solid #36A2EB;
+  border-top: 4px solid #6366f1;
   border-radius: 50%;
   width: 24px;
   height: 24px;

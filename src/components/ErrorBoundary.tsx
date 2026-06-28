@@ -53,7 +53,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         errorType: 'react_error',
         errorName: error.name,
         errorMessage: error.message,
-        componentStack: errorInfo.componentStack?.substring(0, 200),
+        componentStack: errorInfo.componentStack?.substring(0, 1500), // callstack מלא יותר
         isRecoverable: this.state.errorCount < 3, // אם יותר מ-3 שגיאות - may be unrecoverable
         timestamp: Date.now(),
       });

@@ -1,0 +1,123 @@
+.update-transactions {
+  direction: rtl;
+  padding: 12px;
+}
+
+.update-transactions__links-section,
+.update-transactions__drop-section {
+  margin-bottom: 16px;
+}
+
+.update-transactions__subtitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.update-transactions__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.update-transactions__link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  text-decoration: none;
+  color: #1e293b;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+.update-transactions__link:hover {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  transform: translateY(-1px);
+}
+
+.update-transactions__link-icon {
+  font-size: 1rem;
+}
+
+.update-transactions__link-label {
+  font-weight: 500;
+}
+
+.update-transactions__dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fafbfc;
+}
+
+.update-transactions__dropzone:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.update-transactions__dropzone.dragging {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  border-style: solid;
+}
+
+.update-transactions__dropzone.processing {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.update-transactions__dropzone-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.95rem;
+  color: #64748b;
+}
+
+.update-transactions__dropzone-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.update-transactions__status {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.update-transactions__status--success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.update-transactions__status--error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.update-transactions__status--info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.update-transactions__tip {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-align: center;
+}

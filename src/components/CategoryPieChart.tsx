@@ -1,7 +1,7 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { Pie } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-import type { ChartData, ChartOptions } from 'chart.js';
+import type { ChartData, ChartOptions, ChartEvent, ActiveElement, TooltipItem } from 'chart.js';
 import type { CategoryDef } from './CategoryManager';
 import CategoryStats from './CategoryStats';
 import './CategoryPieChart.css';
@@ -36,26 +36,17 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
 }) => {
   // ניהול קטגוריה נבחרת
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  // Early return if no data
-  if (!categories || Object.keys(categories).length === 0) {
-    return (
-      <div className="category-pie-chart" style={{ maxWidth }}>
-        <h3>{title}</h3>
-        <div style={{ 
-          textAlign: 'center', 
-          color: '#666', 
-          padding: 40,
-          fontSize: 16 
-        }}>
-          אין נתונים להצגה
-        </div>
-      </div>
-    );
-  }
+  
+  const isEmpty = !categories || Object.keys(categories).length === 0;
+
   // Process categories - group small ones if needed
   const processedCategories = useMemo(() => {
     const total = Object.values(categories).reduce((sum, val) => sum + val, 0);
     if (!groupSmallCategories) return categories;
+
+    // אם מעט קטגוריות, הצג הכל ללא קיבוץ (כמו באתר MAX)
+    const categoryCount = Object.keys(categories).length;
+    if (categoryCount <= 6) return categories;
 
     const result: Record<string, number> = {};
     let othersTotal = 0;
@@ -134,14 +125,14 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
   // Enhanced plugin with better positioning and readability
   const pieLabelPlugin = useMemo(() => ({
     id: 'pieLabelPlugin',
-    afterDatasetsDraw(chart: any) {
+    afterDatasetsDraw(chart: ChartJS<'pie'>) {
       // Skip if labels on chart are disabled
       if (!showLabelsOnChart) return;
       
       const { ctx, chartArea, data } = chart;
       if (!chartArea) return;
       
-      chart.getDatasetMeta(0).data.forEach((arc: any, i: number) => {
+      (chart.getDatasetMeta(0).data as ArcElement[]).forEach((arc, i) => {
         const total = data.datasets[0].data.reduce((sum: number, val: number) => sum + val, 0);
         const percentage = ((data.datasets[0].data[i] / total) * 100).toFixed(1);
         
@@ -163,7 +154,8 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
         const y = arc.y + Math.sin(angle) * labelRadius;
         
         // Get icon if available
-        const categoryName = data.labels[i];
+        const categoryName = data.labels![i] as string;
+
         const icon = categoryIcons[categoryName];
         
         ctx.save();
@@ -209,7 +201,7 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
   }), [categoryIcons, showLabelsOnChart]);
 
   // Click handler for pie slices
-  const handleChartClick = useCallback((_event: any, elements: any[]) => {
+  const handleChartClick = useCallback((_event: ChartEvent, elements: ActiveElement[]) => {
     if (elements.length > 0) {
       const elementIndex = elements[0].index;
       const categoryName = pieData.labels?.[elementIndex];
@@ -236,10 +228,11 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
       tooltip: {
         enabled: true,
         callbacks: {
-          label: function(context: any) {
-            const total = context.dataset.data.reduce((sum: number, val: number) => sum + val, 0);
-            const percentage = ((context.raw / total) * 100).toFixed(1);
-            return `${context.label}: ${context.raw.toLocaleString()} ₪ (${percentage}%)`;
+          label: function(context: TooltipItem<'pie'>) {
+            const total = (context.dataset.data as number[]).reduce((sum, val) => sum + val, 0);
+            const rawValue = context.raw as number;
+            const percentage = ((rawValue / total) * 100).toFixed(1);
+            return `${context.label}: ${rawValue.toLocaleString()} ₪ (${percentage}%)`;
           }
         }
       }
@@ -270,6 +263,20 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
 
   return (
     <div className="category-pie-chart" style={{ maxWidth }}>
+      {isEmpty ? (
+        <>
+          <h3>{title}</h3>
+          <div style={{ 
+            textAlign: 'center', 
+            color: '#666', 
+            padding: 40,
+            fontSize: 16 
+          }}>
+            אין נתונים להצגה
+          </div>
+        </>
+      ) : (
+      <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
         {showExportButton && (
@@ -391,6 +398,8 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({
         categoriesList={categoriesList}
         showDetailedStats={showDetailedStats}
       />
+      </>
+      )}
     </div>
   );
 };

@@ -1,21 +1,25 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { ConsoleErrorEvent, ErrorStats } from './types';
+import { getFirebaseApp } from '../../utils/firebaseAuth';
+import { getFirestore, doc, deleteDoc } from 'firebase/firestore';
 import './ErrorsTable.css';
 
 interface ErrorsTableProps {
   errors: ConsoleErrorEvent[];
   eventsByType?: Record<string, number>;
   loading?: boolean;
+  onDeleted?: () => void;
 }
 
 /**
  * ErrorsTable - אטבל של שגיאות עבור admin dashboard
  * מציגה שגיאות שנתקבלו, מקצב אותן ומאפשר סינון
  */
-const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) => {
+const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false, onDeleted }) => {
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'latest' | 'frequency'>('latest');
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // סינון וסידור שגיאות
   const filteredAndSorted = useMemo(() => {
@@ -95,6 +99,24 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
 
     return stats;
   }, [errors]);
+
+  // מחיקת שגיאה בודדת
+  const handleDeleteError = useCallback(async (errorId: string) => {
+    if (!confirm('למחוק שגיאה זו?')) return;
+    setDeleting(errorId);
+    try {
+      const app = getFirebaseApp();
+      if (!app) throw new Error('Firebase not initialized');
+      const db = getFirestore(app);
+      await deleteDoc(doc(db, 'analytics_events', errorId));
+      onDeleted?.();
+    } catch (err) {
+      console.error('[Admin] Error deleting error:', err);
+      alert('שגיאה במחיקה: ' + (err instanceof Error ? err.message : 'unknown'));
+    } finally {
+      setDeleting(null);
+    }
+  }, [onDeleted]);
 
   const getErrorTypeColor = (type: string | undefined): string => {
     const colors: Record<string, string> = {
@@ -219,6 +241,7 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
             <th>סוג</th>
             <th>שגיאה</th>
             <th>דפדפן</th>
+            <th>יוזר</th>
             <th>תאריך</th>
             <th></th>
           </tr>
@@ -242,6 +265,9 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
                   <span className="message-text">{error.errorMessage || 'No message'}</span>
                 </td>
                 <td className="browser-info">{error.browserInfo || 'Unknown'}</td>
+                <td className="visitor-id">
+                  <code>{(error.visitorId || 'unknown').substring(0, 8)}...</code>
+                </td>
                 <td className="timestamp">
                   {error.timestamp ? 
                     new Date(error.timestamp).toLocaleString('he-IL', {
@@ -267,12 +293,12 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
 
               {expandedErrorId === error.id && (
                 <tr className="error-details-row">
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <div className="error-details">
                       {error.componentStack && (
                         <div className="detail-section">
                           <strong>Component Stack:</strong>
-                          <pre>{String(error.componentStack).substring(0, 300)}</pre>
+                          <pre style={{ maxHeight: '300px', overflow: 'auto' }}>{String(error.componentStack)}</pre>
                         </div>
                       )}
                       {error.errorMessage && (
@@ -286,6 +312,25 @@ const ErrorsTable: React.FC<ErrorsTableProps> = ({ errors, loading = false }) =>
                         <span>Recoverable: {error.isRecoverable ? '✓' : '✗'}</span>
                         <span>Visitor: {(error.visitorId || 'unknown').substring(0, 8)}...</span>
                         {error.createdAt && <span>Created: {new Date(error.createdAt).toLocaleString('he-IL')}</span>}
+                      </div>
+                      <div className="detail-actions" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #334155' }}>
+                        <button
+                          onClick={() => handleDeleteError(error.id)}
+                          disabled={deleting === error.id}
+                          className="delete-error-btn"
+                          style={{
+                            padding: '6px 12px',
+                            background: '#dc2626',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: deleting === error.id ? 'not-allowed' : 'pointer',
+                            opacity: deleting === error.id ? 0.5 : 1,
+                            fontSize: '13px'
+                          }}
+                        >
+                          {deleting === error.id ? '🔄 מוחק...' : '🗑️ מחק שגיאה'}
+                        </button>
                       </div>
                     </div>
                   </td>
