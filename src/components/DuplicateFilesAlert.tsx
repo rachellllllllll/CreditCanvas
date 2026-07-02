@@ -54,6 +54,7 @@ const DuplicateFilesAlert: React.FC<DuplicateFilesAlertProps> = ({
   const hasIdentical = identicalFiles.length > 0;
   const hasOverlapping = overlappingRanges.length > 0;
 
+  console.log(`[DUP-ALERT] isDismissed=${isDismissed}, hasIdentical=${hasIdentical} (${identicalFiles.length}), hasOverlapping=${hasOverlapping} (${overlappingRanges.length}), folderName=${folderName}`);
   if (isDismissed || (!hasIdentical && !hasOverlapping)) return null;
 
   const handleDismiss = () => {

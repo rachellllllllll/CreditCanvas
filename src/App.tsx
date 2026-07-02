@@ -359,7 +359,7 @@ const App: React.FC = () => {
         try {
           const buffer = await file.arrayBuffer();
           const name = file.name.toLowerCase();
-          let sheets: Record<string, (string | number)[][]> = {};
+          const sheets: Record<string, (string | number)[][]> = {};
           
           if (name.endsWith('.xlsx')) {
             const workbook = await readXLSX(buffer);
@@ -628,6 +628,7 @@ const App: React.FC = () => {
       const hashToFirstPath: Map<string, string> = new Map(); // hash → first relativePath
       const pathToHash: Map<string, string> = new Map(); // כל path (כולל כפולים) → hash שלו
       const skippedDuplicateFiles: Set<string> = new Set();
+      console.log(`[DUP-DEBUG] סה"כ קבצי אקסל שנמצאו: ${excelFileEntries.length}`, excelFileEntries.map(e => e.relativePath));
       
       for (const { handle, relativePath } of excelFileEntries) {
         try {
@@ -636,6 +637,7 @@ const App: React.FC = () => {
           const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
           pathToHash.set(relativePath, hash);
           
+          console.log(`[DUP-DEBUG] קובץ: ${relativePath}, hash: ${hash.slice(0, 12)}..., size: ${arrayBuffer.byteLength}`);
           if (hashToFirstPath.has(hash)) {
             // קובץ כפול – דלג
             skippedDuplicateFiles.add(relativePath);
@@ -834,14 +836,25 @@ const App: React.FC = () => {
             fileSize: fileBuffers.get(paths[0])?.byteLength ?? 0
           }));
 
-        // רמה 3: זיהוי חפיפת תאריכים
-        const overlappingRanges = findOverlappingDateRanges(excelOnlyDetails, skippedDuplicateFiles);
+        console.log(`[DUP-DEBUG] pathToHash entries: ${pathToHash.size}`);
+        console.log(`[DUP-DEBUG] hashToAllPaths entries: ${hashToAllPaths.size}`);
+        console.log(`[DUP-DEBUG] identicalGroups: ${identicalGroups.length}`, identicalGroups.map(g => ({ paths: g.paths, hash: g.hash.slice(0, 12) })));
+        console.log(`[DUP-DEBUG] skippedDuplicateFiles: ${skippedDuplicateFiles.size}`, Array.from(skippedDuplicateFiles));
 
-        setDuplicateFilesInfo({
+        // רמה 3: זיהוי חפיפת תאריכים (רק מאקסלים — לא מעסקאות שנגררו ל-transactions.json)
+        // fileNames בעסקאות שנטענו:
+        const excelFileNames = Array.from(new Set(excelOnlyDetails.map(d => d.fileName).filter(Boolean)));
+        console.log(`[DUP-DEBUG] excelOnlyDetails: ${excelOnlyDetails.length} עסקאות מ-${excelFileNames.length} קבצים`, excelFileNames);
+        const overlappingRanges = findOverlappingDateRanges(excelOnlyDetails, skippedDuplicateFiles);
+        console.log(`[DUP-DEBUG] overlappingRanges: ${overlappingRanges.length}`, overlappingRanges);
+
+        const dupInfo = {
           identicalFiles: identicalGroups,
           overlappingRanges,
           skippedFiles: Array.from(skippedDuplicateFiles)
-        });
+        };
+        console.log(`[DUP-DEBUG] setDuplicateFilesInfo:`, { identical: dupInfo.identicalFiles.length, overlapping: dupInfo.overlappingRanges.length, skipped: dupInfo.skippedFiles.length });
+        setDuplicateFilesInfo(dupInfo);
       }
       
       // --- Firebase: שלח תיאורים חדשים שזוהו ע"י סכום אבל לא ברשימה הידועה ---
