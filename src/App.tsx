@@ -512,7 +512,7 @@ const App: React.FC = () => {
         if (entry.name.endsWith('.xlsx') || entry.name.endsWith('.xls')) {
           const filePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
           files.push({ handle: entry, relativePath: filePath });
-        } else if (depth <= 1) {
+        } else {
           // DEBUG: לוג קבצים שלא xlsx (רק ברמה עליונה/ראשונה)
           console.log(`[DUP-DEBUG] קובץ שדולג (לא xlsx): ${relativePath ? relativePath + '/' : ''}${entry.name}`);
         }
