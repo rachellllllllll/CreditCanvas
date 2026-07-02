@@ -835,7 +835,7 @@ const App: React.FC = () => {
           }));
 
         // רמה 3: זיהוי חפיפת תאריכים
-        const overlappingRanges = findOverlappingDateRanges(allDetails, skippedDuplicateFiles);
+        const overlappingRanges = findOverlappingDateRanges(excelOnlyDetails, skippedDuplicateFiles);
 
         setDuplicateFilesInfo({
           identicalFiles: identicalGroups,
